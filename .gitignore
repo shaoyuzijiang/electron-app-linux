@@ -3,3 +3,4 @@ dist/
 .DS_Store
 TMSDK_*/
 build/
+wemeet_electron_demo.log
