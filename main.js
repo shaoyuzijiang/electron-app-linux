@@ -182,6 +182,7 @@ function createWindow() {
     height: 700,
     minWidth: 800,
     minHeight: 600,
+    title: '腾讯会议SDK Demo',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
