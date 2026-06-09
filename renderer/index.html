@@ -102,6 +102,106 @@
     .welcome-box .loading {
       color: #9ca3af;
     }
+
+    .token-cards {
+      display: flex;
+      gap: 20px;
+      margin-top: 32px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .token-card {
+      flex: 1;
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      text-align: left;
+    }
+
+    .token-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .token-card h3 .badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    .token-card h3 .badge.error {
+      background: #fef2f2;
+      color: #dc2626;
+    }
+
+    .token-card h3 .badge.pending {
+      background: #fef9c3;
+      color: #ca8a04;
+    }
+
+    .token-field {
+      margin-bottom: 12px;
+    }
+
+    .token-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .token-field .label {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    .token-field .value {
+      font-size: 13px;
+      color: #374151;
+      word-break: break-all;
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+      background: #f9fafb;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    .token-field .value.error-text {
+      color: #dc2626;
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+
+    .retry-btn {
+      margin-top: 12px;
+      padding: 6px 16px;
+      font-size: 13px;
+      color: #667eea;
+      background: #f0f0ff;
+      border: 1px solid #c7c7f7;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .retry-btn:hover {
+      background: #e0e0ff;
+    }
+
+    .retry-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -117,10 +217,54 @@
     <div class="welcome-box">
       <h2 id="welcomeText" class="loading">正在加载...</h2>
       <p id="welcomeDesc">登录成功，这里是应用的主界面区域</p>
+      <div class="token-cards">
+        <div class="token-card">
+          <h3>SDK Token <span class="badge pending" id="sdkBadge">获取中</span></h3>
+          <div class="token-field">
+            <div class="label">SDK ID</div>
+            <div class="value" id="sdkId">-</div>
+          </div>
+          <div class="token-field">
+            <div class="label">SDK Token</div>
+            <div class="value" id="sdkToken">-</div>
+          </div>
+          <div class="token-field">
+            <div class="label">过期时间</div>
+            <div class="value" id="sdkExpires">-</div>
+          </div>
+        </div>
+        <div class="token-card">
+          <h3>ID Token <span class="badge pending" id="idBadge">获取中</span></h3>
+          <div class="token-field" id="idTokenError" style="display:none">
+            <div class="value error-text" id="idTokenErrMsg"></div>
+          </div>
+          <div id="idTokenFields">
+            <div class="token-field">
+              <div class="label">ID Token</div>
+              <div class="value" id="idToken">-</div>
+            </div>
+            <div class="token-field">
+              <div class="label">过期时间</div>
+              <div class="value" id="idExpires">-</div>
+            </div>
+            <div class="token-field">
+              <div class="label">SSO URL</div>
+              <div class="value" id="ssoUrl">-</div>
+            </div>
+          </div>
+          <button class="retry-btn" id="retryIdToken" style="display:none">重新获取</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
+    function formatTimestamp(unixTs) {
+      if (!unixTs) return '-';
+      const d = new Date(unixTs * 1000);
+      return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
     async function loadProfile() {
       try {
         const result = await window.electronAPI.getProfile();
@@ -140,11 +284,126 @@
       }
     }
 
+    async function loadSdkToken() {
+      const badge = document.getElementById('sdkBadge');
+      try {
+        const data = await window.electronAPI.getSdkToken();
+        if (data) {
+          document.getElementById('sdkId').textContent = data.sdkId || '-';
+          document.getElementById('sdkToken').textContent = data.sdkToken || '-';
+          document.getElementById('sdkExpires').textContent = formatTimestamp(data.expiresIn);
+          badge.textContent = '已获取';
+          badge.classList.remove('pending', 'error');
+        } else {
+          document.getElementById('sdkToken').textContent = '暂无数据';
+          badge.textContent = '未获取';
+          badge.classList.remove('pending');
+          badge.classList.add('error');
+        }
+      } catch (err) {
+        document.getElementById('sdkToken').textContent = '获取失败';
+        badge.textContent = '失败';
+        badge.classList.remove('pending');
+        badge.classList.add('error');
+      }
+    }
+
+    async function loadIdToken() {
+      const badge = document.getElementById('idBadge');
+      const errorDiv = document.getElementById('idTokenError');
+      const errMsg = document.getElementById('idTokenErrMsg');
+      const fields = document.getElementById('idTokenFields');
+      const retryBtn = document.getElementById('retryIdToken');
+
+      try {
+        const data = await window.electronAPI.getIdToken();
+        if (data && data.error) {
+          badge.textContent = '失败';
+          badge.classList.remove('pending');
+          badge.classList.add('error');
+          errorDiv.style.display = 'block';
+          errMsg.textContent = data.error;
+          fields.style.display = 'none';
+          retryBtn.style.display = 'inline-block';
+        } else if (data) {
+          badge.textContent = '已获取';
+          badge.classList.remove('pending', 'error');
+          errorDiv.style.display = 'none';
+          fields.style.display = 'block';
+          retryBtn.style.display = 'none';
+          document.getElementById('idToken').textContent = data.idToken || '-';
+          document.getElementById('idExpires').textContent = formatTimestamp(data.expiresIn);
+          document.getElementById('ssoUrl').textContent = data.ssoUrl || '-';
+        } else {
+          badge.textContent = '未获取';
+          badge.classList.remove('pending');
+          badge.classList.add('error');
+          errorDiv.style.display = 'none';
+          fields.style.display = 'block';
+          document.getElementById('idToken').textContent = '暂无数据';
+          retryBtn.style.display = 'inline-block';
+        }
+      } catch (err) {
+        badge.textContent = '失败';
+        badge.classList.remove('pending');
+        badge.classList.add('error');
+        errorDiv.style.display = 'block';
+        errMsg.textContent = err.message || '获取失败';
+        fields.style.display = 'none';
+        retryBtn.style.display = 'inline-block';
+      }
+    }
+
+    async function retryIdToken() {
+      const retryBtn = document.getElementById('retryIdToken');
+      const badge = document.getElementById('idBadge');
+      retryBtn.disabled = true;
+      retryBtn.textContent = '获取中...';
+      badge.textContent = '获取中';
+      badge.classList.remove('error');
+      badge.classList.add('pending');
+
+      try {
+        const data = await window.electronAPI.fetchIdToken();
+        if (data.error) {
+          badge.textContent = '失败';
+          badge.classList.remove('pending');
+          badge.classList.add('error');
+          document.getElementById('idTokenError').style.display = 'block';
+          document.getElementById('idTokenErrMsg').textContent = data.error;
+          document.getElementById('idTokenFields').style.display = 'none';
+        } else {
+          badge.textContent = '已获取';
+          badge.classList.remove('pending', 'error');
+          document.getElementById('idTokenError').style.display = 'none';
+          document.getElementById('idTokenFields').style.display = 'block';
+          document.getElementById('idToken').textContent = data.idToken || '-';
+          document.getElementById('idExpires').textContent = formatTimestamp(data.expiresIn);
+          document.getElementById('ssoUrl').textContent = data.ssoUrl || '-';
+          retryBtn.style.display = 'none';
+        }
+      } catch (err) {
+        badge.textContent = '失败';
+        badge.classList.remove('pending');
+        badge.classList.add('error');
+        document.getElementById('idTokenError').style.display = 'block';
+        document.getElementById('idTokenErrMsg').textContent = err.message || '获取失败';
+        document.getElementById('idTokenFields').style.display = 'none';
+      } finally {
+        retryBtn.disabled = false;
+        retryBtn.textContent = '重新获取';
+      }
+    }
+
     loadProfile();
+    loadSdkToken();
+    loadIdToken();
 
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       await window.electronAPI.logout();
     });
+
+    document.getElementById('retryIdToken').addEventListener('click', retryIdToken);
   </script>
 </body>
 </html>

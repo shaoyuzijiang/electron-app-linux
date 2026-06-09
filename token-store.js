@@ -9,6 +9,8 @@ const { app } = require('electron');
 const TOKEN_FILE = path.join(app.getPath('userData'), 'auth-tokens.json');
 
 let tokens = null;
+let sdkTokenData = null;
+let idTokenData = null;
 
 function loadTokens() {
   try {
@@ -63,4 +65,40 @@ function isAccessTokenExpired() {
   return Date.now() > expiresAt - 30 * 1000;
 }
 
-module.exports = { loadTokens, saveTokens, getTokens, clearTokens, isAccessTokenExpired };
+/**
+ * 保存 SDK Token 数据
+ */
+function saveSdkToken(data) {
+  sdkTokenData = data;
+}
+
+/**
+ * 获取 SDK Token 数据
+ */
+function getSdkToken() {
+  return sdkTokenData;
+}
+
+/**
+ * 保存 ID Token 数据
+ */
+function saveIdToken(data) {
+  idTokenData = data;
+}
+
+/**
+ * 获取 ID Token 数据
+ */
+function getIdToken() {
+  return idTokenData;
+}
+
+/**
+ * 清除会议相关 Token
+ */
+function clearMeetingTokens() {
+  sdkTokenData = null;
+  idTokenData = null;
+}
+
+module.exports = { loadTokens, saveTokens, getTokens, clearTokens, isAccessTokenExpired, saveSdkToken, getSdkToken, saveIdToken, getIdToken, clearMeetingTokens };

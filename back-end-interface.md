@@ -3,8 +3,11 @@
 | 方法 | 路径 | 认证 | 加密 | 说明 |
 |------|------|------|------|------|
 | GET | `/api/auth/public-key` | - | - | 获取 RSA 公钥 |
+| GET | `/api/auth/sdk-token` | - | - | 获取腾讯会议 SDK Token |
+| GET | `/api/auth/id-token` | Bearer Token | - | 获取腾讯会议 ID Token |
 | POST | `/api/auth/login` | - | ✅ | 用户登录 |
 | POST | `/api/auth/refresh` | - | ✅ | 刷新令牌 |
+| POST | `/api/auth/logout` | Bearer Token | - | 登出（撤销 Token） |
 | GET | `/api/auth/profile` | Bearer Token | - | 获取用户信息 |
 
 ### 响应格式
@@ -44,16 +47,102 @@ curl http://localhost:3000/api/auth/public-key
 
 ---
 
-### 2. 用户登录
+### 2. 获取腾讯会议 SDK Token
 
-请求体需经 RSA + AES 混合加密，受速率限制保护。
+无需认证，无需加密。根据腾讯会议 SDK 鉴权规范，由服务端使用 HS256 算法签发 JWT Token。
+
+> **前置条件**：需在环境变量中配置 `SDK_ID` 和 `SDK_SECRET`（从腾讯会议 SDK 配置中获取）。
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/auth/sdk-token
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "sdkId": "your-sdk-id",
+    "sdkToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": 1748936400
+  }
+}
+```
+
+**失败响应**
+
+```json
+// SDK 未配置 500
+{ "code": 500, "message": "SDK_ID and SDK_SECRET must be configured in environment variables" }
+```
+
+> **SDK Token 说明**：
+> - 使用 HS256 (HMAC-SHA256) 签名，密钥为 `SDK_SECRET`
+> - Payload 包含 `aud`（固定值 `"Tencent Meeting"`）、`iss`（SDK ID）、`iat`、`exp`
+> - `expiresIn` 为 Token 过期时间的 Unix 时间戳（秒），有效期默认 30 天（可通过 `SDK_TOKEN_EXPIRES_IN` 环境变量配置）
+> - 客户端获取后用于 SDK 初始化，初始化时仅做本地校验，真正验证在登录时进行
+
+---
+
+### 3. 获取腾讯会议 ID Token
+
+需要 Bearer Token 认证，无需加密。根据腾讯会议 SDK 鉴权规范，由服务端使用 RS256 算法签发 JWT Token。
+
+> **前置条件**：需在环境变量中配置 `SDK_ID`，并将腾讯会议 RSA 私钥文件放置在 `sso_key/private.pem`。
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/auth/id-token \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "idToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": 1748936300,
+    "ssoUrl": "https://test-idp.id.meeting.qq.com/cidp/custom/ai-xxx/ai-yyy?id_token="
+  }
+}
+```
+
+> `ssoUrl` 仅在配置了 `SDK_SSO_URL_PREFIX` 环境变量时返回，规则为 `SSO_URL前缀 + ID Token`。
+
+**失败响应**
+
+```json
+// 未认证 401
+{ "code": 401, "message": "Missing or invalid Authorization header" }
+
+// SDK 未配置或私钥缺失 500
+{ "code": 500, "message": "SDK_ID must be configured and sso_key/private.pem must exist" }
+```
+
+> **ID Token 说明**：
+> - 使用 RS256 (RSA-SHA256) 签名，密钥为腾讯侧提供的 RSA 私钥文件
+> - Payload 包含 `sub`（用户 ID，对应腾讯会议的 userId）、`iss`（SDK ID）、`name`（用户显示名称）、`iat`、`exp`
+> - `expiresIn` 为 Token 过期时间的 Unix 时间戳（秒），有效期默认 5 分钟（可通过 `SDK_ID_TOKEN_EXPIRES_IN` 环境变量配置）
+> - 客户端获取后与 SSO_URL 前缀拼接成完整 SSO_URL，用于 SDK 登录
+
+---
+
+### 4. 用户登录
+
+请求体需经 RSA + AES 混合加密，受速率限制保护（默认 5 次/分钟）。连续失败 5 次后账户锁定 15 分钟。
 
 **加密前的原始请求体**
 
 ```json
 {
   "username": "zhangsan",
-  "password": "password123"
+  "password": "<your-password>"
 }
 ```
 
@@ -104,8 +193,14 @@ curl -X POST http://localhost:3000/api/auth/login \
 // 凭证错误 401
 { "code": 401, "message": "Invalid credentials" }
 
+// 账户锁定 429
+{ "code": 429, "message": "Account temporarily locked due to too many failed attempts, please try again later" }
+
 // 解密失败 400
 { "code": 400, "message": "Decryption failed" }
+
+// nonce/timestamp 缺失 400
+{ "code": 400, "message": "Missing nonce or timestamp in encrypted request" }
 
 // 重放请求 400
 { "code": 400, "message": "Invalid or reused nonce" }
@@ -119,7 +214,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ---
 
-### 3. 刷新令牌
+### 5. 刷新令牌
 
 请求体需经 RSA + AES 混合加密，受速率限制保护。旧 Refresh Token 使用后即加入黑名单，响应返回新的 Token 对。
 
@@ -178,7 +273,48 @@ curl -X POST http://localhost:3000/api/auth/refresh \
 
 ---
 
-### 4. 获取用户信息
+### 6. 登出
+
+需要 Bearer Token 认证。撤销当前 Access Token，可选同时撤销 Refresh Token。
+
+**请求**
+
+```bash
+# 仅撤销 Access Token
+curl -X POST http://localhost:3000/api/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# 同时撤销 Refresh Token
+curl -X POST http://localhost:3000/api/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."}'
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Logged out successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// Token 已被撤销 401
+{ "code": 401, "message": "Token has been revoked" }
+
+// Token 过期 401
+{ "code": 401, "message": "Token expired" }
+```
+
+---
+
+### 7. 获取用户信息
 
 需要 Bearer Token 认证，无需加密。
 
@@ -211,6 +347,9 @@ curl http://localhost:3000/api/auth/profile \
 // Token 过期 401
 { "code": 401, "message": "Token expired" }
 
+// Token 已被撤销 401
+{ "code": 401, "message": "Token has been revoked" }
+
 // Token 无效 401
 { "code": 401, "message": "Invalid token" }
 
@@ -237,6 +376,8 @@ curl http://localhost:3000/api/auth/profile \
   "timestamp": "<毫秒时间戳>"
 }
 ```
+
+> **注意**：`nonce` 和 `timestamp` 为必填字段，缺失时请求将被拒绝。
 
 **Node.js 客户端加密示例**
 

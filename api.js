@@ -117,4 +117,23 @@ async function getProfile(accessToken) {
   });
 }
 
-module.exports = { getPublicKey, login, refreshToken, getProfile };
+/**
+ * 获取腾讯会议 SDK Token
+ * @returns {{ sdkId, sdkToken, expiresIn }}
+ */
+async function getSdkToken() {
+  return await request(`${BASE_URL}/api/auth/sdk-token`);
+}
+
+/**
+ * 获取腾讯会议 ID Token
+ * @param {string} accessToken
+ * @returns {{ idToken, expiresIn, ssoUrl? }}
+ */
+async function getIdToken(accessToken) {
+  return await request(`${BASE_URL}/api/auth/id-token`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+module.exports = { getPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken };

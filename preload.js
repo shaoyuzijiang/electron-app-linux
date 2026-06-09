@@ -5,4 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loginSuccess: () => ipcRenderer.send('login-success'),
   getProfile: () => ipcRenderer.invoke('get-profile'),
   logout: () => ipcRenderer.invoke('logout'),
+  getSdkToken: () => ipcRenderer.invoke('get-sdk-token'),
+  getIdToken: () => ipcRenderer.invoke('get-id-token'),
+  fetchIdToken: () => ipcRenderer.invoke('fetch-id-token'),
 });
