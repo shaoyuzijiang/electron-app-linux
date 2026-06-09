@@ -63,12 +63,23 @@ async function request(url, options = {}) {
   return json.data;
 }
 
+let cachedPublicKey = null;
+
 /**
- * 获取 RSA 公钥
+ * 获取 RSA 公钥（带缓存）
  */
 async function getPublicKey() {
+  if (cachedPublicKey) return cachedPublicKey;
   const data = await request(`${BASE_URL}/api/auth/public-key`);
-  return data.publicKey;
+  cachedPublicKey = data.publicKey;
+  return cachedPublicKey;
+}
+
+/**
+ * 预取公钥（应用启动时调用，不阻塞）
+ */
+function prefetchPublicKey() {
+  getPublicKey().catch(() => {});
 }
 
 /**
@@ -154,4 +165,4 @@ async function changePassword(accessToken, oldPassword, newPassword) {
   });
 }
 
-module.exports = { getPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword };
+module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword };

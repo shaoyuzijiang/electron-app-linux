@@ -411,6 +411,66 @@
       min-height: 18px;
     }
 
+    /* SDK 加载状态 */
+    .sdk-loading {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      gap: 16px;
+    }
+
+    .sdk-loading .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e8e8e8;
+      border-top-color: #1e6fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .sdk-loading .loading-text {
+      font-size: 14px;
+      color: #999;
+    }
+
+    .sdk-loading .loading-error {
+      font-size: 14px;
+      color: #ff4d4f;
+    }
+
+    .sdk-loading .retry-btn {
+      margin-top: 8px;
+      padding: 8px 20px;
+      font-size: 14px;
+      color: #fff;
+      background: #1e6fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .sdk-loading .retry-btn:hover {
+      opacity: 0.92;
+    }
+
+    .sdk-ready .action-btn,
+    .sdk-ready .meeting-item {
+      pointer-events: auto;
+    }
+
+    .sdk-not-ready .action-btn,
+    .sdk-not-ready .meeting-item {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
   </style>
 </head>
 <body>
@@ -423,8 +483,14 @@
     </div>
   </nav>
 
+  <!-- SDK 加载中状态 -->
+  <div class="sdk-loading" id="sdkLoading">
+    <div class="spinner"></div>
+    <div class="loading-text">会议功能加载中...</div>
+  </div>
+
   <!-- 左侧面板 -->
-  <aside class="left-panel">
+  <aside class="left-panel" id="leftPanel" style="display:none;">
     <div class="action-grid">
       <button class="action-btn" id="btnJoin">
         <div class="icon-wrap">
@@ -458,7 +524,7 @@
   </aside>
 
   <!-- 右侧内容 -->
-  <main class="right-content">
+  <main class="right-content" id="rightContent" style="display:none;">
     <div class="meeting-list" id="meetingList">
       <!-- 动态渲染 -->
     </div>
@@ -500,6 +566,67 @@
   </div>
 
   <script>
+    // SDK 加载状态管理
+    const sdkLoadingEl = document.getElementById('sdkLoading');
+    const leftPanelEl = document.getElementById('leftPanel');
+    const rightContentEl = document.getElementById('rightContent');
+
+    function showMeetingContent() {
+      sdkLoadingEl.style.display = 'none';
+      leftPanelEl.style.display = '';
+      rightContentEl.style.display = '';
+    }
+
+    function showSdkError(msg) {
+      sdkLoadingEl.innerHTML = `
+        <div class="loading-error">${msg}</div>
+        <button class="retry-btn" id="retrySdkBtn">重试</button>
+      `;
+      document.getElementById('retrySdkBtn').addEventListener('click', retrySdkLogin);
+    }
+
+    async function retrySdkLogin() {
+      sdkLoadingEl.innerHTML = `
+        <div class="spinner"></div>
+        <div class="loading-text">会议功能加载中...</div>
+      `;
+      try {
+        const idTokenResult = await window.electronAPI.fetchIdToken();
+        if (idTokenResult.error) {
+          showSdkError('会议功能加载失败，请重试');
+          return;
+        }
+        // 等待 SDK 登录完成
+        const result = await window.electronAPI.waitSdkLogin();
+        if (result.success) {
+          showMeetingContent();
+        } else {
+          showSdkError(result.message || '会议功能加载失败，请重试');
+        }
+      } catch (err) {
+        showSdkError('会议功能加载失败，请重试');
+      }
+    }
+
+    async function checkSdkStatus() {
+      try {
+        const status = await window.electronAPI.getSdkStatus();
+        if (status.loggedIn) {
+          showMeetingContent();
+          return;
+        }
+        // 未登录则等待 SDK 登录完成
+        const result = await window.electronAPI.waitSdkLogin();
+        if (result.success) {
+          showMeetingContent();
+        } else {
+          showSdkError(result.message || '会议功能加载失败，请重试');
+        }
+      } catch (err) {
+        showSdkError('会议功能加载失败，请重试');
+      }
+    }
+
     // 用户信息
     async function loadProfile() {
       try {
@@ -724,6 +851,7 @@
 
     // 初始化
     loadProfile();
+    checkSdkStatus();
   </script>
 </body>
 </html>

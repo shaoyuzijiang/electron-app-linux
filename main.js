@@ -9,15 +9,11 @@ let sdkInitialized = false;
 let sdkLoggedIn = false;
 let sdkInitResolve, sdkInitReject;
 let sdkLoginResolve, sdkLoginReject;
+let currentSdkLoginPromise = null;
 
 const sdkInitPromise = new Promise((resolve, reject) => {
   sdkInitResolve = resolve;
   sdkInitReject = reject;
-});
-
-const sdkLoginPromise = new Promise((resolve, reject) => {
-  sdkLoginResolve = resolve;
-  sdkLoginReject = reject;
 });
 
 try {
@@ -78,10 +74,10 @@ function handleSDKCallback(cbMsg) {
       if (success) {
         sdkLoggedIn = true;
         console.log('SDK 登录成功');
-        sdkLoginResolve(true);
+        if (sdkLoginResolve) sdkLoginResolve(true);
       } else {
         console.error('SDK 登录失败:', msg);
-        sdkLoginReject(new Error(`SDK 登录失败: ${msg}`));
+        if (sdkLoginReject) sdkLoginReject(new Error(`SDK 登录失败: ${msg}`));
       }
     } else if (func === 'OnLogout') {
       sdkLoggedIn = false;
@@ -154,7 +150,18 @@ async function sdkLogin(ssoUrl) {
     return false;
   }
 
+  if (sdkLoggedIn) {
+    console.log('SDK 已登录，跳过');
+    return true;
+  }
+
   try {
+    // 为每次登录创建新的 Promise
+    currentSdkLoginPromise = new Promise((resolve, reject) => {
+      sdkLoginResolve = resolve;
+      sdkLoginReject = reject;
+    });
+
     const loginJson = JSON.stringify({
       login_type: 0,                  // 0: SSOURL 登录
       force_kick_other_device: true,  // 强制踢出已登录的同端设备
@@ -163,17 +170,46 @@ async function sdkLogin(ssoUrl) {
       },
     });
     console.log('SDK 开始登录 (LoginByJSON), JSON 长度:', loginJson.length, '字节');
-    console.log('LoginByJSON 参数:', loginJson);
     if (loginJson.length > 1000) {
       console.warn('警告: LoginByJSON 的 JSON 字符串超过 1000 字节，C++ 侧 buf 仅有 1024 字节，可能被截断');
     }
     wemeetSdk.LoginByJSON(loginJson);
-    await sdkLoginPromise;
+    await currentSdkLoginPromise;
     return true;
   } catch (err) {
     console.error('SDK 登录失败:', err.message);
     return false;
   }
+}
+
+/**
+ * 等待 SDK 登录完成（供渲染进程调用）
+ */
+function waitSdkLogin() {
+  return new Promise((resolve) => {
+    if (sdkLoggedIn) {
+      resolve({ success: true });
+      return;
+    }
+
+    const TIMEOUT = 30000;
+    const INTERVAL = 500;
+    const startTime = Date.now();
+
+    const check = () => {
+      if (sdkLoggedIn) {
+        resolve({ success: true });
+        return;
+      }
+      if (Date.now() - startTime > TIMEOUT) {
+        resolve({ success: false, message: 'SDK 登录超时，请重试' });
+        return;
+      }
+      setTimeout(check, INTERVAL);
+    };
+
+    check();
+  });
 }
 
 function createWindow() {
@@ -192,6 +228,49 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
 
+  // 检查是否已有有效 token，自动登录
+  if (!tokenStore.isAccessTokenExpired()) {
+    const tokens = tokenStore.getTokens();
+    if (tokens) {
+      (async () => {
+        try {
+          const accessToken = await getValidAccessToken();
+          const profile = await api.getProfile(accessToken);
+
+          // 并行获取 ID Token + SDK 登录（不阻塞页面跳转）
+          (async () => {
+            try {
+              // 等待 SDK 初始化完成
+              if (wemeetSdk && !sdkInitialized) {
+                await sdkInitPromise;
+              }
+
+              const idTokenData = await api.getIdToken(accessToken);
+              tokenStore.saveIdToken(idTokenData);
+
+              if (wemeetSdk && sdkInitialized && idTokenData.ssoUrl) {
+                const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
+                if (loginSuccess) {
+                  console.log('自动登录 SDK 登录成功');
+                }
+              } else {
+                console.warn('自动登录 SDK 条件不满足:', { hasSdk: !!wemeetSdk, initialized: sdkInitialized, hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
+              }
+            } catch (err) {
+              console.error('自动登录 SDK 流程异常:', err.message);
+            }
+          })();
+
+          // 直接跳转首页
+          mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+        } catch (err) {
+          console.warn('自动登录失败，显示登录页:', err.message);
+          tokenStore.clearTokens();
+        }
+      })();
+    }
+  }
+
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
@@ -208,6 +287,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  // 预取公钥（不阻塞，登录时可直接使用缓存）
+  api.prefetchPublicKey();
 
   // 应用启动时初始化 SDK
   initSDK().then((success) => {
@@ -227,31 +309,32 @@ app.whenReady().then(() => {
       const tokenData = await api.login(username, password);
       tokenStore.saveTokens(tokenData);
 
-      // 2. 用 accessToken 获取用户信息（验证登录成功）
+      // 2. 获取用户信息（验证登录成功）
       const profile = await api.getProfile(tokenData.accessToken);
 
-      // 3. 登录已确认成功，再获取 ID Token
-      try {
-        const idTokenData = await api.getIdToken(tokenData.accessToken);
-        console.log('idTokenData:', JSON.stringify(idTokenData, null, 2));
-        tokenStore.saveIdToken(idTokenData);
+      // 3. ID Token + SDK 登录在后台异步完成，不阻塞页面跳转
+      (async () => {
+        try {
+          // 等待 SDK 初始化完成
+          if (wemeetSdk && !sdkInitialized) {
+            await sdkInitPromise;
+          }
 
-        // 4. 使用 ssoUrl 通过 LoginByJSON 登录腾讯会议 SDK（ssoUrl 已包含 idToken）
-        if (wemeetSdk && sdkInitialized && idTokenData.ssoUrl) {
-          sdkLogin(idTokenData.ssoUrl).then((loginSuccess) => {
+          const idTokenData = await api.getIdToken(tokenData.accessToken);
+          tokenStore.saveIdToken(idTokenData);
+
+          if (wemeetSdk && sdkInitialized && idTokenData.ssoUrl) {
+            const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
             if (loginSuccess) {
               console.log('腾讯会议 SDK 登录成功');
             }
-          }).catch((err) => {
-            console.error('腾讯会议 SDK 登录异常:', err.message);
-          });
-        } else {
-          console.warn('SDK 登录跳过: ssoUrl 缺失');
+          } else {
+            console.warn('SDK 登录条件不满足:', { hasSdk: !!wemeetSdk, initialized: sdkInitialized, hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
+          }
+        } catch (err) {
+          console.error('SDK 登录流程异常:', err.message);
         }
-      } catch (err) {
-        console.error('获取 ID Token 失败:', err.message);
-        tokenStore.saveIdToken({ error: err.message });
-      }
+      })();
 
       return { success: true, profile };
     } catch (err) {
@@ -356,6 +439,9 @@ app.whenReady().then(() => {
       version: wemeetSdk ? wemeetSdk.GetSDKVersion() : null,
     };
   });
+
+  // 等待 SDK 登录完成
+  ipcMain.handle('wait-sdk-login', () => waitSdkLogin());
 
   // 加入会议
   ipcMain.handle('join-meeting', async (_event, { meetingCode, displayName, password }) => {

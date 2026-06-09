@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 腾讯会议 SDK 接口
   getSdkStatus: () => ipcRenderer.invoke('get-sdk-status'),
+  waitSdkLogin: () => ipcRenderer.invoke('wait-sdk-login'),
   joinMeeting: (meetingCode, displayName, password) =>
     ipcRenderer.invoke('join-meeting', { meetingCode, displayName, password }),
   joinMeetingByJson: (meetingJson) =>
