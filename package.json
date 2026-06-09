@@ -5,23 +5,63 @@
   "description": "腾讯会议SDK Demo",
   "main": "main.js",
   "scripts": {
-    "build": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && cp build/Release/wemeet_electron_sdk.node output/mac/",
+    "build:native:arm64": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && mkdir -p output/mac && cp build/Release/wemeet_electron_sdk.node output/mac/wemeet_electron_sdk.arm64.node",
+    "build:native:x64": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && mkdir -p output/mac && cp build/Release/wemeet_electron_sdk.node output/mac/wemeet_electron_sdk.x64.node",
+    "build:native": "npm run build:native:arm64 && npm run build:native:x64",
     "start": "node start.js && electron .",
     "dev": "node start.js && electron .",
-    "postinstall": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && cp build/Release/wemeet_electron_sdk.node output/mac/"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:arm64": "electron-builder --arm64",
+    "dist:x64": "electron-builder --x64",
+    "create-universal-node": "lipo -create output/mac/wemeet_electron_sdk.arm64.node output/mac/wemeet_electron_sdk.x64.node -output output/mac/wemeet_electron_sdk.node",
+    "dist:universal": "npm run create-universal-node && electron-builder --universal",
+    "postinstall": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && mkdir -p output/mac && cp build/Release/wemeet_electron_sdk.node output/mac/wemeet_electron_sdk.arm64.node"
   },
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^26.15.2",
+    "fs-extra": "^11.0.0",
     "node-addon-api": "^3.0.2",
-    "node-gyp": "^10.0.0",
-    "fs-extra": "^11.0.0"
+    "node-gyp": "^10.0.0"
   },
-  "mac": {
-    "entitlements": "entitlements.mac.plist",
-    "hardenedRuntime": true,
-    "extendInfo": {
-      "NSMicrophoneUsageDescription": "请允许本程序访问您的麦克风",
-      "NSCameraUsageDescription": "请允许本程序访问您的摄像头"
+  "build": {
+    "appId": "com.tencent.meeting.sdk.demo",
+    "productName": "腾讯会议SDK Demo",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "api.js",
+      "token-store.js",
+      "start.js",
+      "renderer/**/*",
+      "output/**/*",
+      "!output/mac/wemeet_electron_sdk.arm64.node",
+      "!output/mac/wemeet_electron_sdk.x64.node",
+      "entitlements.mac.plist"
+    ],
+    "extraResources": [
+      {
+        "from": "wemeet_sdk",
+        "to": "wemeet_sdk"
+      }
+    ],
+    "mac": {
+      "entitlements": "entitlements.mac.plist",
+      "hardenedRuntime": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64", "universal"]
+        }
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "请允许本程序访问您的麦克风",
+        "NSCameraUsageDescription": "请允许本程序访问您的摄像头"
+      }
     }
   }
 }

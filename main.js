@@ -18,7 +18,17 @@ const sdkInitPromise = new Promise((resolve, reject) => {
 
 try {
   if (process.platform === 'darwin') {
-    wemeetSdk = require('./output/mac/wemeet_electron_sdk.node');
+    // 优先加载通用文件名（universal 构建产物），回退到架构特定文件（开发模式）
+    try {
+      wemeetSdk = require('./output/mac/wemeet_electron_sdk.node');
+    } catch {
+      const arch = process.arch;
+      try {
+        wemeetSdk = require(`./output/mac/wemeet_electron_sdk.${arch}.node`);
+      } catch {
+        console.error('无法加载腾讯会议 SDK 原生模块');
+      }
+    }
   } else if (process.platform === 'win32' && process.arch === 'x64') {
     wemeetSdk = require('./output/win/x64/wemeet_electron_sdk.node');
   } else if (process.platform === 'win32') {
