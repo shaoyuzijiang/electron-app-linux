@@ -4,10 +4,23 @@
   "description": "Electron app with login and home page",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron ."
+    "build": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && cp build/Release/wemeet_electron_sdk.node output/mac/",
+    "start": "node start.js && electron .",
+    "dev": "node start.js && electron .",
+    "postinstall": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && cp build/Release/wemeet_electron_sdk.node output/mac/"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "node-addon-api": "^3.0.2",
+    "node-gyp": "^10.0.0",
+    "fs-extra": "^11.0.0"
+  },
+  "mac": {
+    "entitlements": "entitlements.mac.plist",
+    "hardenedRuntime": true,
+    "extendInfo": {
+      "NSMicrophoneUsageDescription": "请允许本程序访问您的麦克风",
+      "NSCameraUsageDescription": "请允许本程序访问您的摄像头"
+    }
   }
 }
