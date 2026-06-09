@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('show-schedule-meeting-view', { meetingType }),
   showMeetingSettingView: () => ipcRenderer.invoke('show-meeting-setting-view'),
   showScreenCastView: () => ipcRenderer.invoke('show-screen-cast-view'),
+  showUploadLogsView: () => ipcRenderer.invoke('show-upload-logs-view'),
 
   // 监听 SDK 回调
   onSdkCallback: (callback) => {

@@ -472,6 +472,19 @@ app.whenReady().then(() => {
       return { success: false, message: err.message };
     }
   });
+
+  // 上传腾讯会议日志
+  ipcMain.handle('show-upload-logs-view', async () => {
+    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
+      return { success: false, message: 'SDK 未就绪' };
+    }
+    try {
+      wemeetSdk.ShowUploadLogsView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

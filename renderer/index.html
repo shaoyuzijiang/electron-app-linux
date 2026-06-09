@@ -467,6 +467,7 @@
   <!-- 头像下拉菜单 -->
   <div class="avatar-menu" id="avatarMenu">
     <div class="avatar-menu-item" id="changePasswordMenu">修改密码</div>
+    <div class="avatar-menu-item" id="uploadLogsMenu">上传腾讯会议日志</div>
     <div class="avatar-menu-divider"></div>
     <div class="avatar-menu-item danger" id="logoutMenu">退出登录</div>
   </div>
@@ -624,6 +625,17 @@
     document.getElementById('logoutMenu').addEventListener('click', async () => {
       avatarMenu.classList.remove('show');
       await window.electronAPI.logout();
+    });
+
+    // 上传腾讯会议日志
+    document.getElementById('uploadLogsMenu').addEventListener('click', async () => {
+      avatarMenu.classList.remove('show');
+      try {
+        const result = await window.electronAPI.showUploadLogsView();
+        if (!result.success) alert(result.message || '无法打开上传日志界面');
+      } catch (err) {
+        alert('操作失败: ' + err.message);
+      }
     });
 
     // 修改密码弹窗
