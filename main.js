@@ -120,6 +120,20 @@ app.whenReady().then(() => {
     return { success: true };
   });
 
+  // 修改密码
+  ipcMain.handle('change-password', async (_event, { oldPassword, newPassword }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const result = await api.changePassword(accessToken, oldPassword, newPassword);
+      return { success: true, message: result.message };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
   // 获取 SDK Token 数据（首页使用）
   ipcMain.handle('get-sdk-token', () => {
     return tokenStore.getSdkToken() || null;

@@ -136,4 +136,22 @@ async function getIdToken(accessToken) {
   });
 }
 
-module.exports = { getPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken };
+/**
+ * 修改密码
+ * @param {string} accessToken
+ * @param {string} oldPassword
+ * @param {string} newPassword
+ * @returns {{ message: string }}
+ */
+async function changePassword(accessToken, oldPassword, newPassword) {
+  return await request(`${BASE_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ oldPassword, newPassword }),
+  });
+}
+
+module.exports = { getPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword };

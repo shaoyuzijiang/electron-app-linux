@@ -1,3 +1,4 @@
+
 ## API 接口
 
 | 方法 | 路径 | 认证 | 加密 | 说明 |
@@ -9,6 +10,7 @@
 | POST | `/api/auth/refresh` | - | ✅ | 刷新令牌 |
 | POST | `/api/auth/logout` | Bearer Token | - | 登出（撤销 Token） |
 | GET | `/api/auth/profile` | Bearer Token | - | 获取用户信息 |
+| POST | `/api/auth/change-password` | Bearer Token | - | 修改密码 |
 
 ### 响应格式
 
@@ -356,6 +358,53 @@ curl http://localhost:3000/api/auth/profile \
 // 使用了 Refresh Token 而非 Access Token 401
 { "code": 401, "message": "Invalid token type, access token required" }
 ```
+
+---
+
+### 8. 修改密码
+
+需要 Bearer Token 认证，无需加密。需提供当前密码和新密码，密码修改成功后自动撤销该用户所有 Refresh Token（其他设备需重新登录）。
+
+**请求**
+
+```bash
+curl -X POST http://localhost:3000/api/auth/change-password \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "oldPassword": "OldPass123",
+    "newPassword": "NewPass456"
+  }'
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Password changed successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 缺少字段 400
+{ "code": 400, "message": "Missing oldPassword or newPassword" }
+
+// 旧密码错误 401
+{ "code": 401, "message": "Current password is incorrect" }
+
+// 新密码强度不足 400
+{ "code": 400, "message": "Password must be at least 8 characters" }
+{ "code": 400, "message": "Password must contain at least one uppercase letter" }
+{ "code": 400, "message": "Password must contain at least one lowercase letter" }
+{ "code": 400, "message": "Password must contain at least one digit" }
+```
+
+> **安全说明**：新密码需满足强度要求（≥8 位，含大写字母、小写字母和数字）。密码修改成功后，该用户所有 Refresh Token 将被撤销，其他设备上的会话将失效，需重新登录。
 
 ---
 
