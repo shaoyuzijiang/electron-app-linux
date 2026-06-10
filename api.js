@@ -64,15 +64,25 @@ async function request(url, options = {}) {
 }
 
 let cachedPublicKey = null;
+let publicKeyPromise = null;
 
 /**
- * 获取 RSA 公钥（带缓存）
+ * 获取 RSA 公钥（带缓存，并发安全）
  */
 async function getPublicKey() {
   if (cachedPublicKey) return cachedPublicKey;
-  const data = await request(`${BASE_URL}/api/auth/public-key`);
-  cachedPublicKey = data.publicKey;
-  return cachedPublicKey;
+  if (!publicKeyPromise) {
+    publicKeyPromise = request(`${BASE_URL}/api/auth/public-key`)
+      .then((data) => {
+        cachedPublicKey = data.publicKey;
+        return cachedPublicKey;
+      })
+      .catch((err) => {
+        publicKeyPromise = null; // 请求失败时清除，允许重试
+        throw err;
+      });
+  }
+  return publicKeyPromise;
 }
 
 /**
@@ -165,4 +175,44 @@ async function changePassword(accessToken, oldPassword, newPassword) {
   });
 }
 
-module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword };
+/**
+ * 创建会议
+ * @param {string} accessToken
+ * @param {object} meetingData - 会议数据
+ * @param {string} meetingData.subject - 会议主题（必填，不超过 512 字节）
+ * @param {number} meetingData.type - 会议类型（必填）：0-预约会议，1-快速会议
+ * @param {string} meetingData.start_time - 开始时间（必填，秒级时间戳字符串）
+ * @param {string} meetingData.end_time - 结束时间（必填，秒级时间戳字符串）
+ * @param {number} meetingData.instanceid - 用户终端设备类型（必填，默认 1-PC）
+ * @param {number} [meetingData.meeting_type] - 会议模式：0-普通会议（默认），1-周期性会议，5-个人会议号会议
+ * @param {object[]} [meetingData.hosts] - 主持人列表，如 [{"userid": "user1"}]
+ * @param {object[]} [meetingData.invitees] - 参会人列表
+ * @param {object[]} [meetingData.guests] - 会议嘉宾列表
+ * @param {string} [meetingData.password] - 会议密码（4-6 位数字）
+ * @param {object} [meetingData.settings] - 会议媒体参数配置
+ * @param {number} [meetingData.settings.mute_enable_type_join] - 入会静音：0-关闭，1-开启，2-超6人自动开启（默认2）
+ * @param {boolean} [meetingData.settings.allow_unmute_self] - 允许参会者取消静音，默认 true
+ * @param {boolean} [meetingData.settings.allow_in_before_host] - 允许主持人前入会，默认 true
+ * @param {boolean} [meetingData.settings.auto_in_waiting_room] - 开启等候室，默认 false
+ * @param {string} [meetingData.settings.auto_record_type] - 自动录制：none/local/cloud
+ * @param {object} [meetingData.recurring_rule] - 周期性会议配置（meeting_type=1 时）
+ * @param {boolean} [meetingData.enable_live] - 是否开启直播
+ * @param {object} [meetingData.live_config] - 直播配置
+ * @param {boolean} [meetingData.enable_host_key] - 是否开启主持人密钥
+ * @param {string} [meetingData.host_key] - 主持人密钥（6 位数字）
+ * @param {string} [meetingData.time_zone] - 时区
+ * @param {string} [meetingData.location] - 会议地点
+ * @returns {{ meeting_info: object }}
+ */
+async function createMeeting(accessToken, meetingData) {
+  return await request(`${BASE_URL}/api/wemeet/meetings`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(meetingData),
+  });
+}
+
+module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword, createMeeting };

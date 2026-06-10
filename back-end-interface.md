@@ -12,6 +12,30 @@
 | GET | `/api/auth/profile` | Bearer Token | - | 获取用户信息 |
 | POST | `/api/auth/change-password` | Bearer Token | - | 修改密码 |
 
+### 腾讯会议接口
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/wemeet/meetings` | Bearer Token | 创建会议 |
+| GET | `/api/wemeet/meetings` | Bearer Token | 查询用户会议列表 |
+| GET | `/api/wemeet/meetings/:meetingId` | Bearer Token | 查询会议详情 |
+| GET | `/api/wemeet/meetings/:meetingId/participants` | Bearer Token | 获取参会成员 |
+| GET | `/api/wemeet/history/meetings` | Bearer Token | 查询已结束会议列表 |
+| GET | `/api/wemeet/users/:userid` | Bearer Token | 获取用户详情 |
+| GET | `/api/wemeet/records` | Bearer Token | 查询录制列表 |
+| GET | `/api/wemeet/records/:recordId/address` | Bearer Token | 获取录制下载地址 |
+
+### 管理员接口
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/admin/login` | - | 管理员登录 |
+| GET | `/api/admin/users` | Admin Token | 获取用户列表 |
+| POST | `/api/admin/users` | Admin Token | 创建用户 |
+| PUT | `/api/admin/users/:username` | Admin Token | 修改用户信息 |
+| POST | `/api/admin/users/:username/reset-password` | Admin Token | 重置用户密码 |
+| DELETE | `/api/admin/users/:username` | Admin Token | 删除用户 |
+
 ### 响应格式
 
 ```json
@@ -405,6 +429,275 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 ```
 
 > **安全说明**：新密码需满足强度要求（≥8 位，含大写字母、小写字母和数字）。密码修改成功后，该用户所有 Refresh Token 将被撤销，其他设备上的会话将失效，需重新登录。
+
+---
+
+### 9. 修改用户信息（管理员）
+
+需要管理员 Bearer Token 认证。支持修改用户名和手机号，用户 ID 不可修改。
+
+**请求**
+
+```bash
+curl -X PUT http://localhost:3000/api/admin/users/zhangsan \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"newUsername": "zhangsan2", "phone": "13800138000"}'
+```
+
+> `newUsername` 和 `phone` 均为可选字段，仅传需要修改的字段即可。
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "User updated successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 用户不存在 404
+{ "code": 404, "message": "User not found" }
+
+// 用户名格式错误 400
+{ "code": 400, "message": "Username must be 2-32 characters (letters, numbers, underscore)" }
+
+// 手机号格式错误 400
+{ "code": 400, "message": "Invalid phone number format" }
+
+// 用户名已存在 409
+{ "code": 409, "message": "Username already exists" }
+
+// 手机号已被占用 409
+{ "code": 409, "message": "Phone number already exists" }
+```
+
+---
+
+### 10. 重置用户密码（管理员）
+
+需要管理员 Bearer Token 认证。生成随机新密码，重置后该用户所有 Refresh Token 将被撤销，所有设备需重新登录。
+
+**请求**
+
+```bash
+curl -X POST http://localhost:3000/api/admin/users/zhangsan/reset-password \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "username": "zhangsan",
+    "newPassword": "aB3kM9xNpQr7",
+    "message": "Password reset successfully. Please save the new password securely."
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 用户不存在 404
+{ "code": 404, "message": "User not found" }
+```
+
+> **安全说明**：新密码由服务端随机生成（12 位，含大小写字母、数字和特殊字符），仅在此响应中返回一次，请妥善保存。重置后该用户所有设备将强制重新登录。
+
+---
+
+## 腾讯会议 REST API 接口
+
+所有腾讯会议接口均需 Bearer Token 认证。服务端自动处理 HMAC-SHA256 签名，客户端无需关心签名逻辑。
+
+> **前置条件**：需在环境变量中配置 `WEMEET_SECRET_ID`、`WEMEET_SECRET_KEY`、`WEMEET_APP_ID`、`WEMEET_SDK_ID`（从[腾讯会议开放平台](https://meeting.tencent.com/open-api.html)获取）。
+
+### 1. 创建会议
+
+需要 Bearer Token 认证。服务端自动处理 HMAC-SHA256 签名，创建者 `userid` 自动从当前登录用户的 `username` 获取，无需传入。
+
+> **接口文档**：[腾讯云 - 创建会议](https://cloud.tencent.com/document/product/1095/42417)
+
+**请求**
+
+```bash
+curl -X POST http://localhost:3000/api/wemeet/meetings \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "项目周会",
+    "type": 0,
+    "start_time": "1749540000",
+    "end_time": "1749543600",
+    "instanceid": 1,
+    "password": "123456",
+    "settings": {
+      "mute_enable_type_join": 2
+    }
+  }'
+```
+
+**请求参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `subject` | string | ✅ | 会议主题，不超过 512 字节 |
+| `type` | integer | ✅ | 会议类型：0-预约会议，1-快速会议 |
+| `start_time` | string | ✅ | 会议开始时间（秒级时间戳），需大于当前时间 |
+| `end_time` | string | ✅ | 会议结束时间（秒级时间戳），需大于开始时间 |
+| `instanceid` | integer | ✅ | 用户终端设备类型，默认 1（PC）。0-PSTN, 1-PC, 2-Mac, 3-Android, 4-iOS, 5-Web, 6-iPad, 7-Android Pad, 8-小程序, 10-Linux |
+| `meeting_type` | integer | - | 会议模式：0-普通会议（默认），1-周期性会议，5-个人会议号会议 |
+| `hosts` | User[] | - | 主持人列表（仅商业版/企业版），如 `[{"userid": "user1"}]` |
+| `invitees` | User[] | - | 参会人列表（仅商业版/企业版），限 300 人 |
+| `guests` | Guest[] | - | 会议嘉宾列表（不受密码和等候室限制），限 2000 人 |
+| `password` | string | - | 会议密码（4-6 位数字） |
+| `settings` | object | - | 会议媒体参数配置（见下方 Setting 对象） |
+| `recurring_rule` | object | - | 周期性会议配置（`meeting_type=1` 时使用） |
+| `enable_live` | boolean | - | 是否开启直播，默认 false |
+| `live_config` | object | - | 直播配置 |
+| `enable_host_key` | boolean | - | 是否开启主持人密钥，默认 false |
+| `host_key` | string | - | 主持人密钥，仅支持 6 位数字 |
+| `time_zone` | string | - | 时区（Oracle-TimeZone 标准） |
+| `location` | string | - | 会议地点，最长 18 个汉字或 36 个英文字母 |
+
+**Setting 对象**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `mute_enable_type_join` | integer | 入会静音选项：0-关闭，1-开启，2-超6人自动开启（默认2） |
+| `allow_unmute_self` | boolean | 允许参会者取消静音，默认 true |
+| `allow_in_before_host` | boolean | 允许主持人前入会，默认 true |
+| `auto_in_waiting_room` | boolean | 开启等候室，默认 false |
+| `allow_screen_shared_watermark` | boolean | 屏幕共享水印，默认 false |
+| `only_user_join_type` | integer | 入会限制：1-所有成员，2-仅受邀成员，3-仅企业内部 |
+| `auto_record_type` | string | 自动录制：none-禁用，local-本地录制，cloud-云录制 |
+| `allow_multi_device` | boolean | 允许多端入会 |
+| `change_nickname` | integer | 是否允许改名：1-允许（默认），2-不允许 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "meeting_info": {
+      "meeting_id": "123456789",
+      "subject": "项目周会",
+      "status": "init",
+      "join_url": "https://meeting.tencent.com/dm/r/XXXXXXX",
+      "meeting_code": "123-456-789",
+      "password": "123456",
+      "start_time": "1749540000",
+      "end_time": "1749543600",
+      "hosts": [{ "userid": "zhangsan" }],
+      "invitees": []
+    }
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 未认证 401
+{ "code": 401, "message": "Missing or invalid Authorization header" }
+
+// 缺少必填字段 400
+{ "code": 400, "message": "Missing required field: subject" }
+{ "code": 400, "message": "Missing required field: type (0-scheduled, 1-instant)" }
+{ "code": 400, "message": "Missing required field: start_time (unix timestamp in seconds)" }
+{ "code": 400, "message": "Missing required field: end_time (unix timestamp in seconds)" }
+
+// API 凭证未配置 500
+{ "code": 500, "message": "WeMeet API credentials not configured (WEMEET_SECRET_ID, WEMEET_SECRET_KEY)" }
+
+// 腾讯会议 API 错误
+{ "code": 400, "message": "WeMeet API error: ..." }
+```
+
+---
+
+### 2. 查询用户会议列表
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/wemeet/meetings \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**查询参数**
+
+| 参数 | 说明 |
+|------|------|
+| `page` | 页码 |
+| `page_size` | 每页数量 |
+
+---
+
+### 3. 查询会议详情
+
+```bash
+curl http://localhost:3000/api/wemeet/meetings/123456789 \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
+### 4. 查询已结束会议列表
+
+```bash
+curl "http://localhost:3000/api/wemeet/history/meetings?page=1&page_size=10" \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
+### 5. 获取参会成员
+
+```bash
+curl http://localhost:3000/api/wemeet/meetings/123456789/participants \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
+### 6. 获取用户详情
+
+```bash
+curl http://localhost:3000/api/wemeet/users/zhangsan \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+> 支持降级机制：优先使用 `WEMEET_ADMIN_USERID` 作为 `operator_id`，失败后自动使用当前登录用户重试。
+
+---
+
+### 7. 查询录制列表
+
+```bash
+curl http://localhost:3000/api/wemeet/records \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+> 默认查询最近 24 小时的录制记录。
+
+---
+
+### 8. 获取录制下载地址
+
+```bash
+curl http://localhost:3000/api/wemeet/records/record123/address \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
 
 ---
 

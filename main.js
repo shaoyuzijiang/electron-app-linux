@@ -13,11 +13,10 @@ let sdkLoggedIn = false;
 let sdkInitResolve, sdkInitReject;
 let sdkLoginResolve, sdkLoginReject;
 let currentSdkLoginPromise = null;
-
-let sdkInitPromise = new Promise((resolve, reject) => {
-  sdkInitResolve = resolve;
-  sdkInitReject = reject;
-});
+let sdkInitPromise = null;
+let sdkInitializing = false;
+let sdkLoggingIn = false;
+const MAX_RETRY = 3;
 
 try {
   if (process.platform === 'darwin') {
@@ -78,16 +77,22 @@ function handleSDKCallback(cbMsg) {
       if (success) {
         sdkInitialized = true;
         console.log('SDK 初始化成功');
-        sdkInitResolve(true);
+        if (sdkInitResolve) sdkInitResolve(true);
+      } else if (sdkInitialized) {
+        // 已初始化成功的重复初始化回调，忽略
+        console.log('SDK 已初始化，忽略重复初始化回调:', msg);
       } else {
         console.error('SDK 初始化失败:', msg);
-        sdkInitReject(new Error(`SDK 初始化失败: ${msg}`));
+        if (sdkInitReject) sdkInitReject(new Error(`SDK 初始化失败: ${msg}`));
       }
     } else if (func === 'OnLogin') {
       if (success) {
         sdkLoggedIn = true;
         console.log('SDK 登录成功');
         if (sdkLoginResolve) sdkLoginResolve(true);
+      } else if (sdkLoggedIn) {
+        // 已登录成功的重复登录回调，忽略
+        console.log('SDK 已登录，忽略重复登录回调:', msg);
       } else {
         console.error('SDK 登录失败:', msg);
         if (sdkLoginReject) sdkLoginReject(new Error(`SDK 登录失败: ${msg}`));
@@ -111,7 +116,7 @@ function handleSDKCallback(cbMsg) {
 }
 
 /**
- * 初始化 SDK
+ * 初始化 SDK（带并发保护和重试）
  */
 async function initSDK() {
   if (!wemeetSdk) {
@@ -124,44 +129,66 @@ async function initSDK() {
     return true;
   }
 
-  try {
-    // 每次初始化前重建 Promise（上一次可能已 rejected）
-    sdkInitPromise = new Promise((resolve, reject) => {
-      sdkInitResolve = resolve;
-      sdkInitReject = reject;
-    });
-
-    // 获取 SDK Token
-    const sdkData = await api.getSdkToken();
-    tokenStore.saveSdkToken(sdkData);
-
-    const sdkId = String(sdkData.sdkId);
-    const sdkToken = sdkData.sdkToken;
-    const dataPath = app.getPath('userData');
-    const appName = app.getName();
-
-    console.log('开始初始化 SDK, sdkId:', sdkId);
-
-    // InitWemeetSDK 位置参数: sdk_id, sdk_token, data_path, app_name, app_icon, prefer_language, proxy_info, allow_home_view
-    // 参考文档: https://github.com/Tencent-Meeting/TencentMeetingSDK/blob/main/Docs/Common/TencentMeetingSDK（TMSDK）接口参考文档.md#initialize
-    wemeetSdk.InitWemeetSDK(
-      sdkId,       // sdk_id (string, 必填) - SDK ID
-      sdkToken,    // sdk_token (string, 必填) - SDK Token
-      dataPath,    // data_path (string, 选填) - SDK 数据存储路径，仅 Windows/Linux 有效，Mac 端可传空串
-      appName,     // app_name (string, 选填) - 显示的品牌名称，默认"网络会议"
-      '',          // app_icon (string, 选填) - 窗口图标绝对路径，仅 Windows 端有效，Mac 传空串
-      'zh-cn',     // prefer_language (string, 选填) - SDK 语言，支持 zh-cn/en-us/ja，默认 zh-cn
-      '',          // proxy_info (string, 选填) - 网络代理 JSON 串，不使用代理传空串
-      false        // allow_home_view (bool, 选填) - 是否使用 SDK 会议主面板，false 为不使用
-    );
-
-    // 等待初始化回调
-    await sdkInitPromise;
-    return true;
-  } catch (err) {
-    console.error('SDK 初始化失败:', err.message);
-    return false;
+  // 如果正在初始化中，等待已有的初始化完成，不重复调用
+  if (sdkInitializing) {
+    console.log('SDK 正在初始化中，等待完成...');
+    try {
+      await sdkInitPromise;
+      return true;
+    } catch {
+      // 已有初始化失败，下方会重试
+    }
   }
+
+  sdkInitializing = true;
+
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    try {
+      // 每次尝试前重建 Promise
+      sdkInitPromise = new Promise((resolve, reject) => {
+        sdkInitResolve = resolve;
+        sdkInitReject = reject;
+      });
+
+      // 获取 SDK Token
+      const sdkData = await api.getSdkToken();
+      tokenStore.saveSdkToken(sdkData);
+
+      const sdkId = String(sdkData.sdkId);
+      const sdkToken = sdkData.sdkToken;
+      const dataPath = app.getPath('userData');
+      const appName = app.getName();
+
+      console.log(`开始初始化 SDK (第 ${attempt}/${MAX_RETRY} 次), sdkId:`, sdkId);
+
+      // InitWemeetSDK 位置参数: sdk_id, sdk_token, data_path, app_name, app_icon, prefer_language, proxy_info, allow_home_view
+      wemeetSdk.InitWemeetSDK(
+        sdkId,       // sdk_id (string, 必填)
+        sdkToken,    // sdk_token (string, 必填)
+        dataPath,    // data_path (string, 选填)
+        appName,     // app_name (string, 选填)
+        '',          // app_icon (string, 选填)
+        'zh-cn',     // prefer_language (string, 选填)
+        '',          // proxy_info (string, 选填)
+        false        // allow_home_view (bool, 选填)
+      );
+
+      // 等待初始化回调
+      await sdkInitPromise;
+      sdkInitializing = false;
+      return true;
+    } catch (err) {
+      console.error(`SDK 初始化失败 (第 ${attempt}/${MAX_RETRY} 次):`, err.message);
+      if (attempt < MAX_RETRY) {
+        // 短暂延迟后重试
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  console.error(`SDK 初始化失败，已重试 ${MAX_RETRY} 次`);
+  sdkInitializing = false;
+  return false;
 }
 
 /**
@@ -230,7 +257,7 @@ async function ensureSDKLoggedIn() {
 }
 
 /**
- * SDK 登录（使用 LoginByJSON）
+ * SDK 登录（使用 LoginByJSON，带并发保护和重试）
  * @param {string} ssoUrl - SSO URL 前缀 + ID Token 拼接的完整地址
  */
 async function sdkLogin(ssoUrl) {
@@ -244,31 +271,53 @@ async function sdkLogin(ssoUrl) {
     return true;
   }
 
-  try {
-    // 为每次登录创建新的 Promise
-    currentSdkLoginPromise = new Promise((resolve, reject) => {
-      sdkLoginResolve = resolve;
-      sdkLoginReject = reject;
-    });
-
-    const loginJson = JSON.stringify({
-      login_type: 0,                  // 0: SSOURL 登录
-      force_kick_other_device: true,  // 强制踢出已登录的同端设备
-      login_params: {
-        sso_url: ssoUrl,              // ssoUrl（已包含 idToken）
-      },
-    });
-    console.log('SDK 开始登录 (LoginByJSON), JSON 长度:', loginJson.length, '字节');
-    if (loginJson.length > 1000) {
-      console.warn('警告: LoginByJSON 的 JSON 字符串超过 1000 字节，C++ 侧 buf 仅有 1024 字节，可能被截断');
+  // 如果正在登录中，等待已有的登录完成，不重复调用
+  if (sdkLoggingIn) {
+    console.log('SDK 正在登录中，等待完成...');
+    try {
+      await currentSdkLoginPromise;
+      return true;
+    } catch {
+      // 已有登录失败，下方会重试
     }
-    wemeetSdk.LoginByJSON(loginJson);
-    await currentSdkLoginPromise;
-    return true;
-  } catch (err) {
-    console.error('SDK 登录失败:', err.message);
-    return false;
   }
+
+  sdkLoggingIn = true;
+
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    try {
+      // 每次尝试前重建 Promise
+      currentSdkLoginPromise = new Promise((resolve, reject) => {
+        sdkLoginResolve = resolve;
+        sdkLoginReject = reject;
+      });
+
+      const loginJson = JSON.stringify({
+        login_type: 0,                  // 0: SSOURL 登录
+        force_kick_other_device: true,  // 强制踢出已登录的同端设备
+        login_params: {
+          sso_url: ssoUrl,              // ssoUrl（已包含 idToken）
+        },
+      });
+      console.log(`SDK 开始登录 (第 ${attempt}/${MAX_RETRY} 次), JSON 长度:`, loginJson.length, '字节');
+      if (loginJson.length > 1000) {
+        console.warn('警告: LoginByJSON 的 JSON 字符串超过 1000 字节，C++ 侧 buf 仅有 1024 字节，可能被截断');
+      }
+      wemeetSdk.LoginByJSON(loginJson);
+      await currentSdkLoginPromise;
+      sdkLoggingIn = false;
+      return true;
+    } catch (err) {
+      console.error(`SDK 登录失败 (第 ${attempt}/${MAX_RETRY} 次):`, err.message);
+      if (attempt < MAX_RETRY) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  console.error(`SDK 登录失败，已重试 ${MAX_RETRY} 次`);
+  sdkLoggingIn = false;
+  return false;
 }
 
 /**
@@ -480,6 +529,21 @@ app.whenReady().then(() => {
       mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
     }
     return { success: true };
+  });
+
+  // 创建会议
+  ipcMain.handle('create-meeting', async (_event, meetingData) => {
+    try {
+      console.log('[create-meeting] 请求参数:', JSON.stringify(meetingData, null, 2));
+      const accessToken = await getValidAccessToken();
+      const result = await api.createMeeting(accessToken, meetingData);
+      return { success: true, data: result };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
   });
 
   // 修改密码

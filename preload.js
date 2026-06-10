@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProfile: () => ipcRenderer.invoke('get-profile'),
   logout: () => ipcRenderer.invoke('logout'),
   changePassword: (oldPassword, newPassword) => ipcRenderer.invoke('change-password', { oldPassword, newPassword }),
+  createMeeting: (meetingData) => ipcRenderer.invoke('create-meeting', meetingData),
   getSdkToken: () => ipcRenderer.invoke('get-sdk-token'),
   getIdToken: () => ipcRenderer.invoke('get-id-token'),
   fetchIdToken: () => ipcRenderer.invoke('fetch-id-token'),
