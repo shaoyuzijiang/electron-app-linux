@@ -382,9 +382,22 @@ document.getElementById('submitScheduleMeeting').addEventListener('click', async
 });
 
 function showScheduleResult(data) {
-  const info = data.meeting_info || {};
+  // 创建会议接口返回格式：{ meeting_info_list: [{...}] }
+  let info;
+  if (data && Array.isArray(data.meeting_info_list) && data.meeting_info_list.length > 0) {
+    info = data.meeting_info_list[0];
+  } else if (data && data.meeting_info) {
+    info = data.meeting_info;
+  } else if (data && (data.subject || data.meeting_id || data.meeting_code)) {
+    info = data;
+  } else {
+    info = {};
+  }
+
   const startDisplay = info.start_time ? new Date(Number(info.start_time) * 1000).toLocaleString('zh-CN') : '-';
   const endDisplay = info.end_time ? new Date(Number(info.end_time) * 1000).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-';
+  const meetingCode = info.meeting_code || info.meeting_id || '-';
+  const meetingPassword = info.password || '无';
 
   scheduleFormContainer.style.display = 'none';
   scheduleResultContainer.style.display = '';
@@ -394,38 +407,60 @@ function showScheduleResult(data) {
         <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
       </div>
       <div class="result-title">会议预定成功</div>
+      <!-- 会议号高亮卡片 -->
+      <div class="meeting-code-card">
+        <div>
+          <div class="code-label" style="text-align:left;">会议号</div>
+          <div class="code-value" id="resultMeetingCode" title="点击复制">${meetingCode}</div>
+        </div>
+        <span class="code-copy-hint" id="copyCodeHint">复制</span>
+      </div>
+      <!-- 详细信息 -->
       <div class="result-info">
         <div class="info-row">
           <span class="info-label">会议主题</span>
           <span class="info-value">${info.subject || '-'}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">会议号</span>
-          <span class="info-value copyable" data-copy="${info.meeting_code || ''}">${info.meeting_code || info.meeting_id || '-'}</span>
-        </div>
-        <div class="info-row">
           <span class="info-label">会议密码</span>
-          <span class="info-value">${info.password || '无'}</span>
+          <span class="info-value">${meetingPassword}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">开始时间</span>
-          <span class="info-value">${startDisplay}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">结束时间</span>
-          <span class="info-value">${endDisplay}</span>
+          <span class="info-label">会议时间</span>
+          <span class="info-value time-range-row">${startDisplay} <span class="time-separator">—</span> ${endDisplay}</span>
         </div>
         <div class="info-row">
           <span class="info-label">入会链接</span>
-          <span class="info-value copyable" data-copy="${info.join_url || ''}" style="word-break:break-all;max-width:260px;">${info.join_url || '-'}</span>
+          <span class="info-value copyable" data-copy="${info.join_url || ''}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${info.join_url || '-'}</span>
         </div>
       </div>
     </div>
-    <div class="modal-actions" style="justify-content:center;">
+    <div class="modal-actions" style="justify-content:center;gap:10px;">
+      <button class="btn-copy-all" id="copyAllInfoBtn">
+        <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+        复制会议信息
+      </button>
       <button class="btn-submit" id="closeScheduleResult">确定</button>
     </div>
   `;
 
+  // 复制会议号
+  const codeEl = document.getElementById('resultMeetingCode');
+  const codeHintEl = document.getElementById('copyCodeHint');
+  if (codeEl && meetingCode !== '-') {
+    codeEl.addEventListener('click', () => {
+      navigator.clipboard.writeText(meetingCode);
+      codeHintEl.textContent = '已复制';
+      setTimeout(() => { codeHintEl.textContent = '复制'; }, 1500);
+    });
+    codeHintEl.addEventListener('click', () => {
+      navigator.clipboard.writeText(meetingCode);
+      codeHintEl.textContent = '已复制';
+      setTimeout(() => { codeHintEl.textContent = '复制'; }, 1500);
+    });
+  }
+
+  // 复制单个可点击字段
   scheduleResultContainer.querySelectorAll('.copyable').forEach((el) => {
     el.addEventListener('click', () => {
       const text = el.getAttribute('data-copy');
@@ -438,6 +473,29 @@ function showScheduleResult(data) {
       }
     });
   });
+
+  // 复制全部会议信息
+  const copyAllBtn = document.getElementById('copyAllInfoBtn');
+  if (copyAllBtn) {
+    copyAllBtn.addEventListener('click', () => {
+      const text =
+`会议主题：${info.subject || '-'}
+会议号：${meetingCode}
+会议密码：${meetingPassword === '无' ? '无' : meetingPassword}
+开始时间：${startDisplay}
+结束时间：${endDisplay}
+入会链接：${info.join_url || '-'}`;
+      navigator.clipboard.writeText(text).then(() => {
+        copyAllBtn.classList.add('copied');
+        const originalHtml = copyAllBtn.innerHTML;
+        copyAllBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> 已复制';
+        setTimeout(() => {
+          copyAllBtn.classList.remove('copied');
+          copyAllBtn.innerHTML = originalHtml;
+        }, 1800);
+      });
+    });
+  }
 
   document.getElementById('closeScheduleResult').addEventListener('click', () => {
     scheduleModal.classList.remove('show');

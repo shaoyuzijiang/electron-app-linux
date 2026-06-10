@@ -534,7 +534,6 @@ app.whenReady().then(() => {
   // 创建会议
   ipcMain.handle('create-meeting', async (_event, meetingData) => {
     try {
-      console.log('[create-meeting] 请求参数:', JSON.stringify(meetingData, null, 2));
       const accessToken = await getValidAccessToken();
       const result = await api.createMeeting(accessToken, meetingData);
       return { success: true, data: result };
