@@ -50,6 +50,7 @@
       }
     ],
     "mac": {
+      "icon": "app.png",
       "entitlements": "entitlements.mac.plist",
       "hardenedRuntime": true,
       "target": [
@@ -62,6 +63,15 @@
         "NSMicrophoneUsageDescription": "请允许本程序访问您的麦克风",
         "NSCameraUsageDescription": "请允许本程序访问您的摄像头"
       }
+    },
+    "win": {
+      "icon": "app.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
     }
   }
 }

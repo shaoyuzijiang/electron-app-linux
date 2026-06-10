@@ -1,7 +1,10 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 const api = require('./api');
 const tokenStore = require('./token-store');
+
+// 应用图标路径
+const appIconPath = path.join(__dirname, 'app.png');
 
 // 加载腾讯会议 SDK
 let wemeetSdk = null;
@@ -11,7 +14,7 @@ let sdkInitResolve, sdkInitReject;
 let sdkLoginResolve, sdkLoginReject;
 let currentSdkLoginPromise = null;
 
-const sdkInitPromise = new Promise((resolve, reject) => {
+let sdkInitPromise = new Promise((resolve, reject) => {
   sdkInitResolve = resolve;
   sdkInitReject = reject;
 });
@@ -116,7 +119,18 @@ async function initSDK() {
     return false;
   }
 
+  if (sdkInitialized) {
+    console.log('SDK 已初始化，跳过');
+    return true;
+  }
+
   try {
+    // 每次初始化前重建 Promise（上一次可能已 rejected）
+    sdkInitPromise = new Promise((resolve, reject) => {
+      sdkInitResolve = resolve;
+      sdkInitReject = reject;
+    });
+
     // 获取 SDK Token
     const sdkData = await api.getSdkToken();
     tokenStore.saveSdkToken(sdkData);
@@ -146,6 +160,71 @@ async function initSDK() {
     return true;
   } catch (err) {
     console.error('SDK 初始化失败:', err.message);
+    return false;
+  }
+}
+
+/**
+ * 确保 SDK 已初始化，未初始化则先初始化
+ */
+async function ensureSDKInitialized() {
+  if (!wemeetSdk) {
+    console.warn('SDK 未加载，无法初始化');
+    return false;
+  }
+  if (sdkInitialized) {
+    return true;
+  }
+  console.log('SDK 未初始化，开始初始化...');
+  return await initSDK();
+}
+
+/**
+ * 确保 SDK 已登录，未登录则自动获取 ID Token 并登录
+ */
+async function ensureSDKLoggedIn() {
+  if (!wemeetSdk) {
+    console.warn('SDK 未加载');
+    return false;
+  }
+
+  if (sdkLoggedIn) {
+    return true;
+  }
+
+  // 先确保初始化
+  const initSuccess = await ensureSDKInitialized();
+  if (!initSuccess) {
+    console.warn('SDK 初始化失败，无法登录');
+    return false;
+  }
+
+  // 已登录
+  if (sdkLoggedIn) {
+    return true;
+  }
+
+  // 获取 ID Token 并登录
+  try {
+    const accessToken = await getValidAccessToken();
+    const idTokenData = await api.getIdToken(accessToken);
+    tokenStore.saveIdToken(idTokenData);
+
+    if (idTokenData.ssoUrl) {
+      const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
+      if (loginSuccess) {
+        console.log('SDK 自动登录成功');
+        return true;
+      } else {
+        console.warn('SDK 自动登录失败');
+        return false;
+      }
+    } else {
+      console.warn('无法获取 ssoUrl，SDK 登录失败');
+      return false;
+    }
+  } catch (err) {
+    console.error('SDK 自动登录异常:', err.message);
     return false;
   }
 }
@@ -223,12 +302,18 @@ function waitSdkLogin() {
 }
 
 function createWindow() {
+  // macOS 开发模式下设置 Dock 图标
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock.setIcon(nativeImage.createFromPath(appIconPath));
+  }
+
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
     minWidth: 800,
     minHeight: 600,
     title: '腾讯会议SDK Demo',
+    icon: appIconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -250,21 +335,23 @@ function createWindow() {
           // 并行获取 ID Token + SDK 登录（不阻塞页面跳转）
           (async () => {
             try {
-              // 等待 SDK 初始化完成
-              if (wemeetSdk && !sdkInitialized) {
-                await sdkInitPromise;
+              // 确保 SDK 初始化完成
+              const initSuccess = await ensureSDKInitialized();
+              if (!initSuccess) {
+                console.warn('自动登录：SDK 初始化失败，跳过 SDK 登录');
+                return;
               }
 
               const idTokenData = await api.getIdToken(accessToken);
               tokenStore.saveIdToken(idTokenData);
 
-              if (wemeetSdk && sdkInitialized && idTokenData.ssoUrl) {
+              if (idTokenData.ssoUrl) {
                 const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
                 if (loginSuccess) {
                   console.log('自动登录 SDK 登录成功');
                 }
               } else {
-                console.warn('自动登录 SDK 条件不满足:', { hasSdk: !!wemeetSdk, initialized: sdkInitialized, hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
+                console.warn('自动登录 SDK 条件不满足:', { hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
               }
             } catch (err) {
               console.error('自动登录 SDK 流程异常:', err.message);
@@ -325,21 +412,23 @@ app.whenReady().then(() => {
       // 3. ID Token + SDK 登录在后台异步完成，不阻塞页面跳转
       (async () => {
         try {
-          // 等待 SDK 初始化完成
-          if (wemeetSdk && !sdkInitialized) {
-            await sdkInitPromise;
+          // 确保 SDK 初始化完成
+          const initSuccess = await ensureSDKInitialized();
+          if (!initSuccess) {
+            console.warn('SDK 初始化失败，跳过 SDK 登录');
+            return;
           }
 
           const idTokenData = await api.getIdToken(tokenData.accessToken);
           tokenStore.saveIdToken(idTokenData);
 
-          if (wemeetSdk && sdkInitialized && idTokenData.ssoUrl) {
+          if (idTokenData.ssoUrl) {
             const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
             if (loginSuccess) {
               console.log('腾讯会议 SDK 登录成功');
             }
           } else {
-            console.warn('SDK 登录条件不满足:', { hasSdk: !!wemeetSdk, initialized: sdkInitialized, hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
+            console.warn('SDK 登录条件不满足:', { hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
           }
         } catch (err) {
           console.error('SDK 登录流程异常:', err.message);
@@ -455,8 +544,8 @@ app.whenReady().then(() => {
 
   // 加入会议
   ipcMain.handle('join-meeting', async (_event, { meetingCode, displayName, password }) => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.JoinMeeting(meetingCode, displayName, password || '', '', 1, 0, 1, 0, '');
@@ -468,8 +557,8 @@ app.whenReady().then(() => {
 
   // 通过 JSON 加入会议
   ipcMain.handle('join-meeting-by-json', async (_event, { meetingJson }) => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.JoinMeetingByJSON(meetingJson);
@@ -481,8 +570,8 @@ app.whenReady().then(() => {
 
   // 快速会议
   ipcMain.handle('quick-meeting', async () => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.QuickMeeting();
@@ -507,8 +596,8 @@ app.whenReady().then(() => {
 
   // 显示会前界面（Home 页）
   ipcMain.handle('show-pre-meeting-view', async () => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.ShowPreMeetingView();
@@ -520,8 +609,8 @@ app.whenReady().then(() => {
 
   // 显示加入会议页面
   ipcMain.handle('show-join-meeting-view', async () => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.ShowJoinMeetingView();
@@ -533,8 +622,8 @@ app.whenReady().then(() => {
 
   // 显示预定会议页面
   ipcMain.handle('show-schedule-meeting-view', async (_event, { meetingType }) => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.ShowScheduleMeetingView(meetingType || 0);
@@ -559,8 +648,8 @@ app.whenReady().then(() => {
 
   // 显示投屏页面
   ipcMain.handle('show-screen-cast-view', async () => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.ShowScreenCastView();
@@ -572,8 +661,8 @@ app.whenReady().then(() => {
 
   // 上传腾讯会议日志
   ipcMain.handle('show-upload-logs-view', async () => {
-    if (!wemeetSdk || !sdkInitialized || !sdkLoggedIn) {
-      return { success: false, message: 'SDK 未就绪' };
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
       wemeetSdk.ShowUploadLogsView();
