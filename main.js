@@ -44,6 +44,52 @@ try {
 
 let mainWindow;
 
+// ========== 会议列表推送相关 ==========
+let meetingListRefreshTimer = null; // 防抖定时器
+let pollingTimer = null;            // 轮询定时器
+const POLLING_INTERVAL = 5 * 60 * 1000; // 5 分钟
+
+/**
+ * 防抖刷新会议列表并推送给渲染进程
+ */
+function scheduleMeetingListRefresh() {
+  if (meetingListRefreshTimer) clearTimeout(meetingListRefreshTimer);
+  meetingListRefreshTimer = setTimeout(async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const result = await api.getMeetingList(accessToken, { instanceid: 2, is_show_all_sub_meetings: '1' });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('meeting-list-updated', { success: true, data: result });
+      }
+    } catch (err) {
+      console.error('推送会议列表失败:', err.message);
+    }
+  }, 300);
+}
+
+/**
+ * 启动会议列表定时轮询
+ */
+function startMeetingListPolling() {
+  if (pollingTimer) return;
+  pollingTimer = setInterval(() => {
+    if (!sdkLoggedIn || !mainWindow || mainWindow.isDestroyed()) return;
+    scheduleMeetingListRefresh();
+  }, POLLING_INTERVAL);
+  console.log('[会议列表轮询] 已启动，间隔', POLLING_INTERVAL / 1000, '秒');
+}
+
+/**
+ * 停止会议列表定时轮询
+ */
+function stopMeetingListPolling() {
+  if (pollingTimer) {
+    clearInterval(pollingTimer);
+    pollingTimer = null;
+    console.log('[会议列表轮询] 已停止');
+  }
+}
+
 /**
  * 获取有效的 accessToken，如果已过期则自动刷新
  */
@@ -88,6 +134,8 @@ function handleSDKCallback(cbMsg) {
     } else if (func === 'OnLogin') {
       if (success) {
         sdkLoggedIn = true;
+        startMeetingListPolling();
+        scheduleMeetingListRefresh();
         console.log('SDK 登录成功');
         if (sdkLoginResolve) sdkLoginResolve(true);
       } else if (sdkLoggedIn) {
@@ -99,11 +147,18 @@ function handleSDKCallback(cbMsg) {
       }
     } else if (func === 'OnLogout') {
       sdkLoggedIn = false;
+      stopMeetingListPolling();
       console.log('SDK 登出回调');
     } else if (func === 'OnSDKUninitializeResult') {
       sdkInitialized = false;
       sdkLoggedIn = false;
+      stopMeetingListPolling();
       console.log('SDK 反初始化回调');
+    }
+
+    // 会议相关回调驱动列表刷新
+    if (['OnLeaveMeeting', 'OnInviteMeeting', 'OnRingInvitationEvent', 'OnJoinMeeting'].includes(func)) {
+      scheduleMeetingListRefresh();
     }
 
     // 通知渲染进程
@@ -398,6 +453,8 @@ function createWindow() {
                 const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
                 if (loginSuccess) {
                   console.log('自动登录 SDK 登录成功');
+                  startMeetingListPolling();
+                  scheduleMeetingListRefresh();
                 }
               } else {
                 console.warn('自动登录 SDK 条件不满足:', { hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
@@ -423,6 +480,14 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    stopMeetingListPolling();
+  });
+
+  // 窗口从最小化恢复时刷新会议列表
+  mainWindow.on('restore', () => {
+    if (sdkLoggedIn) {
+      scheduleMeetingListRefresh();
+    }
   });
 
   // 注册 SDK 回调
@@ -475,6 +540,8 @@ app.whenReady().then(() => {
             const loginSuccess = await sdkLogin(idTokenData.ssoUrl);
             if (loginSuccess) {
               console.log('腾讯会议 SDK 登录成功');
+              startMeetingListPolling();
+              scheduleMeetingListRefresh();
             }
           } else {
             console.warn('SDK 登录条件不满足:', { hasSsoUrl: !!(idTokenData && idTokenData.ssoUrl) });
@@ -514,6 +581,9 @@ app.whenReady().then(() => {
 
   // 退出登录
   ipcMain.handle('logout', async () => {
+    // 停止会议列表轮询
+    stopMeetingListPolling();
+
     // SDK 登出
     if (wemeetSdk && sdkLoggedIn) {
       try {

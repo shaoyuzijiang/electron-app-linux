@@ -640,6 +640,18 @@ function showScheduleResult(data) {
   });
 }
 
+// ========== 监听主进程推送的会议列表更新 ==========
+window.electronAPI.onMeetingListUpdate((result) => {
+  if (result.success && result.data) {
+    const list = result.data.meeting_info_list || [];
+    meetingListRemaining = result.data.remaining || 0;
+    meetingListNextPos = result.data.next_pos || 0;
+    meetingListNextCursory = result.data.next_cursory || 0;
+    meetingListData = list;
+    renderMeetings(meetingListData);
+  }
+});
+
 // ========== 初始化 ==========
 loadProfile();
 loadMeetingList();

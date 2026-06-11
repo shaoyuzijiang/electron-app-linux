@@ -34,4 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSdkCallback: (callback) => {
     ipcRenderer.on('sdk-callback', (_event, msg) => callback(msg));
   },
+
+  // 监听会议列表推送更新
+  onMeetingListUpdate: (callback) => {
+    ipcRenderer.on('meeting-list-updated', (_event, data) => callback(data));
+  },
 });
