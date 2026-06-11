@@ -6,6 +6,58 @@ let selectedDeptId = null;
 let searchTimer = null;
 let contactsInitialized = false;
 
+// ---------- 本地缓存 ----------
+const CACHE_KEY_DEPT_TREE = 'contacts_dept_tree';
+const CACHE_KEY_DEPT_USERS_PREFIX = 'contacts_dept_users_';
+const CACHE_KEY_VERSION = 'contacts_cache_version';
+const CACHE_VERSION = 1; // 缓存结构版本，变更时自动失效
+
+function saveContactsCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('缓存写入失败:', e);
+  }
+}
+
+function loadContactsCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.warn('缓存读取失败:', e);
+    return null;
+  }
+}
+
+function clearContactsCache() {
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k === CACHE_KEY_DEPT_TREE || k.startsWith(CACHE_KEY_DEPT_USERS_PREFIX) || k === CACHE_KEY_VERSION)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn('缓存清理失败:', e);
+  }
+}
+
+// 检查缓存版本，不匹配则清空
+function checkCacheVersion() {
+  const v = localStorage.getItem(CACHE_KEY_VERSION);
+  if (v !== String(CACHE_VERSION)) {
+    clearContactsCache();
+    localStorage.setItem(CACHE_KEY_VERSION, String(CACHE_VERSION));
+  }
+}
+
+function deptUsersCacheKey(deptId, recursive) {
+  return `${CACHE_KEY_DEPT_USERS_PREFIX}${deptId}_${recursive ? '1' : '0'}`;
+}
+
 /**
  * 初始化通讯录（懒加载，首次切换到通讯录页签时调用）
  */
@@ -71,6 +123,7 @@ function initContacts() {
 }
 
 async function loadContactsData() {
+  checkCacheVersion();
   await loadDepartmentTree();
   if (deptTreeRoot) {
     // 默认选中根节点"全部"并展开
@@ -83,19 +136,39 @@ async function loadContactsData() {
 
 async function loadDepartmentTree() {
   const container = document.getElementById('contactsDeptTree');
-  container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
 
+  // 1. 先读本地缓存，有则立即渲染
+  const cached = loadContactsCache(CACHE_KEY_DEPT_TREE);
+  if (cached) {
+    deptTreeRoot = cached;
+    renderDepartmentTree();
+  } else {
+    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  }
+
+  // 2. 后台请求最新数据
   try {
     const result = await window.electronAPI.getDepartmentTree();
     if (result.success && result.data) {
-      deptTreeRoot = result.data;
-      renderDepartmentTree();
-    } else {
+      const newTree = result.data;
+      // 对比是否有变化
+      if (!cached || JSON.stringify(cached) !== JSON.stringify(newTree)) {
+        deptTreeRoot = newTree;
+        saveContactsCache(CACHE_KEY_DEPT_TREE, newTree);
+        renderDepartmentTree();
+        // 如果当前选中的部门还存在，刷新用户列表
+        if (selectedDeptId && findDeptById(deptTreeRoot, selectedDeptId)) {
+          loadDepartmentUsers(selectedDeptId, true);
+        }
+      }
+    } else if (!cached) {
       container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
     }
   } catch (err) {
     console.error('获取部门树失败:', err);
-    container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
+    if (!cached) {
+      container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
+    }
   }
 }
 
@@ -164,18 +237,37 @@ function selectDepartment(dept) {
 
 async function loadDepartmentUsers(departmentId, recursive = true) {
   const container = document.getElementById('contactsUserList');
-  container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  const cacheKey = deptUsersCacheKey(departmentId, recursive);
 
+  // 1. 先读本地缓存，有则立即渲染
+  const cached = loadContactsCache(cacheKey);
+  if (cached) {
+    renderContactsUserList(cached);
+  } else {
+    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  }
+
+  // 2. 后台请求最新数据
   try {
     const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive);
     if (result.success && result.data) {
-      renderContactsUserList(result.data);
-    } else {
+      const newUsers = result.data;
+      // 对比是否有变化
+      if (!cached || JSON.stringify(cached) !== JSON.stringify(newUsers)) {
+        saveContactsCache(cacheKey, newUsers);
+        // 只有当前选中的部门仍然是该部门时才刷新，避免切换部门后覆盖
+        if (selectedDeptId === departmentId) {
+          renderContactsUserList(newUsers);
+        }
+      }
+    } else if (!cached) {
       container.innerHTML = `<div class="meeting-empty">${result.message || '获取用户列表失败'}</div>`;
     }
   } catch (err) {
     console.error('获取部门用户失败:', err);
-    container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
+    if (!cached) {
+      container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
+    }
   }
 }
 
