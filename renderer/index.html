@@ -4,15 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>腾讯会议SDK Demo</title>
-  <link rel="stylesheet" href="css/index.css" />
+  <link rel="stylesheet" href="css/meeting.css" />
+  <link rel="stylesheet" href="css/contacts.css" />
 </head>
 <body>
   <!-- 左侧窄导航 -->
   <nav class="side-nav">
     <div class="nav-avatar" id="userAvatarNav">?</div>
 
-    <div class="nav-item active" title="会议">
+    <div class="nav-item active" data-tab="meeting" title="会议">
       <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+    </div>
+
+    <div class="nav-item" data-tab="contacts" title="通讯录">
+      <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
     </div>
   </nav>
 
@@ -68,6 +73,30 @@
       <!-- 动态渲染 -->
     </div>
   </main>
+
+  <!-- 通讯录页面 -->
+  <div class="contacts-page" id="contactsPage" style="display:none;">
+    <div class="contacts-left-panel">
+      <div class="contacts-search-box">
+        <svg viewBox="0 0 24 24" class="search-icon"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input type="text" id="contactsSearchInput" placeholder="搜索姓名或用户ID" />
+      </div>
+      <div class="contacts-search-results" id="contactsSearchResults" style="display:none;">
+        <!-- 搜索结果动态渲染 -->
+      </div>
+      <div class="contacts-dept-tree" id="contactsDeptTree">
+        <!-- 部门树动态渲染 -->
+      </div>
+    </div>
+    <div class="contacts-right-panel">
+      <div class="contacts-user-list-header" id="contactsUserListHeader">
+        <h2>通讯录</h2>
+      </div>
+      <div class="contacts-user-list" id="contactsUserList">
+        <!-- 用户列表动态渲染 -->
+      </div>
+    </div>
+  </div>
 
   <!-- 头像下拉菜单 -->
   <div class="avatar-menu" id="avatarMenu">
@@ -150,6 +179,7 @@
     </div>
   </div>
 
-  <script src="js/index.js"></script>
+  <script src="js/contacts.js"></script>
+  <script src="js/meeting.js"></script>
 </body>
 </html>

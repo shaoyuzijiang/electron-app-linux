@@ -39,4 +39,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMeetingListUpdate: (callback) => {
     ipcRenderer.on('meeting-list-updated', (_event, data) => callback(data));
   },
+
+  // 选人组件接口
+  getDepartmentTree: () => ipcRenderer.invoke('get-department-tree'),
+  getDepartmentUsers: (departmentId, recursive) =>
+    ipcRenderer.invoke('get-department-users', { departmentId, recursive }),
+  searchUsers: (query) => ipcRenderer.invoke('search-users', { query }),
 });

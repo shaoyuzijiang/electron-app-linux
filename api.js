@@ -291,4 +291,44 @@ async function getMeetingList(accessToken, options = {}) {
   });
 }
 
-module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword, createMeeting, getMeetingList };
+/**
+ * 获取部门树（含人数统计）
+ * @param {string} accessToken
+ * @returns {Array} 部门树形结构
+ */
+async function getDepartmentTree(accessToken) {
+  return await request(`${BASE_URL}/api/user-picker/departments`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * 获取部门下的用户
+ * @param {string} accessToken
+ * @param {string} departmentId - 部门 ID
+ * @param {boolean} [recursive=false] - 是否递归获取子部门用户
+ * @returns {Array} 用户列表
+ */
+async function getDepartmentUsers(accessToken, departmentId, recursive = false) {
+  const params = new URLSearchParams();
+  if (recursive) params.append('recursive', 'true');
+  return await request(`${BASE_URL}/api/user-picker/departments/${departmentId}/users${params ? '?' + params : ''}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * 搜索用户
+ * @param {string} accessToken
+ * @param {string} query - 搜索关键词
+ * @returns {Array} 匹配的用户列表
+ */
+async function searchUsers(accessToken, query) {
+  const params = new URLSearchParams();
+  params.append('q', query);
+  return await request(`${BASE_URL}/api/user-picker/search?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword, createMeeting, getMeetingList, getDepartmentTree, getDepartmentUsers, searchUsers };

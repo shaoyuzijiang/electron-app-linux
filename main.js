@@ -818,6 +818,50 @@ app.whenReady().then(() => {
       return { success: false, message: err.message };
     }
   });
+
+  // ========== 选人组件 IPC 接口 ==========
+
+  // 获取部门树
+  ipcMain.handle('get-department-tree', async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getDepartmentTree(accessToken);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取部门下的用户
+  ipcMain.handle('get-department-users', async (_event, { departmentId, recursive }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getDepartmentUsers(accessToken, departmentId, recursive);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 搜索用户
+  ipcMain.handle('search-users', async (_event, { query }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.searchUsers(accessToken, query);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

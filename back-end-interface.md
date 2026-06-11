@@ -1,5 +1,8 @@
+# API 接口文档
 
-## API 接口
+## 接口总览
+
+### 认证接口
 
 | 方法 | 路径 | 认证 | 加密 | 说明 |
 |------|------|------|------|------|
@@ -35,6 +38,20 @@
 | PUT | `/api/admin/users/:username` | Admin Token | 修改用户信息 |
 | POST | `/api/admin/users/:username/reset-password` | Admin Token | 重置用户密码 |
 | DELETE | `/api/admin/users/:username` | Admin Token | 删除用户 |
+| GET | `/api/admin/departments` | Admin Token | 获取部门列表（树形） |
+| GET | `/api/admin/departments/flat` | Admin Token | 获取部门列表（扁平） |
+| POST | `/api/admin/departments` | Admin Token | 创建部门 |
+| PUT | `/api/admin/departments/:id` | Admin Token | 修改部门 |
+| DELETE | `/api/admin/departments/:id` | Admin Token | 删除部门 |
+| GET | `/api/admin/departments/:id/users` | Admin Token | 获取部门下的用户 |
+
+### 选人组件接口
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/user-picker/departments` | Bearer Token | 获取部门树（含人数统计） |
+| GET | `/api/user-picker/departments/:id/users` | Bearer Token | 获取部门下的用户（支持递归子部门） |
+| GET | `/api/user-picker/search` | Bearer Token | 搜索用户 |
 
 ### 响应格式
 
@@ -47,6 +64,8 @@
 ```
 
 ---
+
+## 认证接口详解
 
 ### 1. 获取 RSA 公钥
 
@@ -359,7 +378,9 @@ curl http://localhost:3000/api/auth/profile \
   "data": {
     "id": "user_001",
     "username": "zhangsan",
-    "role": "user"
+    "role": "user",
+    "departmentId": "tech",
+    "departmentName": "技术部"
   }
 }
 ```
@@ -432,9 +453,11 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 
 ---
 
+## 管理员接口详解
+
 ### 9. 修改用户信息（管理员）
 
-需要管理员 Bearer Token 认证。支持修改用户名和手机号，用户 ID 不可修改。
+需要管理员 Bearer Token 认证。支持修改用户名、手机号和所属部门，用户 ID 不可修改。
 
 **请求**
 
@@ -442,10 +465,10 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 curl -X PUT http://localhost:3000/api/admin/users/zhangsan \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
-  -d '{"newUsername": "zhangsan2", "phone": "13800138000"}'
+  -d '{"newUsername": "zhangsan2", "phone": "13800138000", "departmentId": "tech"}'
 ```
 
-> `newUsername` 和 `phone` 均为可选字段，仅传需要修改的字段即可。
+> `newUsername`、`phone`、`departmentId` 均为可选字段，仅传需要修改的字段即可。`departmentId` 传空字符串可清除部门归属。
 
 **成功响应** `200`
 
@@ -511,6 +534,226 @@ curl -X POST http://localhost:3000/api/admin/users/zhangsan/reset-password \
 ```
 
 > **安全说明**：新密码由服务端随机生成（12 位，含大小写字母、数字和特殊字符），仅在此响应中返回一次，请妥善保存。重置后该用户所有设备将强制重新登录。
+
+---
+
+### 11. 组织架构（部门）管理
+
+所有部门接口均需管理员 Bearer Token 认证。部门采用树形结构，通过 `parent_id` 实现层级嵌套。
+
+#### 获取部门列表（树形）
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/admin/departments \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "tech",
+      "name": "技术部",
+      "parent_id": "",
+      "sort_order": 0,
+      "created_at": "2026-06-11 10:00:00",
+      "children": [
+        {
+          "id": "frontend",
+          "name": "前端组",
+          "parent_id": "tech",
+          "sort_order": 0,
+          "created_at": "2026-06-11 10:05:00",
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### 获取部门列表（扁平）
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/admin/departments/flat \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    { "id": "tech", "name": "技术部", "parent_id": "", "sort_order": 0, "created_at": "2026-06-11 10:00:00" },
+    { "id": "frontend", "name": "前端组", "parent_id": "tech", "sort_order": 0, "created_at": "2026-06-11 10:05:00" }
+  ]
+}
+```
+
+#### 创建部门
+
+**请求**
+
+```bash
+curl -X POST http://localhost:3000/api/admin/departments \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "departmentId": "tech",
+    "name": "技术部",
+    "parentId": "",
+    "sortOrder": 0
+  }'
+```
+
+**请求参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `departmentId` | string | ✅ | 部门 ID，1-64 位字母、数字、下划线 |
+| `name` | string | ✅ | 部门名称，1-64 字符 |
+| `parentId` | string | - | 父部门 ID，空字符串或省略表示顶级部门 |
+| `sortOrder` | integer | - | 排序权重，默认 0，值越小越靠前 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "departmentId": "tech",
+    "name": "技术部",
+    "message": "Department created successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 缺少必填字段 400
+{ "code": 400, "message": "Department ID and name are required" }
+
+// ID 已存在 409
+{ "code": 409, "message": "Department ID already exists" }
+
+// 同级别名称重复 409
+{ "code": 409, "message": "Department name already exists at the same level" }
+
+// 父部门不存在 409
+{ "code": 409, "message": "Parent department not found" }
+```
+
+#### 修改部门
+
+**请求**
+
+```bash
+curl -X PUT http://localhost:3000/api/admin/departments/tech \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "技术中心",
+    "parentId": "org",
+    "sortOrder": 1
+  }'
+```
+
+> `name`、`parentId`、`sortOrder` 均为可选字段，仅传需要修改的字段即可。
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Department updated successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 部门不存在 404
+{ "code": 404, "message": "Department not found" }
+
+// 循环引用 409
+{ "code": 409, "message": "Circular reference detected" }
+
+// 不能设自己为父部门 409
+{ "code": 409, "message": "Cannot set department as its own parent" }
+
+// 同级别名称重复 409
+{ "code": 409, "message": "Department name already exists at the same level" }
+```
+
+#### 删除部门
+
+**请求**
+
+```bash
+curl -X DELETE http://localhost:3000/api/admin/departments/frontend \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+> 删除部门时，该部门下用户的部门归属会被自动清除；存在子部门时禁止删除，需先删除或移动子部门。
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Department deleted successfully"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 部门不存在 404
+{ "code": 404, "message": "Department not found" }
+
+// 存在子部门 400
+{ "code": 400, "message": "Cannot delete department with sub-departments" }
+```
+
+#### 获取部门下的用户
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/admin/departments/tech/users \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "user_001",
+      "username": "zhangsan",
+      "phone": "13800138000",
+      "role": "user",
+      "departmentId": "tech",
+      "departmentName": "技术部"
+    }
+  ]
+}
+```
 
 ---
 
@@ -627,136 +870,19 @@ curl -X POST http://localhost:3000/api/wemeet/meetings \
 
 ### 2. 查询用户会议列表
 
-需要 Bearer Token 认证。获取某指定用户的进行中或待开始的会议列表，单次最多返回 20 条。`userid` 由服务端从当前登录用户自动获取，无需传入。
-
-> **接口文档**：[腾讯云 - 查询用户的会议列表](https://cloud.tencent.com/document/product/1095/42421)
-
 **请求**
 
 ```bash
-curl "http://localhost:3000/api/wemeet/meetings?instanceid=1" \
+curl http://localhost:3000/api/wemeet/meetings \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 **查询参数**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `instanceid` | integer | ✅ | 用户终端设备类型，默认 1（PC）。0-PSTN, 1-PC, 2-Mac, 3-Android, 4-iOS, 5-Web, 6-iPad, 7-Android Pad, 8-小程序, 9-voip/sip设备, 10-Linux, 20-Rooms for Touch Windows, 21-Rooms for Touch MacOS, 22-Rooms for Touch Android, 30-Controller for Touch Windows, 32-Controller for Touch Android, 33-Controller for Touch iOS |
-| `pos` | integer | - | 分页查询起始时间值，UNIX 秒级时间戳，只能查询开始时间在本时间之后（包含）的会议。默认 0（从当日零点开始）。`remaining` 不为 0 时继续查询，`next_pos` 即为下次查询的 `pos` 值 |
-| `cursory` | integer | - | 分页游标，UNIX 毫秒级时间戳，默认 0。与 `pos` 配合使用可避免仅使用 `pos` 时出现的重复数据等问题。`remaining` 不为 0 时继续查询，`next_cursory` 即为下次查询的 `cursory` 值 |
-| `is_show_all_sub_meetings` | string | - | 是否显示周期性会议所有子会议：`0`-仅第一个子会议（默认），`1`-显示所有子会议 |
-
-**成功响应** `200`
-
-```json
-{
-  "code": 0,
-  "data": {
-    "meeting_number": 1,
-    "next_pos": 0,
-    "remaining": 0,
-    "next_cursory": 0,
-    "meeting_info_list": [
-      {
-        "subject": "tester's meeting",
-        "meeting_id": "7567173273889276131",
-        "meeting_code": "806146667",
-        "status": "MEETING_STATE_ENDED",
-        "start_time": "1572085800",
-        "end_time": "1572089400",
-        "hosts": [{ "userid": "tester" }],
-        "current_hosts": [],
-        "join_meeting_role": "invitee",
-        "meeting_type": 1,
-        "type": 0,
-        "recurring_rule": {
-          "recurring_type": 0,
-          "until_type": 1,
-          "until_count": 4
-        },
-        "media_set_type": 0,
-        "has_more_sub_meeting": 0,
-        "remain_sub_meetings": 3,
-        "current_sub_meeting_id": "1599046220",
-        "sub_meetings": []
-      }
-    ]
-  }
-}
-```
-
-**MeetingInfo 对象**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `subject` | string | 会议主题 |
-| `meeting_id` | string | 会议唯一标识 |
-| `meeting_code` | string | 会议呼入号码 |
-| `hosts` | User[] | 会议主持人用户 ID 列表 |
-| `current_hosts` | User[] | 会议当前主持人列表 |
-| `start_time` | string | 会议开始时间戳（秒） |
-| `end_time` | string | 会议结束时间戳（秒） |
-| `join_meeting_role` | string | 查询者在会议中的角色：`creator`/`hoster`/`invitee` |
-| `meeting_type` | integer | 会议类型：0-普通会议, 1-周期性会议, 2-微信专属会议, 4-Rooms投屏会议, 5-个人会议号会议, 6-网络研讨会 |
-| `recurring_rule` | RecurringRule | 周期性会议设置 |
-| `media_set_type` | integer | 混合云会议类型：0-公网会议, 1-专网会议 |
-| `has_more_sub_meeting` | integer | 0-无更多, 1-有更多子会议特例 |
-| `remain_sub_meetings` | integer | 剩余子会议场数 |
-| `current_sub_meeting_id` | string | 当前子会议 ID（进行中/即将开始） |
-| `status` | string | 会议状态：`MEETING_STATE_INVALID`/`INIT`/`CANCELLED`/`STARTED`/`ENDED`/`NULL`/`RECYCLED` |
-| `type` | integer | 0-预约会议, 1-快速会议 |
-| `sub_meetings` | SubMeeting[] | 周期性子会议列表 |
-
-**RecurringRule 对象**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `recurring_type` | integer | 周期频率：0-每天, 1-每周一至周五, 2-每周, 3-每两周, 4-每月 |
-| `until_type` | integer | 结束重复类型：0-按日期, 1-按次数 |
-| `until_date` | integer | 结束日期时间戳 |
-| `until_count` | integer | 限定会议次数（1-50） |
-
-**SubMeeting 对象**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `sub_meeting_id` | string | 子会议 ID |
-| `status` | integer | 0-默认(存在), 1-已删除 |
-| `start_time` | string | 子会议开始时间（UTC 秒） |
-| `end_time` | string | 子会议结束时间（UTC 秒） |
-
-**会议状态说明**
-
-| 状态值 | 说明 |
+| 参数 | 说明 |
 |------|------|
-| `MEETING_STATE_INVALID` | 非法或未知的会议状态 |
-| `MEETING_STATE_INIT` | 待开始 |
-| `MEETING_STATE_CANCELLED` | 已取消 |
-| `MEETING_STATE_STARTED` | 会议中 |
-| `MEETING_STATE_ENDED` | 已删除 |
-| `MEETING_STATE_NULL` | 无状态（过了预定结束时间且会议中无人） |
-| `MEETING_STATE_RECYCLED` | 已回收（过了预定开始时间30天，会议号被后台回收） |
-
-**分页说明**
-
-- 单次查询最多返回 20 条记录
-- 通过 `remaining` 判断是否需要继续查询：`remaining` 非 0 表示还有更多数据
-- 使用 `next_pos` 和 `next_cursory` 作为下次查询的游标参数
-- 建议同时使用 `pos` 和 `cursory`，避免仅使用 `pos` 时出现的重复数据问题
-
-**失败响应**
-
-```json
-// 未认证 401
-{ "code": 401, "message": "Missing or invalid Authorization header" }
-
-// API 凭证未配置 500
-{ "code": 500, "message": "WeMeet API credentials not configured (WEMEET_SECRET_ID, WEMEET_SECRET_KEY)" }
-
-// 腾讯会议 API 错误
-{ "code": 400, "message": "WeMeet API error: ..." }
-```
+| `page` | 页码 |
+| `page_size` | 每页数量 |
 
 ---
 
@@ -818,7 +944,7 @@ curl http://localhost:3000/api/wemeet/records/record123/address \
 
 ---
 
-### 请求加密流程详解
+## 请求加密流程详解
 
 1. 调用 `GET /api/auth/public-key` 获取 RSA 公钥
 2. 客户端生成随机 AES-256 密钥 (32 字节) 和 IV (16 字节)
@@ -837,6 +963,159 @@ curl http://localhost:3000/api/wemeet/records/record123/address \
 ```
 
 > **注意**：`nonce` 和 `timestamp` 为必填字段，缺失时请求将被拒绝。
+
+---
+
+## 选人组件接口详解
+
+所有选人组件接口仅需 Bearer Token 认证（普通登录用户即可使用，不限于管理员）。用于前端选人组件获取组织架构数据和搜索用户。
+
+### 1. 获取部门树（含人数统计）
+
+返回完整的部门树形结构，每个节点包含直接用户数（`userCount`）和递归子部门总用户数（`totalUserCount`），方便前端展示人数信息。
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/user-picker/departments \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "tech",
+      "name": "技术部",
+      "parentId": "",
+      "sortOrder": 0,
+      "userCount": 3,
+      "totalUserCount": 8,
+      "children": [
+        {
+          "id": "frontend",
+          "name": "前端组",
+          "parentId": "tech",
+          "sortOrder": 0,
+          "userCount": 5,
+          "totalUserCount": 5,
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+**字段说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 部门 ID |
+| `name` | string | 部门名称 |
+| `parentId` | string | 父部门 ID，空字符串表示顶级部门 |
+| `sortOrder` | integer | 排序权重，值越小越靠前 |
+| `userCount` | integer | 直接归属该部门的用户数（不含子部门） |
+| `totalUserCount` | integer | 该部门及所有子部门的用户总数 |
+| `children` | array | 子部门列表，结构相同（递归） |
+
+---
+
+### 2. 获取部门下的用户
+
+获取指定部门下的用户列表，支持 `recursive` 参数递归获取子部门用户。
+
+**请求**
+
+```bash
+# 仅获取直接归属该部门的用户
+curl http://localhost:3000/api/user-picker/departments/tech/users \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# 递归获取该部门及所有子部门的用户
+curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=true" \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**查询参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `recursive` | string | - | 设为 `true` 时递归获取子部门用户，默认仅获取直接归属用户 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "user_001",
+      "username": "zhangsan",
+      "role": "user",
+      "departmentId": "tech",
+      "departmentName": "技术部"
+    },
+    {
+      "id": "user_002",
+      "username": "lisi",
+      "role": "user",
+      "departmentId": "frontend",
+      "departmentName": "前端组"
+    }
+  ]
+}
+```
+
+> **安全说明**：选人组件返回的用户信息已脱敏，不包含手机号、密码等敏感字段。
+
+**失败响应**
+
+```json
+// 部门不存在 404
+{ "code": 404, "message": "Department not found" }
+```
+
+---
+
+### 3. 搜索用户
+
+按用户名（`username`）或用户 ID（`id`）模糊搜索用户，返回匹配的用户列表（最多 50 条）。
+
+**请求**
+
+```bash
+curl "http://localhost:3000/api/user-picker/search?q=zhang" \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**查询参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `q` | string | ✅ | 搜索关键词，匹配用户名和用户 ID |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "user_001",
+      "username": "zhangsan",
+      "role": "user",
+      "departmentId": "tech",
+      "departmentName": "技术部"
+    }
+  ]
+}
+```
+
+> 搜索关键词为空时返回空数组。搜索结果按用户名排序，最多返回 50 条。
 
 **Node.js 客户端加密示例**
 

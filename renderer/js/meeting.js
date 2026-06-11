@@ -10,6 +10,9 @@ function showMeetingContent() {
 }
 
 function showSdkError(msg) {
+  leftPanelEl.style.display = 'none';
+  rightContentEl.style.display = 'none';
+  sdkLoadingEl.style.display = '';
   sdkLoadingEl.innerHTML = `
     <div class="loading-error">${msg}</div>
     <button class="retry-btn" id="retrySdkBtn">重试</button>
@@ -650,6 +653,39 @@ window.electronAPI.onMeetingListUpdate((result) => {
     meetingListData = list;
     renderMeetings(meetingListData);
   }
+});
+
+// ========== 页签切换 ==========
+
+let currentTab = 'meeting';
+const navItems = document.querySelectorAll('.nav-item[data-tab]');
+const meetingContentEls = () => [leftPanelEl, rightContentEl];
+const contactsPageEl = document.getElementById('contactsPage');
+
+function switchTab(tab) {
+  if (tab === currentTab) return;
+  currentTab = tab;
+
+  navItems.forEach((item) => {
+    item.classList.toggle('active', item.getAttribute('data-tab') === tab);
+  });
+
+  if (tab === 'meeting') {
+    meetingContentEls().forEach((el) => { el.style.display = ''; });
+    contactsPageEl.style.display = 'none';
+  } else if (tab === 'contacts') {
+    meetingContentEls().forEach((el) => { el.style.display = 'none'; });
+    sdkLoadingEl.style.display = 'none';
+    contactsPageEl.style.display = '';
+    initContacts();
+  }
+}
+
+navItems.forEach((item) => {
+  item.addEventListener('click', () => {
+    const tab = item.getAttribute('data-tab');
+    switchTab(tab);
+  });
 });
 
 // ========== 初始化 ==========
