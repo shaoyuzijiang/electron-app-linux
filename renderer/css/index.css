@@ -151,10 +151,77 @@ body {
 }
 
 /* 会议列表 */
+.meeting-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 32px 0;
+  flex-shrink: 0;
+}
+
+.meeting-list-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e1e1e;
+}
+
+.refresh-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: none;
+  background: #f5f5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover {
+  background: #eee;
+}
+
+.refresh-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: #666;
+}
+
 .meeting-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 32px 32px;
+  padding: 16px 32px 32px;
+}
+
+.meeting-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e8e8e8;
+  border-top-color: #1e6fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.meeting-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  color: #bbb;
+  font-size: 14px;
+  gap: 12px;
 }
 
 .meeting-list::-webkit-scrollbar {
@@ -223,6 +290,55 @@ body {
   font-size: 12px;
   color: #999;
   margin-left: 4px;
+}
+
+.meeting-status-active {
+  color: #1e6fff;
+  font-weight: 600;
+}
+
+.meeting-code-copy {
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.meeting-code-copy:hover {
+  color: #1e6fff;
+  text-decoration: underline;
+}
+
+.meeting-code-copy.copied {
+  color: #52c41a;
+}
+
+.meeting-join-btn {
+  display: none;
+  margin-left: auto;
+  padding: 3px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #1e6fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.meeting-join-btn:hover {
+  background: #165ce0;
+}
+
+.meeting-join-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.meeting-item:hover .meeting-join-btn {
+  display: inline-block;
 }
 
 /* 头像下拉菜单 */

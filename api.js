@@ -30,6 +30,22 @@ function encryptRequest(publicKeyPem, payload) {
  * 统一请求封装，包含错误处理
  */
 async function request(url, options = {}) {
+  const method = options.method || 'GET';
+  console.log(`[API] >>> ${method} ${url}`);
+  if (options.body) {
+    try {
+      const bodyObj = JSON.parse(options.body);
+      // 加密请求体不打印 ciphertext 和 encryptedKey（太长），仅打印摘要信息
+      if (bodyObj.ciphertext) {
+        console.log(`[API] >>> Body (encrypted): nonce=${bodyObj.nonce}, timestamp=${bodyObj.timestamp}`);
+      } else {
+        console.log(`[API] >>> Body:`, options.body);
+      }
+    } catch {
+      console.log(`[API] >>> Body:`, options.body);
+    }
+  }
+
   let res;
   try {
     res = await fetch(url, options);
@@ -57,6 +73,7 @@ async function request(url, options = {}) {
   }
 
   const json = await res.json();
+  console.log(`[API] <<< ${method} ${url} HTTP ${res.status}`, JSON.stringify(json, null, 2));
   if (json.code !== 0) {
     throw new Error(json.message || '请求失败');
   }
@@ -215,4 +232,63 @@ async function createMeeting(accessToken, meetingData) {
   });
 }
 
-module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword, createMeeting };
+/**
+ * 查询用户会议列表
+ * 获取某指定用户的进行中或待开始的会议列表，单次最多返回 20 条。
+ * 企业 secret 鉴权用户可查询该企业该用户创建的有效会议，OAuth2.0 鉴权用户只能查询通过 OAuth2.0 鉴权创建的有效会议。
+ * @param {string} accessToken
+ * @param {object} [options] - 可选参数
+ * @param {number} [options.instanceid=1] - 用户终端设备类型（必填，默认1-PC）：
+ *   0-PSTN, 1-PC, 2-Mac, 3-Android, 4-iOS, 5-Web, 6-iPad, 7-Android Pad, 8-小程序,
+ *   9-voip/sip设备, 10-Linux, 20-Rooms for Touch Windows, 21-Rooms for Touch MacOS,
+ *   22-Rooms for Touch Android, 30-Controller for Touch Windows, 32-Controller for Touch Android,
+ *   33-Controller for Touch iOS
+ * @param {number} [options.pos] - 分页查询起始时间值，UNIX 秒级时间戳，只能查询开始时间在本时间之后（包含）的会议。默认 0（从当日零点开始）。remaining 不为 0 时继续查询，next_pos 即为下次查询的 pos 值
+ * @param {number} [options.cursory] - 分页游标，UNIX 毫秒级时间戳，默认 0（首次查询）。与 pos 配合使用可避免仅使用 pos 时出现的重复数据等问题。remaining 不为 0 时继续查询，next_cursory 即为下次查询的 cursory 值
+ * @param {string} [options.is_show_all_sub_meetings] - 是否显示周期性会议所有子会议：'0'-仅第一个子会议(默认), '1'-显示所有子会议
+ * @returns {{ meeting_number: number, meeting_info_list: MeetingInfo[], remaining: number, next_pos: number, next_cursory: number }}
+ *
+ * MeetingInfo 对象:
+ *   subject {string} - 会议主题
+ *   meeting_id {string} - 会议唯一标识
+ *   meeting_code {string} - 会议呼入号码
+ *   hosts {User[]} - 会议主持人用户 ID 列表
+ *   current_hosts {User[]} - 会议当前主持人列表
+ *   start_time {string} - 会议开始时间戳（秒）
+ *   end_time {string} - 会议结束时间戳（秒）
+ *   join_meeting_role {string} - 查询者在会议中的角色：creator/hoster/invitee
+ *   meeting_type {number} - 会议类型：0-普通会议, 1-周期性会议, 2-微信专属会议, 4-Rooms投屏会议, 5-个人会议号会议, 6-网络研讨会
+ *   recurring_rule {RecurringRule} - 周期性会议设置
+ *   media_set_type {number} - 混合云会议类型：0-公网会议, 1-专网会议
+ *   has_more_sub_meeting {number} - 0-无更多, 1-有更多子会议特例
+ *   remain_sub_meetings {number} - 剩余子会议场数
+ *   current_sub_meeting_id {string} - 当前子会议 ID
+ *   status {string} - 会议状态：MEETING_STATE_INVALID/INIT/CANCELLED/STARTED/ENDED/NULL/RECYCLED
+ *   type {number} - 0-预约会议, 1-快速会议
+ *   sub_meetings {SubMeeting[]} - 周期性子会议列表
+ *
+ * RecurringRule 对象:
+ *   recurring_type {number} - 周期频率：0-每天, 1-每周一至周五, 2-每周, 3-每两周, 4-每月
+ *   until_type {number} - 结束重复类型：0-按日期, 1-按次数
+ *   until_date {number} - 结束日期时间戳
+ *   until_count {number} - 限定会议次数（1-50）
+ *
+ * SubMeeting 对象:
+ *   sub_meeting_id {string} - 子会议 ID
+ *   status {number} - 0-默认(存在), 1-已删除
+ *   start_time {string} - 子会议开始时间（UTC 秒）
+ *   end_time {string} - 子会议结束时间（UTC 秒）
+ */
+async function getMeetingList(accessToken, options = {}) {
+  const { instanceid = 1, pos, cursory, is_show_all_sub_meetings } = options;
+  const params = new URLSearchParams();
+  params.append('instanceid', instanceid);
+  if (pos !== undefined) params.append('pos', pos);
+  if (cursory !== undefined) params.append('cursory', cursory);
+  if (is_show_all_sub_meetings !== undefined) params.append('is_show_all_sub_meetings', is_show_all_sub_meetings);
+  return await request(`${BASE_URL}/api/wemeet/meetings?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+module.exports = { getPublicKey, prefetchPublicKey, login, refreshToken, getProfile, getSdkToken, getIdToken, changePassword, createMeeting, getMeetingList };

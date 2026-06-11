@@ -545,6 +545,20 @@ app.whenReady().then(() => {
     }
   });
 
+  // 查询用户会议列表
+  ipcMain.handle('get-meeting-list', async (_event, options = {}) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const result = await api.getMeetingList(accessToken, { instanceid: 2, ...options });
+      return { success: true, data: result };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
   // 修改密码
   ipcMain.handle('change-password', async (_event, { oldPassword, newPassword }) => {
     try {
@@ -611,7 +625,7 @@ app.whenReady().then(() => {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
-      wemeetSdk.JoinMeeting(meetingCode, displayName, password || '', '', 1, 0, 1, 0, '');
+      wemeetSdk.JoinMeeting(meetingCode, displayName, password || '', '', true, false, true, false, '');
       return { success: true };
     } catch (err) {
       return { success: false, message: err.message };

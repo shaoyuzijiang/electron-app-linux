@@ -70,56 +70,193 @@ async function loadProfile() {
   }
 }
 
-// 模拟会议数据
-const mockMeetings = [
-  {
-    date: '今天',
-    items: [
-      { title: '交付作业平台 - 腾讯会议方案沟通', time: '17:30-18:30', code: '394 928 762', tag: '' }
-    ]
-  },
-  {
-    date: '明天 6月10日',
-    items: [
-      { title: '新功能培训会', time: '19:00-21:00', code: '733 9552 1893', tag: '周期' }
-    ]
-  },
-  {
-    date: '周四 6月11日',
-    items: [
-      { title: '【客】浦发银行腾会项目群周会', time: '14:00-15:00', code: '406 3626 2174', tag: '周期' }
-    ]
-  },
-  {
-    date: '周五 6月12日',
-    items: [
-      { title: '腾讯会议渠道经理培训会', time: '09:00-11:00', code: '892 1034 5671', tag: '' }
-    ]
-  }
-];
+// 会议列表数据
+let meetingListData = [];
+let meetingListNextPos = 0;
+let meetingListNextCursory = 0;
+let meetingListRemaining = 0;
+let meetingListLoading = false;
 
-function renderMeetings() {
+async function loadMeetingList(loadMore = false) {
+  if (meetingListLoading) return;
+  meetingListLoading = true;
   const container = document.getElementById('meetingList');
-  container.innerHTML = mockMeetings.map(group => `
+
+  if (!loadMore) {
+    meetingListData = [];
+    meetingListNextPos = 0;
+    meetingListNextCursory = 0;
+    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  } else {
+    const loader = document.getElementById('meetingLoader');
+    if (loader) loader.innerHTML = `<div class="spinner-small"></div><span>加载更多...</span>`;
+  }
+
+  try {
+    const options = { is_show_all_sub_meetings: '1' };
+    if (loadMore && meetingListNextPos) {
+      options.pos = meetingListNextPos;
+      options.cursory = meetingListNextCursory;
+    }
+    const result = await window.electronAPI.getMeetingList(options);
+    if (result.success && result.data) {
+      const list = result.data.meeting_info_list || [];
+      meetingListRemaining = result.data.remaining || 0;
+      meetingListNextPos = result.data.next_pos || 0;
+      meetingListNextCursory = result.data.next_cursory || 0;
+      meetingListData = loadMore ? [...meetingListData, ...list] : list;
+      renderMeetings(meetingListData);
+    } else {
+      if (!loadMore) {
+        container.innerHTML = `<div class="meeting-empty">${result.message || '获取会议列表失败'}</div>`;
+      }
+    }
+  } catch (err) {
+    console.error('获取会议列表失败:', err);
+    if (!loadMore) {
+      container.innerHTML = `<div class="meeting-empty">获取会议列表失败，请稍后重试</div>`;
+    }
+  } finally {
+    meetingListLoading = false;
+  }
+}
+
+function formatMeetingTime(timestamp) {
+  const date = new Date(Number(timestamp) * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getDateLabel(timestamp) {
+  const date = new Date(Number(timestamp) * 1000);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const meetingDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((meetingDate - today) / (1000 * 60 * 60 * 24));
+
+  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  if (diffDays === 0) return '今天';
+  if (diffDays === 1) return '明天';
+  if (diffDays === 2) return '后天';
+  if (diffDays < 7 && diffDays > 0) return `${weekDays[date.getDay()]} ${month}月${day}日`;
+  return `${month}月${day}日`;
+}
+
+function groupMeetingsByDate(meetings) {
+  const groups = {};
+  meetings.forEach((m) => {
+    const startTime = m.start_time || m.meeting_start_time;
+    if (!startTime) return;
+    const dateKey = getDateLabel(startTime);
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(m);
+  });
+
+  // 按日期排序
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const getSortDate = (label) => {
+      // 简单排序：今天 < 明天 < 其他
+      if (label === '今天') return 0;
+      if (label === '明天') return 1;
+      if (label === '后天') return 2;
+      return 3;
+    };
+    return getSortDate(a) - getSortDate(b);
+  });
+
+  return sortedKeys.map((key) => ({ date: key, items: groups[key] }));
+}
+
+function renderMeetings(meetings) {
+  const container = document.getElementById('meetingList');
+
+  if (!meetings || meetings.length === 0) {
+    container.innerHTML = `<div class="meeting-empty">
+      <svg viewBox="0 0 24 24" width="48" height="48"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="#ddd"/></svg>
+      <div>暂无待参加的会议</div>
+    </div>`;
+    return;
+  }
+
+  const grouped = groupMeetingsByDate(meetings);
+  container.innerHTML = grouped.map((group) => `
     <div class="date-group">
       <div class="date-label">${group.date}</div>
-      ${group.items.map(m => `
-        <div class="meeting-item">
-          <div class="meeting-title">${m.title}</div>
-          <div class="meeting-meta">
-            <span>${m.time}</span>
-            <span class="dot"></span>
-            <span>${m.code}</span>
-            ${m.tag ? `<span class="meeting-tag">· ${m.tag}</span>` : ''}
+      ${group.items.map((m) => {
+        const subject = m.subject || '未命名会议';
+        const startTime = formatMeetingTime(m.start_time || m.meeting_start_time);
+        const endTime = formatMeetingTime(m.end_time || m.meeting_end_time);
+        const meetingCode = m.meeting_code || m.meeting_id || '-';
+        const status = m.status || '';
+        const isRecurring = m.meeting_type === 1;
+        const statusLabel = status === 'MEETING_STATE_STARTED' ? '进行中' : '';
+        return `
+          <div class="meeting-item" data-meeting-code="${meetingCode}">
+            <div class="meeting-title">${subject}</div>
+            <div class="meeting-meta">
+              <span>${startTime}-${endTime}</span>
+              <span class="dot"></span>
+              <span class="meeting-code-copy" data-code="${meetingCode}" title="点击复制会议号">${meetingCode}</span>
+              ${isRecurring ? '<span class="meeting-tag">· 周期</span>' : ''}
+              ${statusLabel ? `<span class="meeting-tag meeting-status-active">· ${statusLabel}</span>` : ''}
+              <button class="meeting-join-btn" data-code="${meetingCode}">入会</button>
+            </div>
           </div>
-        </div>
-      `).join('')}
+        `;
+      }).join('')}
     </div>
   `).join('');
 }
-renderMeetings();
+
+// 会议号点击复制（事件委托）
+document.getElementById('meetingList').addEventListener('click', (e) => {
+  const codeEl = e.target.closest('.meeting-code-copy');
+  if (!codeEl) return;
+  const code = codeEl.getAttribute('data-code');
+  if (!code || code === '-') return;
+  navigator.clipboard.writeText(code).then(() => {
+    const original = codeEl.textContent;
+    codeEl.textContent = '已复制';
+    codeEl.classList.add('copied');
+    setTimeout(() => {
+      codeEl.textContent = original;
+      codeEl.classList.remove('copied');
+    }, 1200);
+  });
+});
+
+// 入会按钮点击（事件委托）
+document.getElementById('meetingList').addEventListener('click', async (e) => {
+  const joinBtn = e.target.closest('.meeting-join-btn');
+  if (!joinBtn) return;
+  const meetingCode = joinBtn.getAttribute('data-code');
+  if (!meetingCode || meetingCode === '-') return;
+
+  joinBtn.disabled = true;
+  joinBtn.textContent = '加入中...';
+  try {
+    const result = await window.electronAPI.joinMeeting(meetingCode, '', '');
+    if (!result.success) {
+      alert(result.message || '入会失败');
+    }
+  } catch (err) {
+    alert('入会失败: ' + err.message);
+  } finally {
+    joinBtn.disabled = false;
+    joinBtn.textContent = '入会';
+  }
+});
 
 // ========== 按钮事件 ==========
+
+document.getElementById('refreshMeetings').addEventListener('click', () => {
+  loadMeetingList();
+});
 
 document.getElementById('btnJoin').addEventListener('click', async () => {
   try {
@@ -370,6 +507,7 @@ document.getElementById('submitScheduleMeeting').addEventListener('click', async
     const result = await window.electronAPI.createMeeting(meetingData);
     if (result.success) {
       showScheduleResult(result.data);
+      loadMeetingList();
     } else {
       scheduleError.textContent = result.message || '创建会议失败';
     }
@@ -504,4 +642,5 @@ function showScheduleResult(data) {
 
 // ========== 初始化 ==========
 loadProfile();
+loadMeetingList();
 checkSdkStatus();
