@@ -1,6 +1,6 @@
 // ========== 通讯录模块 ==========
 
-let deptTreeData = [];
+let deptTreeRoot = null; // 根节点对象 { id: "root", name: "全部", children: [...], userCount, totalUserCount }
 let expandedDepts = new Set();
 let selectedDeptId = null;
 let searchTimer = null;
@@ -32,7 +32,7 @@ function initContacts() {
 
     if (nameEl || headerEl) {
       const deptId = (nameEl || headerEl).getAttribute('data-dept-id');
-      const dept = findDeptById(deptTreeData, deptId);
+      const dept = findDeptById(deptTreeRoot, deptId);
       if (dept) {
         selectDepartment(dept);
       }
@@ -72,8 +72,10 @@ function initContacts() {
 
 async function loadContactsData() {
   await loadDepartmentTree();
-  if (deptTreeData.length > 0) {
-    selectDepartment(deptTreeData[0]);
+  if (deptTreeRoot) {
+    // 默认选中根节点"全部"并展开
+    expandedDepts.add(deptTreeRoot.id);
+    selectDepartment(deptTreeRoot);
   } else {
     renderContactsUserList([]);
   }
@@ -86,7 +88,7 @@ async function loadDepartmentTree() {
   try {
     const result = await window.electronAPI.getDepartmentTree();
     if (result.success && result.data) {
-      deptTreeData = result.data;
+      deptTreeRoot = result.data;
       renderDepartmentTree();
     } else {
       container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
@@ -99,7 +101,31 @@ async function loadDepartmentTree() {
 
 function renderDepartmentTree() {
   const container = document.getElementById('contactsDeptTree');
-  container.innerHTML = renderDeptNodes(deptTreeData, 0);
+  if (!deptTreeRoot) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = renderRootNode(deptTreeRoot);
+}
+
+function renderRootNode(root) {
+  const isExpanded = expandedDepts.has(root.id);
+  const isSelected = selectedDeptId === root.id;
+
+  return `
+    <div class="dept-node" data-dept-id="${root.id}">
+      <div class="dept-node-header ${isSelected ? 'selected' : ''}"
+           style="padding-left: 12px"
+           data-dept-id="${root.id}">
+        ${root.children && root.children.length > 0 ? `<span class="dept-toggle ${isExpanded ? 'expanded' : ''}" data-dept-id="${root.id}">
+          <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </span>` : '<span class="dept-toggle-placeholder"></span>'}
+        <span class="dept-name" data-dept-id="${root.id}">${root.name}</span>
+        <span class="dept-count">${root.totalUserCount || 0}</span>
+      </div>
+      ${isExpanded && root.children && root.children.length > 0 ? `<div class="dept-children">${renderDeptNodes(root.children, 1)}</div>` : ''}
+    </div>
+  `;
 }
 
 function renderDeptNodes(nodes, level) {
@@ -131,6 +157,7 @@ function selectDepartment(dept) {
   selectedDeptId = dept.id;
   expandedDepts.add(dept.id);
   renderDepartmentTree();
+  // 根节点始终递归获取全部用户，子部门也默认递归
   loadDepartmentUsers(dept.id, true);
   document.getElementById('contactsUserListHeader').innerHTML = `<h2>${dept.name}</h2>`;
 }
@@ -178,12 +205,14 @@ function renderContactsUserList(users) {
   }).join('');
 }
 
-function findDeptById(nodes, id) {
-  if (!nodes) return null;
-  for (const dept of nodes) {
-    if (dept.id === id) return dept;
-    const found = findDeptById(dept.children, id);
-    if (found) return found;
+function findDeptById(node, id) {
+  if (!node) return null;
+  if (node.id === id) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findDeptById(child, id);
+      if (found) return found;
+    }
   }
   return null;
 }

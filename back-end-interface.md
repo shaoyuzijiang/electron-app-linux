@@ -970,9 +970,11 @@ curl http://localhost:3000/api/wemeet/records/record123/address \
 
 所有选人组件接口仅需 Bearer Token 认证（普通登录用户即可使用，不限于管理员）。用于前端选人组件获取组织架构数据和搜索用户。
 
+> **虚拟根节点**：部门树返回一个虚拟根节点（`id` 为 `"root"`，`name` 为 `"全部"`），包含所有顶级部门作为子节点，以及未分配部门的用户数。客户端可直接使用 `root` 作为部门 ID 查询所有用户。
+
 ### 1. 获取部门树（含人数统计）
 
-返回完整的部门树形结构，每个节点包含直接用户数（`userCount`）和递归子部门总用户数（`totalUserCount`），方便前端展示人数信息。
+返回完整的部门树形结构，根节点为虚拟的"全部"节点。每个节点包含直接用户数（`userCount`）和递归子部门总用户数（`totalUserCount`）。
 
 **请求**
 
@@ -986,27 +988,35 @@ curl http://localhost:3000/api/user-picker/departments \
 ```json
 {
   "code": 0,
-  "data": [
-    {
-      "id": "tech",
-      "name": "技术部",
-      "parentId": "",
-      "sortOrder": 0,
-      "userCount": 3,
-      "totalUserCount": 8,
-      "children": [
-        {
-          "id": "frontend",
-          "name": "前端组",
-          "parentId": "tech",
-          "sortOrder": 0,
-          "userCount": 5,
-          "totalUserCount": 5,
-          "children": []
-        }
-      ]
-    }
-  ]
+  "data": {
+    "id": "root",
+    "name": "全部",
+    "parentId": "",
+    "sortOrder": 0,
+    "userCount": 2,
+    "totalUserCount": 10,
+    "children": [
+      {
+        "id": "tech",
+        "name": "技术部",
+        "parentId": "",
+        "sortOrder": 0,
+        "userCount": 3,
+        "totalUserCount": 8,
+        "children": [
+          {
+            "id": "frontend",
+            "name": "前端组",
+            "parentId": "tech",
+            "sortOrder": 0,
+            "userCount": 5,
+            "totalUserCount": 5,
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
@@ -1014,23 +1024,29 @@ curl http://localhost:3000/api/user-picker/departments \
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 部门 ID |
-| `name` | string | 部门名称 |
-| `parentId` | string | 父部门 ID，空字符串表示顶级部门 |
+| `id` | string | 部门 ID，虚拟根节点为 `"root"` |
+| `name` | string | 部门名称，虚拟根节点为 `"全部"` |
+| `parentId` | string | 父部门 ID，虚拟根节点和顶级部门为空字符串 |
 | `sortOrder` | integer | 排序权重，值越小越靠前 |
-| `userCount` | integer | 直接归属该部门的用户数（不含子部门） |
-| `totalUserCount` | integer | 该部门及所有子部门的用户总数 |
+| `userCount` | integer | 直接归属该部门的用户数（虚拟根节点为未分配部门的用户数） |
+| `totalUserCount` | integer | 该部门及所有子部门的用户总数（虚拟根节点为全系统用户总数） |
 | `children` | array | 子部门列表，结构相同（递归） |
+
+> **虚拟根节点说明**：根节点的 `userCount` 表示未分配任何部门的用户数，`totalUserCount` 为全系统用户总数。客户端选中根节点时，调用 `/api/user-picker/departments/root/users` 即可获取所有用户。
 
 ---
 
 ### 2. 获取部门下的用户
 
-获取指定部门下的用户列表，支持 `recursive` 参数递归获取子部门用户。
+获取指定部门下的用户列表，支持 `recursive` 参数递归获取子部门用户。支持虚拟根节点 `root`，获取全系统所有用户（含未分配部门的用户）。
 
 **请求**
 
 ```bash
+# 获取虚拟根节点下的所有用户（含未分配部门的用户）
+curl http://localhost:3000/api/user-picker/departments/root/users \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
 # 仅获取直接归属该部门的用户
 curl http://localhost:3000/api/user-picker/departments/tech/users \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -1040,11 +1056,17 @@ curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=tru
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
+**路径参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | ✅ | 部门 ID，传 `root` 获取所有用户 |
+
 **查询参数**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `recursive` | string | - | 设为 `true` 时递归获取子部门用户，默认仅获取直接归属用户 |
+| `recursive` | string | - | 设为 `true` 时递归获取子部门用户，默认仅获取直接归属用户（`root` 时忽略此参数，始终返回全部用户） |
 
 **成功响应** `200`
 
