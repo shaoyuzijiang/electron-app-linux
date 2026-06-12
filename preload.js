@@ -55,13 +55,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setCustomOrgInfo: (jsonParam) =>
     ipcRenderer.invoke('set-custom-org-info', { jsonParam }),
 
-  // 监听会中邀请回调
-  onInviteUsersCallback: (callback) => {
-    ipcRenderer.on('invite-users-callback', (_event, msg) => callback(msg));
+  // 选人组件独立窗口接口
+  getMeetingWindowInfo: () => ipcRenderer.invoke('get-meeting-window-info'),
+  closeUserPickerWindow: () => ipcRenderer.invoke('close-user-picker-window'),
+
+  // 监听选人组件初始化数据（主进程发送）
+  onPickerInitData: (callback) => {
+    ipcRenderer.on('picker-init-data', (_event, data) => callback(data));
   },
-  onInviteMeetingCallback: (callback) => {
-    ipcRenderer.on('invite-meeting-callback', (_event, msg) => callback(msg));
-  },
+
+  // 监听邀请结果回调
   onAddUsersResultCallback: (callback) => {
     ipcRenderer.on('add-users-result-callback', (_event, msg) => callback(msg));
   },

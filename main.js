@@ -43,6 +43,7 @@ try {
 }
 
 let mainWindow;
+let userPickerWindow = null; // 选人组件独立窗口
 
 // ========== 会议列表推送相关 ==========
 let meetingListRefreshTimer = null; // 防抖定时器
@@ -152,18 +153,14 @@ function handleSDKCallback(cbMsg) {
       console.log('SDK 登出回调');
     } else if (func === 'OnInviteUsers') {
       console.log('[选人组件] 收到 OnInviteUsers 回调:', msg);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('invite-users-callback', cbMsg);
-      }
+      openUserPickerWindow('invite_users', cbMsg);
     } else if (func === 'OnInviteMeeting') {
       console.log('[选人组件] 收到 OnInviteMeeting 回调:', msg);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('invite-meeting-callback', cbMsg);
-      }
+      openUserPickerWindow('invite_meeting', cbMsg);
     } else if (func === 'OnAddUsersResult') {
       console.log('[选人组件] 收到 OnAddUsersResult 回调, code:', code, 'msg:', msg);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('add-users-result-callback', cbMsg);
+      if (userPickerWindow && !userPickerWindow.isDestroyed()) {
+        userPickerWindow.webContents.send('add-users-result-callback', cbMsg);
       }
     } else if (func === 'OnSDKUninitializeResult') {
       sdkInitialized = false;
@@ -389,6 +386,122 @@ async function sdkLogin(ssoUrl) {
   console.error(`SDK 登录失败，已重试 ${MAX_RETRY} 次`);
   sdkLoggingIn = false;
   return false;
+}
+
+/**
+ * 获取会中窗口位置信息
+ * @returns {object|null} { x, y, width, height } 或 null
+ *
+ * GetMeetingWindowInfo() 返回 JSON 字符串，结构如下：
+ * {
+ *   "code": 0,
+ *   "msg": "",
+ *   "data": {
+ *     "in_meeting_mode": true,
+ *     "in_screen_share_mode": false,
+ *     "in_meeting_min_wnd_mode": false,
+ *     "window_rect": { "x": 0, "y": 0, "width": 0, "height": 0 }
+ *   }
+ * }
+ * 仅在会中且非屏幕共享、非最小化时 window_rect 有效。
+ */
+function getMeetingWindowInfo() {
+  if (!wemeetSdk) return null;
+  try {
+    const raw = wemeetSdk.GetMeetingWindowInfo();
+    if (!raw || raw === '') return null;
+    const result = JSON.parse(raw);
+    // code 不为 0 表示不在会中或调用非法
+    if (!result || result.code !== 0 || !result.data) return null;
+    const data = result.data;
+    // 非会中状态、屏幕共享状态、最小化状态时 window_rect 无效
+    if (!data.in_meeting_mode || data.in_screen_share_mode || data.in_meeting_min_wnd_mode) {
+      console.warn('[选人组件] 会中窗口状态不适合定位:', {
+        in_meeting_mode: data.in_meeting_mode,
+        in_screen_share_mode: data.in_screen_share_mode,
+        in_meeting_min_wnd_mode: data.in_meeting_min_wnd_mode,
+      });
+      return null;
+    }
+    const rect = data.window_rect;
+    if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  } catch (err) {
+    console.error('[选人组件] GetMeetingWindowInfo 失败:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 打开选人组件独立窗口，定位到会中窗口上方
+ * @param {string} type - 'invite_users' 或 'invite_meeting'
+ * @param {string} cbMsg - SDK 回调原始 JSON 消息
+ */
+function openUserPickerWindow(type, cbMsg) {
+  // 如果已有选人窗口则先关闭
+  if (userPickerWindow && !userPickerWindow.isDestroyed()) {
+    userPickerWindow.close();
+    userPickerWindow = null;
+  }
+
+  // 获取会中窗口位置
+  const meetingWinInfo = getMeetingWindowInfo();
+  console.log('[选人组件] 会中窗口信息:', JSON.stringify(meetingWinInfo));
+
+  const pickerWidth = 800;
+  const pickerHeight = 560;
+
+  let posX, posY;
+  if (meetingWinInfo && typeof meetingWinInfo.x === 'number' && typeof meetingWinInfo.y === 'number') {
+    // 居中于 SDK 会中窗口
+    posX = Math.round(meetingWinInfo.x + (meetingWinInfo.width - pickerWidth) / 2);
+    posY = Math.round(meetingWinInfo.y + (meetingWinInfo.height - pickerHeight) / 2);
+    console.log('[选人组件] 基于 SDK 会中窗口定位:', { posX, posY });
+  } else {
+    // 回退：居中于主窗口
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const mainBounds = mainWindow.getBounds();
+      posX = Math.round(mainBounds.x + (mainBounds.width - pickerWidth) / 2);
+      posY = Math.round(mainBounds.y + (mainBounds.height - pickerHeight) / 2);
+    } else {
+      posX = undefined;
+      posY = undefined;
+    }
+  }
+
+  userPickerWindow = new BrowserWindow({
+    width: pickerWidth,
+    height: pickerHeight,
+    minWidth: 700,
+    minHeight: 480,
+    x: posX,
+    y: posY,
+    title: type === 'invite_meeting' ? '邀请参会' : '邀请成员',
+    resizable: true,
+    minimizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    frame: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  userPickerWindow.loadFile(path.join(__dirname, 'renderer', 'user-picker.html'));
+
+  // 窗口加载完成后发送回调数据
+  userPickerWindow.webContents.on('did-finish-load', () => {
+    userPickerWindow.webContents.send('picker-init-data', { type, cbMsg });
+  });
+
+  userPickerWindow.on('closed', () => {
+    userPickerWindow = null;
+  });
+
+  // 失去焦点时不自动关闭（避免误操作）
 }
 
 /**
@@ -900,6 +1013,21 @@ app.whenReady().then(() => {
   });
 
   // ========== 会中选人组件 IPC 接口 ==========
+
+  // 获取会中窗口位置信息
+  ipcMain.handle('get-meeting-window-info', async () => {
+    const info = getMeetingWindowInfo();
+    return { success: !!info, data: info };
+  });
+
+  // 关闭选人组件窗口
+  ipcMain.handle('close-user-picker-window', async () => {
+    if (userPickerWindow && !userPickerWindow.isDestroyed()) {
+      userPickerWindow.close();
+      userPickerWindow = null;
+    }
+    return { success: true };
+  });
 
   // 启用邀请回调开关
   ipcMain.handle('enable-invite-callbacks', async () => {

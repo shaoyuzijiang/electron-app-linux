@@ -1,29 +1,24 @@
-/* ========== 会中自定义通讯录选人组件 ========== */
+/* ========== 会中自定义通讯录选人组件（独立窗口） ========== */
 
-.user-picker-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.45);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-}
-
-.user-picker-overlay.show {
-  display: flex;
-}
-
-.user-picker-dialog {
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  color: #1e1e1e;
   background: #fff;
-  border-radius: 14px;
-  width: 800px;
-  height: 560px;
-  max-height: 80vh;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.user-picker-container {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -33,39 +28,17 @@
 .user-picker-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
+  justify-content: center;
+  padding: 14px 24px;
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
+  -webkit-app-region: drag; /* 允许拖拽窗口 */
 }
 
 .user-picker-header h2 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #1e1e1e;
-}
-
-.user-picker-close {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-
-.user-picker-close:hover {
-  background: #f0f0f0;
-}
-
-.user-picker-close svg {
-  width: 20px;
-  height: 20px;
-  fill: #999;
 }
 
 /* 主体 */
@@ -86,7 +59,7 @@
 }
 
 .user-picker-selected-header {
-  padding: 16px 16px 8px;
+  padding: 14px 16px 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -385,7 +358,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-top: 1px solid #eee;
   flex-shrink: 0;
 }
@@ -424,4 +397,138 @@
 .user-picker-footer .btn-invite:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ========== 共用样式（部门树、联系人等） ========== */
+
+/* 部门树节点 */
+.dept-node-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 4px;
+  margin: 1px 8px;
+}
+
+.dept-node-header:hover {
+  background: #f0f0f0;
+}
+
+.dept-node-header.selected {
+  background: #e3f0ff;
+}
+
+.dept-toggle {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.dept-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: #999;
+}
+
+.dept-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.dept-toggle-placeholder {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.dept-name {
+  flex: 1;
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.dept-count {
+  font-size: 11px;
+  color: #bbb;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.dept-children {
+  /* 子部门容器 */
+}
+
+/* 联系人头像 */
+.contact-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.contact-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.contact-name {
+  font-size: 14px;
+  color: #1e1e1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-dept {
+  font-size: 12px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 加载/空状态 */
+.meeting-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px 0;
+  color: #999;
+  font-size: 13px;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ddd;
+  border-top-color: #1e6fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.meeting-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: #bbb;
+  font-size: 13px;
 }

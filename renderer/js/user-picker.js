@@ -1,6 +1,5 @@
-// ========== 会中自定义通讯录选人组件 ==========
+// ========== 会中自定义通讯录选人组件（独立窗口模式） ==========
 
-let pickerVisible = false;
 let pickerInMeetingUserIds = []; // 已在会中的用户ID列表
 let pickerSelectedUsers = new Map(); // 已选中的用户 id -> { id, username, departmentName }
 let pickerDeptTreeRoot = null;
@@ -9,59 +8,40 @@ let pickerSelectedDeptId = null;
 let pickerSearchTimer = null;
 let pickerCallbackType = null; // 'invite_users' 或 'invite_meeting'
 
-/**
- * 显示选人组件
- * @param {string} type - 回调类型: 'invite_users' 或 'invite_meeting'
- * @param {object} data - 回调数据，invite_users 时包含 { users, user_type }
- */
-function showUserPicker(type, data) {
-  if (pickerVisible) return;
-  pickerVisible = true;
-  pickerCallbackType = type;
-  pickerSelectedUsers.clear();
+// ========== 初始化：等待主进程发送数据 ==========
 
-  // 解析已在会中的用户列表
-  if (type === 'invite_users' && data && data.users) {
-    pickerInMeetingUserIds = data.users;
-  } else {
-    pickerInMeetingUserIds = [];
+window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
+  try {
+    const cb = JSON.parse(cbMsg);
+    pickerCallbackType = type;
+
+    // 解析已在会中的用户列表
+    if (type === 'invite_users' && cb.param) {
+      let data = typeof cb.param === 'string' ? JSON.parse(cb.param) : cb.param;
+      pickerInMeetingUserIds = data.users || [];
+    } else {
+      pickerInMeetingUserIds = [];
+    }
+
+    // 更新标题
+    const titleEl = document.getElementById('userPickerTitle');
+    if (type === 'invite_meeting') {
+      titleEl.textContent = '邀请参会';
+      document.title = '邀请参会';
+    } else {
+      titleEl.textContent = '邀请成员';
+      document.title = '邀请成员';
+    }
+
+    // 加载数据
+    loadPickerDeptTree();
+    renderPickerSelectedUsers();
+  } catch (err) {
+    console.error('[选人组件] 初始化数据解析失败:', err);
   }
+});
 
-  const overlay = document.getElementById('userPickerOverlay');
-  overlay.classList.add('show');
-
-  // 更新标题
-  const titleEl = document.getElementById('userPickerTitle');
-  if (type === 'invite_meeting') {
-    titleEl.textContent = '邀请参会';
-  } else {
-    titleEl.textContent = '邀请成员';
-  }
-
-  // 清空搜索
-  const searchInput = document.getElementById('userPickerSearchInput');
-  searchInput.value = '';
-  document.getElementById('userPickerSearchResults').style.display = 'none';
-  document.getElementById('userPickerDeptTree').style.display = '';
-
-  // 加载数据
-  loadPickerDeptTree();
-  renderPickerSelectedUsers();
-}
-
-/**
- * 隐藏选人组件
- */
-function hideUserPicker() {
-  pickerVisible = false;
-  pickerSelectedUsers.clear();
-  pickerInMeetingUserIds = [];
-  pickerCallbackType = null;
-  const overlay = document.getElementById('userPickerOverlay');
-  overlay.classList.remove('show');
-}
-
-// ---------- 部门树 ----------
+// ========== 部门树 ==========
 
 async function loadPickerDeptTree() {
   const container = document.getElementById('userPickerDeptTree');
@@ -74,7 +54,6 @@ async function loadPickerDeptTree() {
       pickerExpandedDepts.add(pickerDeptTreeRoot.id);
       pickerSelectedDeptId = null;
       renderPickerDeptTree();
-      // 默认选中根节点
       if (pickerDeptTreeRoot) {
         pickerSelectDepartment(pickerDeptTreeRoot);
       }
@@ -227,7 +206,7 @@ function renderPickerSearchResults(users) {
   }).join('');
 }
 
-// ---------- 已选用户 ----------
+// ========== 已选用户 ==========
 
 function togglePickerUser(userId, username, departmentName) {
   if (pickerInMeetingUserIds.includes(userId)) return;
@@ -239,7 +218,6 @@ function togglePickerUser(userId, username, departmentName) {
   }
 
   renderPickerSelectedUsers();
-  // 更新用户列表中的选中状态
   updatePickerUserListCheckboxes();
 }
 
@@ -278,7 +256,6 @@ function renderPickerSelectedUsers() {
 }
 
 function updatePickerUserListCheckboxes() {
-  // 更新用户列表中所有 checkbox 的显示状态
   document.querySelectorAll('#userPickerUserList .picker-user-item, #userPickerSearchResults .picker-user-item').forEach((item) => {
     const userId = item.getAttribute('data-user-id');
     const checkbox = item.querySelector('.picker-checkbox');
@@ -296,7 +273,7 @@ function updatePickerUserListCheckboxes() {
   });
 }
 
-// ---------- 确认邀请 ----------
+// ========== 确认邀请 ==========
 
 async function confirmInviteUsers() {
   if (pickerSelectedUsers.size === 0) return;
@@ -318,8 +295,8 @@ async function confirmInviteUsers() {
       inviteBtn.textContent = '确认邀请';
       return;
     }
-    // 等待 OnAddUsersResult 回调来确认结果，先关闭弹窗
-    hideUserPicker();
+    // 等待 OnAddUsersResult 回调来确认结果，先关闭窗口
+    window.electronAPI.closeUserPickerWindow();
   } catch (err) {
     alert('邀请失败: ' + err.message);
     inviteBtn.disabled = false;
@@ -327,7 +304,7 @@ async function confirmInviteUsers() {
   }
 }
 
-// ---------- 查找部门 ----------
+// ========== 查找部门 ==========
 
 function findPickerDeptById(node, id) {
   if (!node) return null;
@@ -341,160 +318,115 @@ function findPickerDeptById(node, id) {
   return null;
 }
 
-// ========== 初始化事件绑定 ==========
+// ========== 事件绑定 ==========
 
-function initUserPickerEvents() {
-  // 关闭按钮
-  document.getElementById('userPickerCloseBtn').addEventListener('click', hideUserPicker);
+// 取消按钮
+document.getElementById('userPickerCancelBtn').addEventListener('click', () => {
+  window.electronAPI.closeUserPickerWindow();
+});
 
-  // 取消按钮
-  document.getElementById('userPickerCancelBtn').addEventListener('click', hideUserPicker);
+// 确认邀请
+document.getElementById('userPickerInviteBtn').addEventListener('click', confirmInviteUsers);
 
-  // 确认邀请
-  document.getElementById('userPickerInviteBtn').addEventListener('click', confirmInviteUsers);
+// 部门树点击事件（事件委托）
+document.getElementById('userPickerDeptTree').addEventListener('click', (e) => {
+  const toggleEl = e.target.closest('.dept-toggle');
+  const nameEl = e.target.closest('.dept-name');
+  const headerEl = e.target.closest('.dept-node-header');
 
-  // 遮罩层点击关闭（不关闭，避免误操作）
-
-  // 部门树点击事件（事件委托）
-  document.getElementById('userPickerDeptTree').addEventListener('click', (e) => {
-    const toggleEl = e.target.closest('.dept-toggle');
-    const nameEl = e.target.closest('.dept-name');
-    const headerEl = e.target.closest('.dept-node-header');
-
-    if (toggleEl) {
-      const deptId = toggleEl.getAttribute('data-dept-id');
-      if (pickerExpandedDepts.has(deptId)) {
-        pickerExpandedDepts.delete(deptId);
-      } else {
-        pickerExpandedDepts.add(deptId);
-      }
-      renderPickerDeptTree();
-      return;
+  if (toggleEl) {
+    const deptId = toggleEl.getAttribute('data-dept-id');
+    if (pickerExpandedDepts.has(deptId)) {
+      pickerExpandedDepts.delete(deptId);
+    } else {
+      pickerExpandedDepts.add(deptId);
     }
+    renderPickerDeptTree();
+    return;
+  }
 
-    if (nameEl || headerEl) {
-      const deptId = (nameEl || headerEl).getAttribute('data-dept-id');
-      const dept = findPickerDeptById(pickerDeptTreeRoot, deptId);
-      if (dept) {
-        pickerSelectDepartment(dept);
-      }
+  if (nameEl || headerEl) {
+    const deptId = (nameEl || headerEl).getAttribute('data-dept-id');
+    const dept = findPickerDeptById(pickerDeptTreeRoot, deptId);
+    if (dept) {
+      pickerSelectDepartment(dept);
     }
-  });
+  }
+});
 
-  // 用户列表点击事件（事件委托）
-  document.getElementById('userPickerUserList').addEventListener('click', (e) => {
-    const item = e.target.closest('.picker-user-item');
-    if (!item) return;
-    const userId = item.getAttribute('data-user-id');
-    const username = item.getAttribute('data-username');
-    const dept = item.getAttribute('data-dept');
-    if (userId) {
-      togglePickerUser(userId, username, dept);
-    }
-  });
+// 用户列表点击事件（事件委托）
+document.getElementById('userPickerUserList').addEventListener('click', (e) => {
+  const item = e.target.closest('.picker-user-item');
+  if (!item) return;
+  const userId = item.getAttribute('data-user-id');
+  const username = item.getAttribute('data-username');
+  const dept = item.getAttribute('data-dept');
+  if (userId) {
+    togglePickerUser(userId, username, dept);
+  }
+});
 
-  // 搜索结果点击事件（事件委托）
-  document.getElementById('userPickerSearchResults').addEventListener('click', (e) => {
-    const item = e.target.closest('.picker-user-item');
-    if (!item) return;
-    const userId = item.getAttribute('data-user-id');
-    const username = item.getAttribute('data-username');
-    const dept = item.getAttribute('data-dept');
-    if (userId) {
-      togglePickerUser(userId, username, dept);
-    }
-  });
+// 搜索结果点击事件（事件委托）
+document.getElementById('userPickerSearchResults').addEventListener('click', (e) => {
+  const item = e.target.closest('.picker-user-item');
+  if (!item) return;
+  const userId = item.getAttribute('data-user-id');
+  const username = item.getAttribute('data-username');
+  const dept = item.getAttribute('data-dept');
+  if (userId) {
+    togglePickerUser(userId, username, dept);
+  }
+});
 
-  // 已选用户移除事件（事件委托）
-  document.getElementById('userPickerSelectedList').addEventListener('click', (e) => {
-    const removeEl = e.target.closest('.picker-selected-remove');
-    if (!removeEl) return;
-    const userId = removeEl.getAttribute('data-user-id');
-    if (userId) {
-      removePickerUser(userId);
-    }
-  });
+// 已选用户移除事件（事件委托）
+document.getElementById('userPickerSelectedList').addEventListener('click', (e) => {
+  const removeEl = e.target.closest('.picker-selected-remove');
+  if (!removeEl) return;
+  const userId = removeEl.getAttribute('data-user-id');
+  if (userId) {
+    removePickerUser(userId);
+  }
+});
 
-  // 搜索
-  document.getElementById('userPickerSearchInput').addEventListener('input', (e) => {
-    const query = e.target.value.trim();
-    const searchResultsEl = document.getElementById('userPickerSearchResults');
-    const deptTreeEl = document.getElementById('userPickerDeptTree');
+// 搜索
+document.getElementById('userPickerSearchInput').addEventListener('input', (e) => {
+  const query = e.target.value.trim();
+  const searchResultsEl = document.getElementById('userPickerSearchResults');
+  const deptTreeEl = document.getElementById('userPickerDeptTree');
 
-    clearTimeout(pickerSearchTimer);
+  clearTimeout(pickerSearchTimer);
 
-    if (!query) {
-      searchResultsEl.style.display = 'none';
-      deptTreeEl.style.display = '';
-      return;
-    }
+  if (!query) {
+    searchResultsEl.style.display = 'none';
+    deptTreeEl.style.display = '';
+    return;
+  }
 
-    pickerSearchTimer = setTimeout(async () => {
-      try {
-        const result = await window.electronAPI.searchUsers(query);
-        if (result.success && result.data) {
-          searchResultsEl.style.display = '';
-          deptTreeEl.style.display = 'none';
-          renderPickerSearchResults(result.data);
-        }
-      } catch (err) {
-        console.error('[选人组件] 搜索用户失败:', err);
-      }
-    }, 300);
-  });
-
-  // 监听 SDK 邀请回调
-  window.electronAPI.onInviteUsersCallback((msg) => {
+  pickerSearchTimer = setTimeout(async () => {
     try {
-      const cb = JSON.parse(msg);
-      // OnInviteUsers 回调的 param 字段包含 { users, user_type }
-      let data = {};
-      if (cb.param) {
-        if (typeof cb.param === 'string') {
-          data = JSON.parse(cb.param);
-        } else {
-          data = cb.param;
-        }
-      }
-      console.log('[选人组件] OnInviteUsers 回调数据:', data);
-      showUserPicker('invite_users', data);
-    } catch (err) {
-      console.error('[选人组件] 解析 OnInviteUsers 回调失败:', err);
-    }
-  });
-
-  window.electronAPI.onInviteMeetingCallback((msg) => {
-    try {
-      const cb = JSON.parse(msg);
-      // OnInviteMeeting 回调的 param 字段包含会议信息
-      let data = {};
-      if (cb.param) {
-        if (typeof cb.param === 'string') {
-          data = JSON.parse(cb.param);
-        } else {
-          data = cb.param;
-        }
-      }
-      console.log('[选人组件] OnInviteMeeting 回调数据:', data);
-      showUserPicker('invite_meeting', data);
-    } catch (err) {
-      console.error('[选人组件] 解析 OnInviteMeeting 回调失败:', err);
-    }
-  });
-
-  // 监听邀请结果回调
-  window.electronAPI.onAddUsersResultCallback((msg) => {
-    try {
-      const cb = JSON.parse(msg);
-      const code = Number(cb.code);
-      if (code === 0) {
-        console.log('[选人组件] 邀请用户成功');
-      } else {
-        console.error('[选人组件] 邀请用户失败:', cb.msg);
-        alert('邀请用户失败: ' + (cb.msg || '未知错误'));
+      const result = await window.electronAPI.searchUsers(query);
+      if (result.success && result.data) {
+        searchResultsEl.style.display = '';
+        deptTreeEl.style.display = 'none';
+        renderPickerSearchResults(result.data);
       }
     } catch (err) {
-      console.error('[选人组件] 解析 OnAddUsersResult 回调失败:', err);
+      console.error('[选人组件] 搜索用户失败:', err);
     }
-  });
-}
+  }, 300);
+});
+
+// 监听邀请结果回调
+window.electronAPI.onAddUsersResultCallback((msg) => {
+  try {
+    const cb = JSON.parse(msg);
+    const code = Number(cb.code);
+    if (code === 0) {
+      console.log('[选人组件] 邀请用户成功');
+    } else {
+      console.error('[选人组件] 邀请用户失败:', cb.msg);
+    }
+  } catch (err) {
+    console.error('[选人组件] 解析 OnAddUsersResult 回调失败:', err);
+  }
+});

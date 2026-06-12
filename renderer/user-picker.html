@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>邀请成员</title>
+  <link rel="stylesheet" href="css/user-picker.css" />
+</head>
+<body>
+  <div class="user-picker-container">
+    <div class="user-picker-header">
+      <h2 id="userPickerTitle">邀请成员</h2>
+    </div>
+
+    <div class="user-picker-body">
+      <!-- 左侧：已选用户 -->
+      <div class="user-picker-left">
+        <div class="user-picker-selected-header">
+          <h3>已选择</h3>
+          <span class="user-picker-selected-count" id="userPickerSelectedCount"></span>
+        </div>
+        <div class="user-picker-selected-list" id="userPickerSelectedList">
+          <div class="picker-empty-hint">从右侧通讯录中选择要邀请的人员</div>
+        </div>
+      </div>
+
+      <!-- 右侧：通讯录 -->
+      <div class="user-picker-right">
+        <div class="user-picker-search">
+          <svg viewBox="0 0 24 24" class="search-icon"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" id="userPickerSearchInput" placeholder="搜索姓名或用户ID" />
+        </div>
+
+        <div class="user-picker-contacts">
+          <div class="user-picker-dept-tree" id="userPickerDeptTree">
+            <!-- 部门树动态渲染 -->
+          </div>
+          <div class="user-picker-user-area">
+            <div class="user-picker-user-header" id="userPickerUserListHeader">
+              <h3>通讯录</h3>
+            </div>
+            <div class="user-picker-search-results" id="userPickerSearchResults" style="display:none;">
+              <!-- 搜索结果动态渲染 -->
+            </div>
+            <div class="user-picker-user-list" id="userPickerUserList">
+              <!-- 用户列表动态渲染 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="user-picker-footer">
+      <button class="btn-cancel" id="userPickerCancelBtn">取消</button>
+      <button class="btn-invite" id="userPickerInviteBtn" disabled>确认邀请</button>
+    </div>
+  </div>
+
+  <script src="js/user-picker.js"></script>
+</body>
+</html>
