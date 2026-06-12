@@ -45,4 +45,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDepartmentUsers: (departmentId, recursive) =>
     ipcRenderer.invoke('get-department-users', { departmentId, recursive }),
   searchUsers: (query) => ipcRenderer.invoke('search-users', { query }),
+
+  // 会中选人组件接口
+  enableInviteCallbacks: () => ipcRenderer.invoke('enable-invite-callbacks'),
+  addUsersWithParam: (jsonParam) =>
+    ipcRenderer.invoke('add-users-with-param', { jsonParam }),
+  enableCustomOrgInfo: (enable) =>
+    ipcRenderer.invoke('enable-custom-org-info', { enable }),
+  setCustomOrgInfo: (jsonParam) =>
+    ipcRenderer.invoke('set-custom-org-info', { jsonParam }),
+
+  // 监听会中邀请回调
+  onInviteUsersCallback: (callback) => {
+    ipcRenderer.on('invite-users-callback', (_event, msg) => callback(msg));
+  },
+  onInviteMeetingCallback: (callback) => {
+    ipcRenderer.on('invite-meeting-callback', (_event, msg) => callback(msg));
+  },
+  onAddUsersResultCallback: (callback) => {
+    ipcRenderer.on('add-users-result-callback', (_event, msg) => callback(msg));
+  },
 });

@@ -692,3 +692,4 @@ navItems.forEach((item) => {
 loadProfile();
 loadMeetingList();
 checkSdkStatus();
+initUserPickerEvents();

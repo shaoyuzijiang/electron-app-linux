@@ -136,6 +136,7 @@ function handleSDKCallback(cbMsg) {
         sdkLoggedIn = true;
         startMeetingListPolling();
         scheduleMeetingListRefresh();
+        enableInviteCallbacks();
         console.log('SDK 登录成功');
         if (sdkLoginResolve) sdkLoginResolve(true);
       } else if (sdkLoggedIn) {
@@ -149,6 +150,21 @@ function handleSDKCallback(cbMsg) {
       sdkLoggedIn = false;
       stopMeetingListPolling();
       console.log('SDK 登出回调');
+    } else if (func === 'OnInviteUsers') {
+      console.log('[选人组件] 收到 OnInviteUsers 回调:', msg);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('invite-users-callback', cbMsg);
+      }
+    } else if (func === 'OnInviteMeeting') {
+      console.log('[选人组件] 收到 OnInviteMeeting 回调:', msg);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('invite-meeting-callback', cbMsg);
+      }
+    } else if (func === 'OnAddUsersResult') {
+      console.log('[选人组件] 收到 OnAddUsersResult 回调, code:', code, 'msg:', msg);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('add-users-result-callback', cbMsg);
+      }
     } else if (func === 'OnSDKUninitializeResult') {
       sdkInitialized = false;
       sdkLoggedIn = false;
@@ -373,6 +389,26 @@ async function sdkLogin(ssoUrl) {
   console.error(`SDK 登录失败，已重试 ${MAX_RETRY} 次`);
   sdkLoggingIn = false;
   return false;
+}
+
+/**
+ * 启用会中邀请回调（选人组件）
+ * 建议在初始化回调之后、登录之前设置，但登录后设置也有效
+ */
+function enableInviteCallbacks() {
+  if (!wemeetSdk || !sdkInitialized) {
+    console.warn('[选人组件] SDK 未初始化，无法启用邀请回调');
+    return;
+  }
+  try {
+    // EnableInviteUsersCallback: 会中管理成员邀请回调，enable=true, show=false 表示启用回调且隐藏SDK默认通讯录
+    wemeetSdk.EnableInviteUsersCallback(true, false);
+    // SetNeedShareCallback: 会中工具栏邀请回调（底层调用 EnableInviteCallback），enable=true, show=false
+    wemeetSdk.SetNeedShareCallback(true, false);
+    console.log('[选人组件] 已启用邀请回调（隐藏SDK默认通讯录）');
+  } catch (err) {
+    console.error('[选人组件] 启用邀请回调失败:', err.message);
+  }
 }
 
 /**
@@ -859,6 +895,60 @@ app.whenReady().then(() => {
       if (err.message === '未登录') {
         return { success: false, message: '未登录，请重新登录' };
       }
+      return { success: false, message: err.message };
+    }
+  });
+
+  // ========== 会中选人组件 IPC 接口 ==========
+
+  // 启用邀请回调开关
+  ipcMain.handle('enable-invite-callbacks', async () => {
+    if (!wemeetSdk || !sdkInitialized) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      enableInviteCallbacks();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 呼叫用户入会（选人后调用）
+  ipcMain.handle('add-users-with-param', async (_event, { jsonParam }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.AddUsersWithParam(jsonParam);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 启用自定义组织架构
+  ipcMain.handle('enable-custom-org-info', async (_event, { enable }) => {
+    if (!wemeetSdk || !sdkInitialized) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      wemeetSdk.EnableCustomOrgInfo(enable);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 设置自定义组织架构信息
+  ipcMain.handle('set-custom-org-info', async (_event, { jsonParam }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.SetCustomOrgInfo(jsonParam);
+      return { success: true };
+    } catch (err) {
       return { success: false, message: err.message };
     }
   });
