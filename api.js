@@ -110,14 +110,14 @@ function prefetchPublicKey() {
 }
 
 /**
- * 用户登录
- * @param {string} username
+ * 用户登录（邮箱）
+ * @param {string} email
  * @param {string} password
  * @returns {{ accessToken, refreshToken, expiresIn, tokenType }}
  */
-async function login(username, password) {
+async function login(email, password) {
   const publicKey = await getPublicKey();
-  const payload = { username, password };
+  const payload = { email, password };
   const encrypted = encryptRequest(publicKey, payload);
 
   return await request(`${BASE_URL}/api/auth/login`, {

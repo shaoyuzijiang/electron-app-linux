@@ -663,10 +663,10 @@ app.whenReady().then(() => {
   });
 
   // 登录
-  ipcMain.handle('login', async (_event, { username, password }) => {
+  ipcMain.handle('login', async (_event, { email, password }) => {
     try {
-      // 1. 账号登录，获取 accessToken
-      const tokenData = await api.login(username, password);
+      // 1. 邮箱登录，获取 accessToken
+      const tokenData = await api.login(email, password);
       tokenStore.saveTokens(tokenData);
 
       // 2. 获取用户信息（验证登录成功）

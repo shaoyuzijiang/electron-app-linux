@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // 原有接口
-  login: (username, password) => ipcRenderer.invoke('login', { username, password }),
+  login: (email, password) => ipcRenderer.invoke('login', { email, password }),
   loginSuccess: () => ipcRenderer.send('login-success'),
   getProfile: () => ipcRenderer.invoke('get-profile'),
   logout: () => ipcRenderer.invoke('logout'),

@@ -130,11 +130,11 @@
 <body>
   <div class="login-card">
     <h1>欢迎登录</h1>
-    <p class="subtitle">请输入您的账号和密码</p>
+    <p class="subtitle">请输入您的邮箱和密码</p>
     <form id="loginForm">
       <div class="form-group">
-        <label for="username">用户名</label>
-        <input type="text" id="username" placeholder="请输入用户名" autocomplete="off" />
+        <label for="email">邮箱</label>
+        <input type="email" id="email" placeholder="请输入邮箱地址" autocomplete="off" />
       </div>
       <div class="form-group">
         <label for="password">密码</label>
@@ -154,27 +154,34 @@
     const errorMsg = document.getElementById('errorMsg');
     const loginBtn = document.getElementById('loginBtn');
     const rememberCb = document.getElementById('rememberPassword');
-    const usernameInput = document.getElementById('username');
+    const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
 
-    // 读取记住的账号密码
-    const savedUsername = localStorage.getItem('remembered_username');
+    // 读取记住的邮箱密码
+    const savedEmail = localStorage.getItem('remembered_email');
     const savedPassword = localStorage.getItem('remembered_password');
-    if (savedUsername) {
-      usernameInput.value = savedUsername;
+    if (savedEmail) {
+      emailInput.value = savedEmail;
       passwordInput.value = savedPassword || '';
       rememberCb.checked = true;
     }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = document.getElementById('username').value.trim();
+      const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
 
       errorMsg.textContent = '';
 
-      if (!username || !password) {
-        errorMsg.textContent = '请输入用户名和密码';
+      if (!email || !password) {
+        errorMsg.textContent = '请输入邮箱和密码';
+        return;
+      }
+
+      // 邮箱格式校验
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        errorMsg.textContent = '请输入有效的邮箱地址';
         return;
       }
 
@@ -182,15 +189,15 @@
       loginBtn.textContent = '登录中...';
 
       try {
-        const result = await window.electronAPI.login(username, password);
+        const result = await window.electronAPI.login(email, password);
 
         if (result.success) {
           // 记住密码逻辑
           if (rememberCb.checked) {
-            localStorage.setItem('remembered_username', username);
+            localStorage.setItem('remembered_email', email);
             localStorage.setItem('remembered_password', password);
           } else {
-            localStorage.removeItem('remembered_username');
+            localStorage.removeItem('remembered_email');
             localStorage.removeItem('remembered_password');
           }
           window.electronAPI.loginSuccess();
