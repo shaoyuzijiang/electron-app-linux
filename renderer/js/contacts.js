@@ -347,7 +347,6 @@ function renderContactsUserItems(users) {
           <div class="contact-name">${user.username || '-'}</div>
           <div class="contact-dept">${user.departmentName || '-'}</div>
         </div>
-        <div class="contact-id">${user.id || ''}</div>
       </div>
     `;
   }).join('');
@@ -386,7 +385,6 @@ function renderSearchResults(users) {
           <div class="contact-name">${user.username || '-'}</div>
           <div class="contact-dept">${user.departmentName || '-'}</div>
         </div>
-        <div class="contact-id">${user.id || ''}</div>
       </div>
     `;
   }).join('');
