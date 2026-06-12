@@ -303,16 +303,22 @@ async function getDepartmentTree(accessToken) {
 }
 
 /**
- * 获取部门下的用户
+ * 获取部门下的用户（分页）
  * @param {string} accessToken
- * @param {string} departmentId - 部门 ID
- * @param {boolean} [recursive=false] - 是否递归获取子部门用户
- * @returns {Array} 用户列表
+ * @param {string} departmentId - 部门 ID，传 'root' 获取全部用户
+ * @param {object} [options] - 可选参数
+ * @param {boolean} [options.recursive=false] - 是否递归获取子部门用户；根部门默认递归
+ * @param {number} [options.page=1] - 页码，从 1 开始
+ * @param {number} [options.pageSize=50] - 每页数量，默认 50，最大 50
+ * @returns {{ list: Array, total: number, page: number, pageSize: number }}
  */
-async function getDepartmentUsers(accessToken, departmentId, recursive = false) {
+async function getDepartmentUsers(accessToken, departmentId, options = {}) {
+  const { recursive = false, page, pageSize } = options;
   const params = new URLSearchParams();
   if (recursive) params.append('recursive', 'true');
-  return await request(`${BASE_URL}/api/user-picker/departments/${departmentId}/users${params ? '?' + params : ''}`, {
+  if (page !== undefined) params.append('page', page);
+  if (pageSize !== undefined) params.append('pageSize', pageSize);
+  return await request(`${BASE_URL}/api/user-picker/departments/${departmentId}/users${params.toString() ? '?' + params : ''}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

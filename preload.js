@@ -42,8 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 选人组件接口
   getDepartmentTree: () => ipcRenderer.invoke('get-department-tree'),
-  getDepartmentUsers: (departmentId, recursive) =>
-    ipcRenderer.invoke('get-department-users', { departmentId, recursive }),
+  getDepartmentUsers: (departmentId, recursive, page, pageSize) =>
+    ipcRenderer.invoke('get-department-users', { departmentId, recursive, page, pageSize }),
   searchUsers: (query) => ipcRenderer.invoke('search-users', { query }),
 
   // 会中选人组件接口

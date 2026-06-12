@@ -984,11 +984,11 @@ app.whenReady().then(() => {
     }
   });
 
-  // 获取部门下的用户
-  ipcMain.handle('get-department-users', async (_event, { departmentId, recursive }) => {
+  // 获取部门下的用户（分页）
+  ipcMain.handle('get-department-users', async (_event, { departmentId, recursive, page, pageSize }) => {
     try {
       const accessToken = await getValidAccessToken();
-      const data = await api.getDepartmentUsers(accessToken, departmentId, recursive);
+      const data = await api.getDepartmentUsers(accessToken, departmentId, { recursive, page, pageSize });
       return { success: true, data };
     } catch (err) {
       if (err.message === '未登录') {

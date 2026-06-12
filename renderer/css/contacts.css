@@ -263,3 +263,29 @@
 .search-result-item {
   padding: 10px 14px;
 }
+
+/* 加载更多按钮 */
+.contacts-load-more-btn {
+  text-align: center;
+  padding: 10px;
+  margin: 4px 0;
+  color: #1e6fff;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.contacts-load-more-btn:hover {
+  background: #f0f5ff;
+}
+
+.contacts-load-more-btn:disabled {
+  color: #bbb;
+  cursor: default;
+}
+
+.contacts-load-more-btn:disabled:hover {
+  background: transparent;
+}

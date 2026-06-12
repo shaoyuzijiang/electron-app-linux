@@ -6,6 +6,15 @@ let selectedDeptId = null;
 let searchTimer = null;
 let contactsInitialized = false;
 
+// 分页状态
+let contactsCurrentPage = 1;
+let contactsPageSize = 50;
+let contactsTotalUsers = 0;
+let contactsHasMore = false;
+let contactsCurrentDeptId = null;
+let contactsCurrentRecursive = true;
+let contactsLoadingMore = false;
+
 // ---------- 本地缓存 ----------
 const CACHE_KEY_DEPT_TREE = 'contacts_dept_tree';
 const CACHE_KEY_DEPT_USERS_PREFIX = 'contacts_dept_users_';
@@ -64,6 +73,20 @@ function deptUsersCacheKey(deptId, recursive) {
 function initContacts() {
   if (contactsInitialized) return;
   contactsInitialized = true;
+
+  // 用户列表点击事件（事件委托，含加载更多按钮）
+  document.getElementById('contactsUserList').addEventListener('click', (e) => {
+    const loadMoreBtn = e.target.closest('#contactsLoadMoreBtn');
+    if (loadMoreBtn && !contactsLoadingMore) {
+      contactsLoadingMore = true;
+      loadMoreBtn.textContent = '加载中...';
+      loadMoreBtn.disabled = true;
+      loadDepartmentUsers(contactsCurrentDeptId, contactsCurrentRecursive, contactsCurrentPage + 1).finally(() => {
+        contactsLoadingMore = false;
+      });
+      return;
+    }
+  });
 
   // 部门树点击事件（事件委托）
   document.getElementById('contactsDeptTree').addEventListener('click', (e) => {
@@ -230,42 +253,57 @@ function selectDepartment(dept) {
   selectedDeptId = dept.id;
   expandedDepts.add(dept.id);
   renderDepartmentTree();
-  // 根节点始终递归获取全部用户，子部门也默认递归
-  loadDepartmentUsers(dept.id, true);
+  // 重置分页状态，加载第一页
+  contactsCurrentDeptId = dept.id;
+  contactsCurrentPage = 1;
+  contactsCurrentRecursive = true;
+  loadDepartmentUsers(dept.id, true, 1);
   document.getElementById('contactsUserListHeader').innerHTML = `<h2>${dept.name}</h2>`;
 }
 
-async function loadDepartmentUsers(departmentId, recursive = true) {
+async function loadDepartmentUsers(departmentId, recursive = true, page = 1) {
   const container = document.getElementById('contactsUserList');
   const cacheKey = deptUsersCacheKey(departmentId, recursive);
 
-  // 1. 先读本地缓存，有则立即渲染
-  const cached = loadContactsCache(cacheKey);
-  if (cached) {
-    renderContactsUserList(cached);
-  } else {
-    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  if (page === 1) {
+    // 1. 先读本地缓存，有则立即渲染（仅第一页）
+    const cached = loadContactsCache(cacheKey);
+    if (cached) {
+      renderContactsUserList(cached);
+    } else {
+      container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+    }
   }
 
   // 2. 后台请求最新数据
   try {
-    const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive);
+    const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive, page, contactsPageSize);
     if (result.success && result.data) {
-      const newUsers = result.data;
-      // 对比是否有变化
-      if (!cached || JSON.stringify(cached) !== JSON.stringify(newUsers)) {
-        saveContactsCache(cacheKey, newUsers);
-        // 只有当前选中的部门仍然是该部门时才刷新，避免切换部门后覆盖
+      const { list, total } = result.data;
+      contactsTotalUsers = total || 0;
+      contactsCurrentPage = page;
+      contactsHasMore = list && list.length > 0 && (page * contactsPageSize) < contactsTotalUsers;
+
+      if (page === 1) {
+        // 缓存第一页
+        const cached = loadContactsCache(cacheKey);
+        if (!cached || JSON.stringify(cached) !== JSON.stringify(list)) {
+          saveContactsCache(cacheKey, list);
+        }
         if (selectedDeptId === departmentId) {
-          renderContactsUserList(newUsers);
+          renderContactsUserList(list || []);
+        }
+      } else {
+        if (selectedDeptId === departmentId) {
+          appendContactsUserList(list || []);
         }
       }
-    } else if (!cached) {
+    } else if (page === 1 && !loadContactsCache(cacheKey)) {
       container.innerHTML = `<div class="meeting-empty">${result.message || '获取用户列表失败'}</div>`;
     }
   } catch (err) {
     console.error('获取部门用户失败:', err);
-    if (!cached) {
+    if (page === 1 && !loadContactsCache(cacheKey)) {
       container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
     }
   }
@@ -282,7 +320,25 @@ function renderContactsUserList(users) {
     return;
   }
 
-  container.innerHTML = users.map((user) => {
+  container.innerHTML = renderContactsUserItems(users) + renderContactsLoadMoreBtn();
+}
+
+function appendContactsUserList(users) {
+  const container = document.getElementById('contactsUserList');
+  const oldBtn = container.querySelector('.contacts-load-more-btn');
+  if (oldBtn) oldBtn.remove();
+
+  if (users && users.length > 0) {
+    container.insertAdjacentHTML('beforeend', renderContactsUserItems(users));
+  }
+
+  if (contactsHasMore) {
+    container.insertAdjacentHTML('beforeend', renderContactsLoadMoreBtn());
+  }
+}
+
+function renderContactsUserItems(users) {
+  return users.map((user) => {
     const initial = (user.username || '?').charAt(0).toUpperCase();
     return `
       <div class="contact-item">
@@ -295,6 +351,11 @@ function renderContactsUserList(users) {
       </div>
     `;
   }).join('');
+}
+
+function renderContactsLoadMoreBtn() {
+  if (!contactsHasMore) return '';
+  return `<div class="contacts-load-more-btn" id="contactsLoadMoreBtn">加载更多 (${contactsCurrentPage * contactsPageSize}/${contactsTotalUsers})</div>`;
 }
 
 function findDeptById(node, id) {

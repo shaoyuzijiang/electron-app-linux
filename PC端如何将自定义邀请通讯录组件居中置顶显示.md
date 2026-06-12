@@ -287,6 +287,27 @@ SDK 会中窗口是独立于 Electron 主窗口的，
 ```javascript
 // main.js
 
+// 获取部门树
+ipcMain.handle('get-department-tree', async () => {
+  const accessToken = await getValidAccessToken();
+  const data = await api.getDepartmentTree(accessToken);
+  return { success: true, data };
+});
+
+// 获取部门下的用户（分页）
+ipcMain.handle('get-department-users', async (_event, { departmentId, recursive, page, pageSize }) => {
+  const accessToken = await getValidAccessToken();
+  const data = await api.getDepartmentUsers(accessToken, departmentId, { recursive, page, pageSize });
+  return { success: true, data };
+});
+
+// 搜索用户
+ipcMain.handle('search-users', async (_event, { query }) => {
+  const accessToken = await getValidAccessToken();
+  const data = await api.searchUsers(accessToken, query);
+  return { success: true, data };
+});
+
 // 获取会中窗口位置信息
 ipcMain.handle('get-meeting-window-info', async () => {
   const info = getMeetingWindowInfo();
@@ -310,6 +331,12 @@ ipcMain.handle('close-user-picker-window', async () => {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // ... 其他接口 ...
+
+  // 选人组件数据接口
+  getDepartmentTree: () => ipcRenderer.invoke('get-department-tree'),
+  getDepartmentUsers: (departmentId, recursive, page, pageSize) =>
+    ipcRenderer.invoke('get-department-users', { departmentId, recursive, page, pageSize }),
+  searchUsers: (query) => ipcRenderer.invoke('search-users', { query }),
 
   // 选人组件独立窗口接口
   getMeetingWindowInfo: () => ipcRenderer.invoke('get-meeting-window-info'),
@@ -470,3 +497,110 @@ function enableInviteCallbacks() {
 ```
 
 该函数在 SDK 登录成功回调（`OnLogin`）中自动调用。
+
+---
+
+## 九、后端选人组件接口
+
+选人组件的后端 API 基路径为 `/api/user-picker/`，仅需 Bearer Token 认证（普通用户即可使用）。
+
+### 9.1 获取部门树
+
+```
+GET /api/user-picker/departments
+Authorization: Bearer <accessToken>
+```
+
+返回以 `root` 为根节点的完整部门树，每个节点包含 `userCount`（直接用户数）和 `totalUserCount`（递归总用户数）。
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": "root",
+    "name": "全部",
+    "parentId": "",
+    "sortOrder": 0,
+    "userCount": 2,
+    "totalUserCount": 10,
+    "children": [
+      {
+        "id": "tech",
+        "name": "技术部",
+        "parentId": "",
+        "sortOrder": 0,
+        "userCount": 3,
+        "totalUserCount": 8,
+        "children": []
+      }
+    ]
+  }
+}
+```
+
+### 9.2 获取部门下的用户（分页）
+
+```
+GET /api/user-picker/departments/:id/users
+Authorization: Bearer <accessToken>
+```
+
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `recursive` | string | 设为 `true` 递归获取子部门用户；根部门默认递归 |
+| `page` | integer | 页码，从 1 开始，默认 1 |
+| `pageSize` | integer | 每页数量，默认 50，最大 50 |
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "list": [
+      { "id": "user_001", "username": "zhangsan", "role": "user", "departmentId": "tech", "departmentName": "技术部" }
+    ],
+    "total": 100,
+    "page": 1,
+    "pageSize": 50
+  }
+}
+```
+
+> 选中根部门时调用 `/api/user-picker/departments/root/users?recursive=true` 可获取全部用户。返回的用户信息已脱敏，不含手机号、密码等敏感字段。
+
+### 9.3 搜索用户
+
+```
+GET /api/user-picker/search?q=<keyword>
+Authorization: Bearer <accessToken>
+```
+
+按用户名或用户 ID 模糊搜索，最多返回 50 条。
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": [
+    { "id": "user_001", "username": "zhangsan", "role": "user", "departmentId": "tech", "departmentName": "技术部" }
+  ]
+}
+```
+
+---
+
+## 十、分页加载机制
+
+部门用户列表采用分页加载，避免一次性返回大量数据：
+
+1. 选中部门时，加载第 1 页（`page=1, pageSize=50`）
+2. 渲染进程根据响应中的 `total` 和 `list.length` 判断是否有更多数据
+3. 若 `page * pageSize < total`，显示"加载更多"按钮
+4. 点击"加载更多"时，请求下一页，将新用户追加到列表末尾
+5. 切换部门时重置分页状态，从第 1 页重新加载

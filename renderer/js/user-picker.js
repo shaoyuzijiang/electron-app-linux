@@ -8,6 +8,15 @@ let pickerSelectedDeptId = null;
 let pickerSearchTimer = null;
 let pickerCallbackType = null; // 'invite_users' 或 'invite_meeting'
 
+// 分页状态
+let pickerCurrentPage = 1;
+let pickerPageSize = 50;
+let pickerTotalUsers = 0;
+let pickerHasMoreUsers = false;
+let pickerCurrentDeptId = null;
+let pickerCurrentRecursive = true;
+let pickerLoadingMore = false;
+
 // ========== 初始化：等待主进程发送数据 ==========
 
 window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
@@ -124,24 +133,44 @@ function pickerSelectDepartment(dept) {
   pickerSelectedDeptId = dept.id;
   pickerExpandedDepts.add(dept.id);
   renderPickerDeptTree();
-  loadPickerDepartmentUsers(dept.id, true);
+  // 重置分页状态，加载第一页
+  pickerCurrentDeptId = dept.id;
+  pickerCurrentPage = 1;
+  pickerCurrentRecursive = true;
+  loadPickerDepartmentUsers(dept.id, true, 1);
   document.getElementById('userPickerUserListHeader').innerHTML = `<h3>${dept.name}</h3>`;
 }
 
-async function loadPickerDepartmentUsers(departmentId, recursive = true) {
+async function loadPickerDepartmentUsers(departmentId, recursive = true, page = 1) {
   const container = document.getElementById('userPickerUserList');
-  container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+
+  if (page === 1) {
+    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  }
 
   try {
-    const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive);
+    const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive, page, pickerPageSize);
     if (result.success && result.data) {
-      renderPickerUserList(result.data);
+      const { list, total } = result.data;
+      pickerTotalUsers = total || 0;
+      pickerCurrentPage = page;
+      pickerHasMoreUsers = list && list.length < pickerTotalUsers && (page * pickerPageSize) < pickerTotalUsers;
+
+      if (page === 1) {
+        renderPickerUserList(list || []);
+      } else {
+        appendPickerUserList(list || []);
+      }
     } else {
-      container.innerHTML = `<div class="meeting-empty">${result.message || '获取用户列表失败'}</div>`;
+      if (page === 1) {
+        container.innerHTML = `<div class="meeting-empty">${result.message || '获取用户列表失败'}</div>`;
+      }
     }
   } catch (err) {
     console.error('[选人组件] 获取部门用户失败:', err);
-    container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
+    if (page === 1) {
+      container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
+    }
   }
 }
 
@@ -153,7 +182,27 @@ function renderPickerUserList(users) {
     return;
   }
 
-  container.innerHTML = users.map((user) => {
+  container.innerHTML = renderPickerUserItems(users) + renderLoadMoreBtn();
+}
+
+function appendPickerUserList(users) {
+  const container = document.getElementById('userPickerUserList');
+  // 移除旧的"加载更多"按钮
+  const oldBtn = container.querySelector('.picker-load-more-btn');
+  if (oldBtn) oldBtn.remove();
+
+  if (users && users.length > 0) {
+    container.insertAdjacentHTML('beforeend', renderPickerUserItems(users));
+  }
+
+  // 添加新的"加载更多"按钮
+  if (pickerHasMoreUsers) {
+    container.insertAdjacentHTML('beforeend', renderLoadMoreBtn());
+  }
+}
+
+function renderPickerUserItems(users) {
+  return users.map((user) => {
     const initial = (user.username || '?').charAt(0).toUpperCase();
     const isSelected = pickerSelectedUsers.has(user.id);
     const isInMeeting = pickerInMeetingUserIds.includes(user.id);
@@ -174,6 +223,11 @@ function renderPickerUserList(users) {
       </div>
     `;
   }).join('');
+}
+
+function renderLoadMoreBtn() {
+  if (!pickerHasMoreUsers) return '';
+  return `<div class="picker-load-more-btn" id="pickerLoadMoreBtn">加载更多 (${pickerCurrentPage * pickerPageSize}/${pickerTotalUsers})</div>`;
 }
 
 function renderPickerSearchResults(users) {
@@ -356,6 +410,18 @@ document.getElementById('userPickerDeptTree').addEventListener('click', (e) => {
 
 // 用户列表点击事件（事件委托）
 document.getElementById('userPickerUserList').addEventListener('click', (e) => {
+  // 加载更多按钮
+  const loadMoreBtn = e.target.closest('#pickerLoadMoreBtn');
+  if (loadMoreBtn && !pickerLoadingMore) {
+    pickerLoadingMore = true;
+    loadMoreBtn.textContent = '加载中...';
+    loadMoreBtn.disabled = true;
+    loadPickerDepartmentUsers(pickerCurrentDeptId, pickerCurrentRecursive, pickerCurrentPage + 1).finally(() => {
+      pickerLoadingMore = false;
+    });
+    return;
+  }
+
   const item = e.target.closest('.picker-user-item');
   if (!item) return;
   const userId = item.getAttribute('data-user-id');

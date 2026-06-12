@@ -620,7 +620,7 @@ curl -X POST http://localhost:3000/api/admin/departments \
 |------|------|------|------|
 | `departmentId` | string | ✅ | 部门 ID，1-64 位字母、数字、下划线 |
 | `name` | string | ✅ | 部门名称，1-64 字符 |
-| `parentId` | string | - | 父部门 ID，空字符串或省略表示顶级部门 |
+| `parentId` | string | - | 父部门 ID，省略或传 `root` 表示挂在根部门下 |
 | `sortOrder` | integer | - | 排序权重，默认 0，值越小越靠前 |
 
 **成功响应** `200`
@@ -705,7 +705,7 @@ curl -X DELETE http://localhost:3000/api/admin/departments/frontend \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-> 删除部门时，该部门下用户的部门归属会被自动清除；存在子部门时禁止删除，需先删除或移动子部门。
+> 删除部门时，该部门下用户会被移至上级部门；根部门不可删除；存在子部门时禁止删除，需先删除或移动子部门。
 
 **成功响应** `200`
 
@@ -970,11 +970,11 @@ curl http://localhost:3000/api/wemeet/records/record123/address \
 
 所有选人组件接口仅需 Bearer Token 认证（普通登录用户即可使用，不限于管理员）。用于前端选人组件获取组织架构数据和搜索用户。
 
-> **虚拟根节点**：部门树返回一个虚拟根节点（`id` 为 `"root"`，`name` 为 `"全部"`），包含所有顶级部门作为子节点，以及未分配部门的用户数。客户端可直接使用 `root` 作为部门 ID 查询所有用户。
+> **根部门节点**：部门树返回系统内置的根部门节点（`id` 为 `"root"`，`name` 为 `"全部"`），包含所有子部门。客户端可直接使用 `root` 作为部门 ID 查询用户。
 
 ### 1. 获取部门树（含人数统计）
 
-返回完整的部门树形结构，根节点为虚拟的"全部"节点。每个节点包含直接用户数（`userCount`）和递归子部门总用户数（`totalUserCount`）。
+返回完整的部门树形结构，根节点为内置的"全部"根部门。每个节点包含直接用户数（`userCount`）和递归子部门总用户数（`totalUserCount`）。
 
 **请求**
 
@@ -1024,35 +1024,35 @@ curl http://localhost:3000/api/user-picker/departments \
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 部门 ID，虚拟根节点为 `"root"` |
-| `name` | string | 部门名称，虚拟根节点为 `"全部"` |
-| `parentId` | string | 父部门 ID，虚拟根节点和顶级部门为空字符串 |
+| `id` | string | 部门 ID，根部门为 `"root"` |
+| `name` | string | 部门名称，根部门为 `"全部"` |
+| `parentId` | string | 父部门 ID，根部门为空字符串 |
 | `sortOrder` | integer | 排序权重，值越小越靠前 |
-| `userCount` | integer | 直接归属该部门的用户数（虚拟根节点为未分配部门的用户数） |
-| `totalUserCount` | integer | 该部门及所有子部门的用户总数（虚拟根节点为全系统用户总数） |
+| `userCount` | integer | 直接归属该部门的用户数 |
+| `totalUserCount` | integer | 该部门及所有子部门的用户总数 |
 | `children` | array | 子部门列表，结构相同（递归） |
 
-> **虚拟根节点说明**：根节点的 `userCount` 表示未分配任何部门的用户数，`totalUserCount` 为全系统用户总数。客户端选中根节点时，调用 `/api/user-picker/departments/root/users` 即可获取所有用户。
+> **根部门说明**：根部门（`id` 为 `"root"`）是系统内置的默认部门，所有部门均在其下。根部门的 `userCount` 为直接归属该部门的用户数，`totalUserCount` 为全系统用户总数。客户端选中根部门时，调用 `/api/user-picker/departments/root/users?recursive=true` 即可获取所有用户。
 
 ---
 
 ### 2. 获取部门下的用户
 
-获取指定部门下的用户列表，支持 `recursive` 参数递归获取子部门用户。支持虚拟根节点 `root`，获取全系统所有用户（含未分配部门的用户）。
+获取指定部门下的用户列表（分页），支持 `recursive` 参数递归获取子部门用户。支持根部门 `root`，传入 `recursive=true` 可递归获取全系统所有用户。
 
 **请求**
 
 ```bash
-# 获取虚拟根节点下的所有用户（含未分配部门的用户）
-curl http://localhost:3000/api/user-picker/departments/root/users \
+# 递归获取根部门下的用户（第1页，每页50条）
+curl "http://localhost:3000/api/user-picker/departments/root/users?page=1&pageSize=50" \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 # 仅获取直接归属该部门的用户
 curl http://localhost:3000/api/user-picker/departments/tech/users \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# 递归获取该部门及所有子部门的用户
-curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=true" \
+# 递归获取该部门及所有子部门的用户（第2页）
+curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=true&page=2&pageSize=50" \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -1060,35 +1060,42 @@ curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=tru
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `id` | string | ✅ | 部门 ID，传 `root` 获取所有用户 |
+| `id` | string | ✅ | 部门 ID，传 `root` 获取全部用户（根部门默认递归） |
 
 **查询参数**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `recursive` | string | - | 设为 `true` 时递归获取子部门用户，默认仅获取直接归属用户（`root` 时忽略此参数，始终返回全部用户） |
+| `recursive` | string | - | 设为 `true` 时递归获取子部门用户，默认仅获取直接归属用户；根部门（`root`）默认递归，忽略此参数 |
+| `page` | integer | - | 页码，从 1 开始，默认 1 |
+| `pageSize` | integer | - | 每页数量，默认 50，最大 50 |
 
 **成功响应** `200`
 
 ```json
 {
   "code": 0,
-  "data": [
-    {
-      "id": "user_001",
-      "username": "zhangsan",
-      "role": "user",
-      "departmentId": "tech",
-      "departmentName": "技术部"
-    },
-    {
-      "id": "user_002",
-      "username": "lisi",
-      "role": "user",
-      "departmentId": "frontend",
-      "departmentName": "前端组"
-    }
-  ]
+  "data": {
+    "list": [
+      {
+        "id": "user_001",
+        "username": "zhangsan",
+        "role": "user",
+        "departmentId": "tech",
+        "departmentName": "技术部"
+      },
+      {
+        "id": "user_002",
+        "username": "lisi",
+        "role": "user",
+        "departmentId": "frontend",
+        "departmentName": "前端组"
+      }
+    ],
+    "total": 100,
+    "page": 1,
+    "pageSize": 50
+  }
 }
 ```
 
