@@ -55,6 +55,54 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setCustomOrgInfo: (jsonParam) =>
     ipcRenderer.invoke('set-custom-org-info', { jsonParam }),
 
+  // 新增 SDK 接口
+  isInitialized: () => ipcRenderer.invoke('is-initialized'),
+  isAuthorized: () => ipcRenderer.invoke('is-authorized'),
+  getCurrentSdkToken: () => ipcRenderer.invoke('get-current-sdk-token'),
+  refreshSdkToken: (newToken) =>
+    ipcRenderer.invoke('refresh-sdk-token', { newToken }),
+  getCurrentMeetingInfo: () => ipcRenderer.invoke('get-current-meeting-info'),
+  getScreenShareInfo: () => ipcRenderer.invoke('get-screen-share-info'),
+  manipulateWindow: (action) =>
+    ipcRenderer.invoke('manipulate-window', { action }),
+  bringInMeetingViewTop: () => ipcRenderer.invoke('bring-in-meeting-view-top'),
+  switchCaption: (open) =>
+    ipcRenderer.invoke('switch-caption', { open }),
+  updateCaptionSettings: (settingsJson) =>
+    ipcRenderer.invoke('update-caption-settings', { settingsJson }),
+  showScreenShareView: () => ipcRenderer.invoke('show-screen-share-view'),
+  showHistoricalMeetingView: () =>
+    ipcRenderer.invoke('show-historical-meeting-view'),
+  showMeetingDetailView: (meetingId, subMeetingId, startTime, isHistory) =>
+    ipcRenderer.invoke('show-meeting-detail-view', { meetingId, subMeetingId, startTime, isHistory }),
+  showVoiceRecordView: () => ipcRenderer.invoke('show-voice-record-view'),
+  showAIAssistantView: () => ipcRenderer.invoke('show-ai-assistant-view'),
+  setUserConfiguration: (userKey, userConfig) =>
+    ipcRenderer.invoke('set-user-configuration', { userKey, userConfig }),
+  getUserConfiguration: (userKey) =>
+    ipcRenderer.invoke('get-user-configuration', { userKey }),
+  setProxyInfo: (proxyInfo) =>
+    ipcRenderer.invoke('set-proxy-info', { proxyInfo }),
+  getProxyInfo: () => ipcRenderer.invoke('get-proxy-info'),
+  enableAddressBookCallback: (enable, show) =>
+    ipcRenderer.invoke('enable-address-book-callback', { enable, show }),
+  setNeedMeetingInfoCallback: (enable, show) =>
+    ipcRenderer.invoke('set-need-meeting-info-callback', { enable, show }),
+  subscribeInMeetingActionEvent: (actionType, subscribe, subscriptionJson) =>
+    ipcRenderer.invoke('subscribe-in-meeting-action-event', { actionType, subscribe, subscriptionJson }),
+  switchLayout: (layoutJson) =>
+    ipcRenderer.invoke('switch-layout', { layoutJson }),
+  enableRingInvitationView: (enable) =>
+    ipcRenderer.invoke('enable-ring-invitation-view', { enable }),
+  handleRingInvitation: (accept, inviteId) =>
+    ipcRenderer.invoke('handle-ring-invitation', { accept, inviteId }),
+  loginBySso: (ssoUrl) =>
+    ipcRenderer.invoke('login-by-sso', { ssoUrl }),
+  jumpUrlWithLoginStatus: (url) =>
+    ipcRenderer.invoke('jump-url-with-login-status', { url }),
+  getUrlWithLoginStatus: (url) =>
+    ipcRenderer.invoke('get-url-with-login-status', { url }),
+
   // 选人组件独立窗口接口
   getMeetingWindowInfo: () => ipcRenderer.invoke('get-meeting-window-info'),
   closeUserPickerWindow: () => ipcRenderer.invoke('close-user-picker-window'),

@@ -3,6 +3,13 @@ const path = require('path');
 const api = require('./api');
 const tokenStore = require('./token-store');
 
+// Windows 平台设置控制台为 UTF-8 编码，解决中文乱码
+if (process.platform === 'win32') {
+  try {
+    require('child_process').execSync('chcp 65001', { stdio: 'ignore' });
+  } catch {}
+}
+
 // 应用图标路径
 const appIconPath = path.join(__dirname, 'app.png');
 
@@ -32,6 +39,13 @@ try {
       }
     }
   } else if (process.platform === 'win32' && process.arch === 'x64') {
+    // Win x64: 确保 SDK 运行时 DLL 在可搜索路径中
+    const path = require('path');
+    const sdkDllDir = path.join(__dirname, 'output', 'win', 'x64');
+    // 将 SDK DLL 目录添加到进程搜索路径（仅开发模式需要，打包后 DLL 在 app 目录）
+    if (!process.env.PATH.includes(sdkDllDir)) {
+      process.env.PATH = sdkDllDir + ';' + process.env.PATH;
+    }
     wemeetSdk = require('./output/win/x64/wemeet_electron_sdk.node');
   } else if (process.platform === 'win32') {
     wemeetSdk = require('./output/win/win32/wemeet_electron_sdk.node');
@@ -890,18 +904,7 @@ app.whenReady().then(() => {
     }
   });
 
-  // 显示会前界面（Home 页）
-  ipcMain.handle('show-pre-meeting-view', async () => {
-    if (!(await ensureSDKLoggedIn())) {
-      return { success: false, message: 'SDK 未就绪，请重新登录' };
-    }
-    try {
-      wemeetSdk.ShowPreMeetingView();
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: err.message };
-    }
-  });
+  // 显示会前界面（Home 页）— 见下方新版本，支持 ui_style 和 tab_id
 
   // 显示加入会议页面
   ipcMain.handle('show-join-meeting-view', async () => {
@@ -950,6 +953,394 @@ app.whenReady().then(() => {
     try {
       wemeetSdk.ShowScreenCastView();
       return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示会前界面（Home 页）— 新版支持 ui_style 和 tab_id 参数
+  ipcMain.handle('show-pre-meeting-view', async (_event, { uiStyle, tabId } = {}) => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      wemeetSdk.ShowPreMeetingView(
+        String(uiStyle || 0),
+        String(tabId || 0)
+      );
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 查询 SDK 是否已初始化
+  ipcMain.handle('is-initialized', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.IsInitialized();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 查询 SDK 是否已登录
+  ipcMain.handle('is-authorized', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.IsAuthorized();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取当前 SDK Token
+  ipcMain.handle('get-current-sdk-token', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const token = wemeetSdk.GetCurrentSDKToken();
+      return { success: true, data: token };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 刷新 SDK Token
+  ipcMain.handle('refresh-sdk-token', async (_event, { newToken }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const result = wemeetSdk.RefreshSDKToken(newToken);
+      return { success: true, data: result };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取当前会议信息
+  ipcMain.handle('get-current-meeting-info', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const info = wemeetSdk.GetCurrentMeetingInfo();
+      return { success: true, data: info };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取屏幕共享信息
+  ipcMain.handle('get-screen-share-info', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const info = wemeetSdk.GetScreenShareInfo();
+      return { success: true, data: info };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 会中窗口操作
+  ipcMain.handle('manipulate-window', async (_event, { action }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.ManipulateWindow(action);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 会中窗口置顶
+  ipcMain.handle('bring-in-meeting-view-top', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.BringInMeetingViewTop();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 开关字幕
+  ipcMain.handle('switch-caption', async (_event, { open }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.SwitchCaption(open);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 更新字幕设置
+  ipcMain.handle('update-caption-settings', async (_event, { settingsJson }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.UpdateCaptionSettings(settingsJson);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示屏幕共享视图
+  ipcMain.handle('show-screen-share-view', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.ShowScreenShareView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示历史会议
+  ipcMain.handle('show-historical-meeting-view', async () => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      wemeetSdk.ShowHistoricalMeetingView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示会议详情
+  ipcMain.handle('show-meeting-detail-view', async (_event, { meetingId, subMeetingId, startTime, isHistory }) => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      if (startTime !== undefined && isHistory !== undefined) {
+        wemeetSdk.ShowMeetingDetailView(meetingId, subMeetingId, startTime, isHistory);
+      } else {
+        wemeetSdk.ShowMeetingDetailView(meetingId, subMeetingId);
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示录音笔窗口
+  ipcMain.handle('show-voice-record-view', async () => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      wemeetSdk.ShowVoiceRecordView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 显示AI小助手
+  ipcMain.handle('show-ai-assistant-view', async () => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      wemeetSdk.ShowAIAssistantView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 设置用户配置
+  ipcMain.handle('set-user-configuration', async (_event, { userKey, userConfig }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.SetUserConfiguration(userKey, userConfig);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取用户配置
+  ipcMain.handle('get-user-configuration', async (_event, { userKey }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.GetUserConfiguration(userKey);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 设置代理
+  ipcMain.handle('set-proxy-info', async (_event, { proxyInfo }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.SetProxyInfo(proxyInfo);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取代理信息
+  ipcMain.handle('get-proxy-info', async () => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const info = wemeetSdk.GetProxyInfo();
+      return { success: true, data: info };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 开启会前通讯录回调
+  ipcMain.handle('enable-address-book-callback', async (_event, { enable, show }) => {
+    if (!wemeetSdk || !sdkInitialized) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      wemeetSdk.EnableAddressBookCallback(enable, show);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 开启会中会议信息回调
+  ipcMain.handle('set-need-meeting-info-callback', async (_event, { enable, show }) => {
+    if (!wemeetSdk || !sdkInitialized) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      wemeetSdk.SetNeedMeetingInfoCallback(enable, show);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 订阅会中Action事件
+  ipcMain.handle('subscribe-in-meeting-action-event', async (_event, { actionType, subscribe, subscriptionJson }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const result = wemeetSdk.SubscribeInMeetingActionEvent(
+        String(actionType),
+        subscribe,
+        subscriptionJson || ''
+      );
+      return { success: true, data: result };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 切换会中布局
+  ipcMain.handle('switch-layout', async (_event, { layoutJson }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.SwitchLayout(layoutJson);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 开启响铃邀请界面
+  ipcMain.handle('enable-ring-invitation-view', async (_event, { enable }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.EnableRingInvitationView(enable);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 处理响铃邀请
+  ipcMain.handle('handle-ring-invitation', async (_event, { accept, inviteId }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.HandleRingInvitation(accept, inviteId);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // SSO URL 登录（非 JSON 方式）
+  ipcMain.handle('login-by-sso', async (_event, { ssoUrl }) => {
+    if (!wemeetSdk || !sdkInitialized) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      wemeetSdk.Login(ssoUrl);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 带登录状态跳转 URL
+  ipcMain.handle('jump-url-with-login-status', async (_event, { url }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      wemeetSdk.JumpUrlWithLoginStatus(url);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取带登录状态的 URL
+  ipcMain.handle('get-url-with-login-status', async (_event, { url }) => {
+    if (!wemeetSdk) {
+      return { success: false, message: 'SDK 未加载' };
+    }
+    try {
+      const resultUrl = wemeetSdk.GetUrlWithLoginStatus(url);
+      return { success: true, data: resultUrl };
     } catch (err) {
       return { success: false, message: err.message };
     }

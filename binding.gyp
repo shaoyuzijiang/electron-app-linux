@@ -12,7 +12,7 @@
             'library_dirs': ['wemeet_sdk/win/lib/win32/release'],
           },
           "include_dirs": [
-            "../../../include",
+            "wemeet_sdk/win/include",
             "./include",
             "<!@(node -p \"require('node-addon-api').include\")"
           ],
@@ -40,7 +40,7 @@
             'library_dirs': ['wemeet_sdk/win/lib/x64/release'],
           },
           "include_dirs": [
-            "../../../include",
+            "wemeet_sdk/win/include",
             "./include",
             "<!@(node -p \"require('node-addon-api').include\")"
           ],
