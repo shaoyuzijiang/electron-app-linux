@@ -5,4 +5,7 @@ TMSDK_*/
 build/
 wemeet_electron_demo.log
 default.profraw
-output/win
+
+# 保留 output/win/x64 文件夹，忽略其中的 SDK 运行时文件
+output/win/x64/*
+!output/win/x64/.gitkeep
