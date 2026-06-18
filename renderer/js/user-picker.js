@@ -338,7 +338,8 @@ async function confirmInviteUsers() {
 
   const userIds = Array.from(pickerSelectedUsers.keys());
   const jsonParam = JSON.stringify({
-    users: userIds.map((id) => ({ user_id: id })),
+    users: userIds,
+    user_type: 3, // 会中邀请入会
   });
 
   try {
