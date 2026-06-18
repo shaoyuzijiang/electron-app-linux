@@ -6,10 +6,6 @@ build/
 wemeet_electron_demo.log
 default.profraw
 
-# 保留 output/win/x64 文件夹，忽略其中的 SDK 运行时文件
-output/win/x64/*
-!output/win/x64/.gitkeep
-
 # 保留 wemeet_sdk 目录结构，忽略 SDK 运行时文件
 wemeet_sdk/*
 !wemeet_sdk/win/
