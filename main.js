@@ -291,7 +291,7 @@ async function initSDK() {
         sdkToken,    // sdk_token (string, 必填)
         dataPath,    // data_path (string, 选填)
         appName,     // app_name (string, 选填)
-        '',          // app_icon (string, 选填)
+        appIconPath, // app_icon (string, 选填) 任务栏图标
         'zh-cn',     // prefer_language (string, 选填)
         '',          // proxy_info (string, 选填)
         false        // allow_home_view (bool, 选填)
