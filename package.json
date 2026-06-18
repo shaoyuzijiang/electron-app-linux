@@ -40,9 +40,7 @@
       "token-store.js",
       "start.js",
       "renderer/**/*",
-      "output/**/*",
-      "!output/mac/wemeet_electron_sdk.arm64.node",
-      "!output/mac/wemeet_electron_sdk.x64.node",
+      "output/mac/**/*",
       "entitlements.mac.plist"
     ],
     "extraResources": [
