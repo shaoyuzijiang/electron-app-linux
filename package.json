@@ -7,7 +7,7 @@
   "scripts": {
     "build:native:arm64": "node-gyp rebuild --target=33.0.0 --arch=arm64 --dist-url=https://electronjs.org/headers && mkdir -p output/mac && cp build/Release/wemeet_electron_sdk.node output/mac/wemeet_electron_sdk.arm64.node",
     "build:native:x64": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && mkdir -p output/mac && cp build/Release/wemeet_electron_sdk.node output/mac/wemeet_electron_sdk.x64.node",
-    "build:native:win-x64": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist output\\win\\x64 mkdir output\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node output\\win\\x64\\wemeet_electron_sdk.node",
+    "build:native:win-x64": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist wemeet_sdk\\win\\x64 mkdir wemeet_sdk\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node wemeet_sdk\\win\\x64\\wemeet_electron_sdk.node",
     "build:native": "npm run build:native:arm64 && npm run build:native:x64",
     "start": "node start.js && electron .",
     "dev": "node start.js && electron .",
@@ -17,7 +17,7 @@
     "dist:x64": "electron-builder --x64",
     "create-universal-node": "lipo -create output/mac/wemeet_electron_sdk.arm64.node output/mac/wemeet_electron_sdk.x64.node -output output/mac/wemeet_electron_sdk.node",
     "dist:universal": "npm run create-universal-node && electron-builder --universal",
-    "postinstall": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist output\\win\\x64 mkdir output\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node output\\win\\x64\\wemeet_electron_sdk.node"
+    "postinstall": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist wemeet_sdk\\win\\x64 mkdir wemeet_sdk\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node wemeet_sdk\\win\\x64\\wemeet_electron_sdk.node"
   },
   "devDependencies": {
     "electron": "^33.4.11",
@@ -35,6 +35,7 @@
     },
     "files": [
       "main.js",
+      "logger.js",
       "preload.js",
       "api.js",
       "token-store.js",
@@ -45,8 +46,8 @@
     ],
     "extraResources": [
       {
-        "from": "wemeet_sdk",
-        "to": "wemeet_sdk"
+        "from": "app.png",
+        "to": "app.png"
       }
     ],
     "mac": {
@@ -81,16 +82,8 @@
       ],
       "extraResources": [
         {
-          "from": "output/win/x64",
-          "to": "output/win/x64",
-          "filter": [
-            "**/*.dll",
-            "**/*.node",
-            "**/*.bin",
-            "**/*.json",
-            "**/*.png",
-            "**/*.svg"
-          ]
+          "from": "wemeet_sdk/win/x64",
+          "to": "wemeet_sdk/win/x64"
         }
       ]
     }

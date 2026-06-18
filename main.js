@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, nativeImage, Menu } = require('electron');
 const path = require('path');
 const api = require('./api');
 const tokenStore = require('./token-store');
+const logger = require('./logger');
 
 // Windows 平台设置控制台为 UTF-8 编码，解决中文乱码
 if (process.platform === 'win32') {
@@ -10,8 +11,10 @@ if (process.platform === 'win32') {
   } catch {}
 }
 
-// 应用图标路径
-const appIconPath = path.join(__dirname, 'app.png');
+// 应用图标路径（打包后图标在 extraResources 或 asar 外部）
+const appIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'app.png')
+  : path.join(__dirname, 'app.png');
 
 // 加载腾讯会议 SDK
 let wemeetSdk = null;
@@ -25,30 +28,64 @@ let sdkInitializing = false;
 let sdkLoggingIn = false;
 const MAX_RETRY = 3;
 
+// 获取 SDK 资源根目录（兼容开发模式与打包后 extraResources）
+function getSdkBasePath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath);
+  }
+  return __dirname;
+}
+
+/**
+ * 加载 asar 外部的原生模块
+ * require() 无法直接加载 asar 外的 .node 文件，
+ * 需要先将路径中的 app.asar 替换为 app.asar.unpacked（如果存在），
+ * 或使用 process.resourcesPath 下的绝对路径
+ */
+function requireNative(modulePath) {
+  try {
+    // 尝试直接 require（开发模式下正常工作）
+    return require(modulePath);
+  } catch {
+    // 打包后：尝试从 app.asar.unpacked 加载
+    const unpackedPath = modulePath.replace('app.asar', 'app.asar.unpacked');
+    if (unpackedPath !== modulePath) {
+      try { return require(unpackedPath); } catch {}
+    }
+    // 最后尝试用绝对路径
+    const absPath = path.resolve(modulePath);
+    try { return require(absPath); } catch {}
+    throw new Error(`无法加载原生模块: ${modulePath}`);
+  }
+}
+
 try {
   if (process.platform === 'darwin') {
     // 优先加载通用文件名（universal 构建产物），回退到架构特定文件（开发模式）
     try {
-      wemeetSdk = require('./output/mac/wemeet_electron_sdk.node');
+      wemeetSdk = requireNative(path.join(getSdkBasePath(), 'output', 'mac', 'wemeet_electron_sdk.node'));
     } catch {
       const arch = process.arch;
       try {
-        wemeetSdk = require(`./output/mac/wemeet_electron_sdk.${arch}.node`);
+        wemeetSdk = requireNative(path.join(getSdkBasePath(), 'output', 'mac', `wemeet_electron_sdk.${arch}.node`));
       } catch {
         console.error('无法加载腾讯会议 SDK 原生模块');
       }
     }
   } else if (process.platform === 'win32' && process.arch === 'x64') {
     // Win x64: 确保 SDK 运行时 DLL 在可搜索路径中
-    const path = require('path');
-    const sdkDllDir = path.join(__dirname, 'output', 'win', 'x64');
-    // 将 SDK DLL 目录添加到进程搜索路径（仅开发模式需要，打包后 DLL 在 app 目录）
+    const sdkDllDir = path.join(getSdkBasePath(), 'wemeet_sdk', 'win', 'x64');
+    // 将 SDK DLL 目录添加到进程搜索路径
     if (!process.env.PATH.includes(sdkDllDir)) {
       process.env.PATH = sdkDllDir + ';' + process.env.PATH;
     }
-    wemeetSdk = require('./output/win/x64/wemeet_electron_sdk.node');
+    wemeetSdk = requireNative(path.join(getSdkBasePath(), 'wemeet_sdk', 'win', 'x64', 'wemeet_electron_sdk.node'));
   } else if (process.platform === 'win32') {
-    wemeetSdk = require('./output/win/win32/wemeet_electron_sdk.node');
+    const sdkDllDir = path.join(getSdkBasePath(), 'wemeet_sdk', 'win', 'win32');
+    if (!process.env.PATH.includes(sdkDllDir)) {
+      process.env.PATH = sdkDllDir + ';' + process.env.PATH;
+    }
+    wemeetSdk = requireNative(path.join(getSdkBasePath(), 'wemeet_sdk', 'win', 'win32', 'wemeet_electron_sdk.node'));
   }
   console.log('腾讯会议 SDK 加载成功，版本:', wemeetSdk.GetSDKVersion());
 } catch (err) {
@@ -129,10 +166,17 @@ async function getValidAccessToken() {
 function handleSDKCallback(cbMsg) {
   try {
     const cb = JSON.parse(cbMsg);
-    const { func, code, msg, param } = cb;
-    console.log(`[SDK回调] func=${func}, code=${code}, msg=${msg}`);
+    // SDK 回调格式说明（参见 wemeet.cpp ProcessCallbackMsg）：
+    // 当 code==0 且 msg 为空时，JSON 中不包含 code 和 msg 字段（省略）
+    // 所以"没有 code 字段"等价于 code=0（成功）
+    let func = cb.func || cb.event_name || cb.event || cb.method || '';
+    let code = cb.code !== undefined ? Number(cb.code) : 0; // 无 code 字段默认为成功(0)
+    let msg = cb.msg || cb.message || '';
+    let param = cb.param || cb.data || {};
 
-    const success = Number(code) === 0;
+    console.log(`[SDK回调] func=${func}, code=${code}, msg=${msg}, raw=${JSON.stringify(cb)}`);
+
+    const success = code === 0;
 
     if (func === 'OnSDKInitializeResult') {
       if (success) {
@@ -140,11 +184,10 @@ function handleSDKCallback(cbMsg) {
         console.log('SDK 初始化成功');
         if (sdkInitResolve) sdkInitResolve(true);
       } else if (sdkInitialized) {
-        // 已初始化成功的重复初始化回调，忽略
         console.log('SDK 已初始化，忽略重复初始化回调:', msg);
       } else {
-        console.error('SDK 初始化失败:', msg);
-        if (sdkInitReject) sdkInitReject(new Error(`SDK 初始化失败: ${msg}`));
+        console.error('SDK 初始化失败:', code, msg);
+        if (sdkInitReject) sdkInitReject(new Error(`SDK 初始化失败: ${code} ${msg}`));
       }
     } else if (func === 'OnLogin') {
       if (success) {
@@ -155,11 +198,10 @@ function handleSDKCallback(cbMsg) {
         console.log('SDK 登录成功');
         if (sdkLoginResolve) sdkLoginResolve(true);
       } else if (sdkLoggedIn) {
-        // 已登录成功的重复登录回调，忽略
         console.log('SDK 已登录，忽略重复登录回调:', msg);
       } else {
-        console.error('SDK 登录失败:', msg);
-        if (sdkLoginReject) sdkLoginReject(new Error(`SDK 登录失败: ${msg}`));
+        console.error('SDK 登录失败:', code, msg);
+        if (sdkLoginReject) sdkLoginReject(new Error(`SDK 登录失败: ${code} ${msg}`));
       }
     } else if (func === 'OnLogout') {
       sdkLoggedIn = false;
@@ -664,6 +706,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // 安装日志拦截（app ready 后才能获取 userData 路径）
+  logger.install();
+
   createWindow();
 
   // 预取公钥（不阻塞，登录时可直接使用缓存）
@@ -1488,6 +1533,7 @@ app.on('window-all-closed', () => {
       console.error('SDK 反初始化失败:', err.message);
     }
   }
+  logger.closeLog();
   if (process.platform !== 'darwin') {
     app.quit();
   }

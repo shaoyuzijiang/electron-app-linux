@@ -9,7 +9,7 @@
 - 会议列表展示
 - macOS Apple Silicon (arm64) & Intel (x64) 双架构支持
 - Windows x64 支持
-- SDK 日志同时输出到控制台和文件，便于调试
+- SDK 日志同时输出到控制台和文件，便于调试；日志时间戳使用本地时区
 - Windows 控制台自动 UTF-8 编码，无中文乱码
 
 ## 环境要求
@@ -35,7 +35,7 @@ npm install
 npm run dev
 ```
 
-macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows 需确保 SDK 运行时 DLL 在 `output/win/x64/` 目录中。
+macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows 需确保 SDK 运行时 DLL 在 `wemeet_sdk/win/x64/` 目录中。
 
 ## 项目结构
 
@@ -44,6 +44,7 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ├── preload.js             # 预加载脚本（IPC 桥接）
 ├── api.js                 # 后端 API 请求（RSA+AES 加密）
 ├── token-store.js         # Token 持久化存储
+├── logger.js              # 文件日志模块（按小时滚动，本地时区时间戳）
 ├── start.js               # 启动前脚本（拷贝 SDK Framework，仅 macOS；Windows 设置控制台 UTF-8 编码）
 ├── binding.gyp            # node-gyp 原生模块编译配置
 ├── entitlements.mac.plist # macOS 权限声明
@@ -57,11 +58,11 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 │   ├── mac/Frameworks/    # macOS SDK 动态库（arm64 / x64）
 │   └── win/               # Windows SDK 文件
 │       ├── include/       # SDK C++ 头文件
-│       └── lib/x64/release/ # SDK 链接库（.lib）
+│       ├── lib/x64/release/ # SDK 链接库（.lib）
+│       └── x64/           # Windows 编译产物（.node + SDK 运行时 DLL + Release 目录）
+│           └── copy.bat   # SDK 文件一键拷贝脚本
 ├── output/
-│   ├── mac/               # macOS 编译产物（.node 原生模块）
-│   └── win/x64/           # Windows 编译产物（.node + SDK 运行时 DLL + Release 目录）
-│       └── copy.bat       # SDK 文件一键拷贝脚本
+│   └── mac/               # macOS 编译产物（.node 原生模块）
 └── include/               # C++ 公共头文件（JsonCpp 等）
 ```
 
@@ -92,14 +93,14 @@ npm run build:native
 npm run build:native:win-x64
 ```
 
-编译产物输出到 `output/win/x64/`，包含 `.node` 文件。SDK 运行时 DLL 和 `Release` 目录需放置在同目录中。
+编译产物输出到 `wemeet_sdk/win/x64/`，包含 `.node` 文件。SDK 运行时 DLL 和 `Release` 目录需放置在同目录中。
 
 #### 拷贝 SDK 运行时文件
 
-从腾讯会议 SDK Windows 分发包拷贝运行时文件到 `output/win/x64/`：
+从腾讯会议 SDK Windows 分发包拷贝运行时文件到 `wemeet_sdk/win/x64/`：
 
 ```bat
-cd output\win\x64
+cd wemeet_sdk\win\x64
 copy.bat
 ```
 
@@ -162,13 +163,14 @@ npm run build:native:win-x64 && npm run dist
 
 ### Windows
 
-- SDK 运行时 DLL（`wemeetsdk_x64.dll` 等）需放置在 `output/win/x64/` 目录中，主进程会自动将该目录加入 `PATH` 环境变量
-- SDK 的 `Release` 目录（含 modules、plugins、resources 等）需放置在 `output/win/x64/Release/`，与 `wemeet_electron_sdk.node` 同级
-- 可使用 `output/win/x64/copy.bat` 一键拷贝 SDK 运行时文件
-- 打包时通过 `build.win.extraResources` 自动将 `output/win/x64/` 下的 `.dll`、`.node`、`.bin` 等文件包含到安装包中
+- SDK 运行时 DLL（`wemeetsdk_x64.dll` 等）需放置在 `wemeet_sdk/win/x64/` 目录中，主进程会自动将该目录加入 `PATH` 环境变量
+- SDK 的 `Release` 目录（含 modules、plugins、resources 等）需放置在 `wemeet_sdk/win/x64/Release/`，与 `wemeet_electron_sdk.node` 同级
+- 可使用 `wemeet_sdk/win/x64/copy.bat` 一键拷贝 SDK 运行时文件
+- 打包时通过 `build.win.extraResources` 自动将 `wemeet_sdk/win/x64/` 目录下所有文件包含到安装包中（无 filter 限制，确保 SDK 资源完整）
 - 编译原生模块需要 Visual Studio Build Tools（C++ 桌面开发工作负载）
 - 启动时自动设置控制台为 UTF-8 编码（`chcp 65001`），解决中文乱码
 - SDK 内部日志同时输出到控制台（`stderr`）和日志文件，便于调试
+- SDK 回调格式：当 `code=0` 且 `msg` 为空时，回调 JSON 中省略 `code`/`msg` 字段，此时应视为成功
 
 ### Universal 构建说明（macOS）
 
@@ -184,7 +186,7 @@ Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用�
 
 1. **替换 SDK 文件**：
    - macOS：将新 SDK 的 `wemeet_sdk/mac/` 目录替换
-   - Windows：将新 SDK 的头文件复制到 `wemeet_sdk/win/include/`，`.lib` 文件复制到 `wemeet_sdk/win/lib/x64/release/`，运行时 DLL 和 `Release` 目录复制到 `output/win/x64/`（可使用 `output/win/x64/copy.bat`，修改其中的 `SDK_SRC` 路径后执行）
+   - Windows：将新 SDK 的头文件复制到 `wemeet_sdk/win/include/`，`.lib` 文件复制到 `wemeet_sdk/win/lib/x64/release/`，运行时 DLL 和 `Release` 目录复制到 `wemeet_sdk/win/x64/`（可使用 `wemeet_sdk/win/x64/copy.bat`，修改其中的 `SDK_SRC` 路径后执行）
 2. **替换 C++ 封装**：将新 SDK Electron Demo 的 `wemeet_sdk/wemeet.cpp` 和 `wemeet_sdk/jsoncpp.cpp` 替换到项目
 3. **检查 macOS 符号链接**：确保 `wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 是**相对符号链接**，而非绝对路径符号链接。替换后执行以下命令检查和修复：
    ```bash
