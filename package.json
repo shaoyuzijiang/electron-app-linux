@@ -29,6 +29,7 @@
   "build": {
     "appId": "com.tencent.meeting.sdk.demo",
     "productName": "腾讯会议SDK Demo",
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },
@@ -71,6 +72,7 @@
     },
     "win": {
       "icon": "app.png",
+      "publish": null,
       "target": [
         {
           "target": "nsis",
