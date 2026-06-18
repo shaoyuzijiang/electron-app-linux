@@ -13,10 +13,11 @@
     "dev": "node start.js && electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "dist:arm64": "electron-builder --arm64",
-    "dist:x64": "electron-builder --x64",
+    "dist:arm64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && electron-builder --arm64",
+    "dist:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && electron-builder --x64",
     "create-universal-node": "lipo -create output/mac/wemeet_electron_sdk.arm64.node output/mac/wemeet_electron_sdk.x64.node -output output/mac/wemeet_electron_sdk.node",
-    "dist:universal": "npm run create-universal-node && electron-builder --universal",
+    "create-universal-framework": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && lipo -create wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework/Versions/A/TMSDK wemeet_sdk/mac/Frameworks/x64/TMSDK.framework/Versions/A/TMSDK -output output/mac/TMSDK.framework/Versions/A/TMSDK && cp output/mac/TMSDK.framework/Versions/A/TMSDK output/mac/TMSDK.framework/TMSDK",
+    "dist:universal": "npm run create-universal-node && npm run create-universal-framework && electron-builder --universal",
     "postinstall": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist wemeet_sdk\\win\\x64 mkdir wemeet_sdk\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node wemeet_sdk\\win\\x64\\wemeet_electron_sdk.node"
   },
   "devDependencies": {
@@ -44,6 +45,9 @@
       "output/mac/**/*",
       "entitlements.mac.plist"
     ],
+    "asarUnpack": [
+      "output/mac/**/*"
+    ],
     "extraResources": [
       {
         "from": "app.png",
@@ -54,6 +58,15 @@
       "icon": "app.png",
       "entitlements": "entitlements.mac.plist",
       "hardenedRuntime": true,
+      "extraFiles": [
+        {
+          "from": "output/mac/TMSDK.framework",
+          "to": "Frameworks/TMSDK.framework",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
       "target": [
         {
           "target": "dmg",

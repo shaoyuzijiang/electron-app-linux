@@ -61,13 +61,14 @@ function requireNative(modulePath) {
 
 try {
   if (process.platform === 'darwin') {
+    // Mac: .node 文件在 asar 内（通过 asarUnpack 解压），使用 __dirname 让 Electron 自动解析 app.asar.unpacked 路径
     // 优先加载通用文件名（universal 构建产物），回退到架构特定文件（开发模式）
     try {
-      wemeetSdk = requireNative(path.join(getSdkBasePath(), 'output', 'mac', 'wemeet_electron_sdk.node'));
+      wemeetSdk = requireNative(path.join(__dirname, 'output', 'mac', 'wemeet_electron_sdk.node'));
     } catch {
       const arch = process.arch;
       try {
-        wemeetSdk = requireNative(path.join(getSdkBasePath(), 'output', 'mac', `wemeet_electron_sdk.${arch}.node`));
+        wemeetSdk = requireNative(path.join(__dirname, 'output', 'mac', `wemeet_electron_sdk.${arch}.node`));
       } catch {
         console.error('无法加载腾讯会议 SDK 原生模块');
       }
