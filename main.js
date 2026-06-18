@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, Menu } = require('electron');
 const path = require('path');
 const api = require('./api');
 const tokenStore = require('./token-store');
@@ -581,6 +581,7 @@ function createWindow() {
     minHeight: 600,
     title: '腾讯会议SDK Demo',
     icon: appIconPath,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -589,6 +590,9 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
+
+  // 移除菜单栏
+  mainWindow.setMenu(null);
 
   // 检查是否已有有效 token，自动登录
   if (!tokenStore.isAccessTokenExpired()) {
