@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeImage, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
 const api = require('./api');
 const tokenStore = require('./token-store');
@@ -727,6 +727,10 @@ app.whenReady().then(() => {
   });
 
   // 登录
+  ipcMain.handle('open-external', async (_event, { url }) => {
+    await shell.openExternal(url);
+  });
+
   ipcMain.handle('login', async (_event, { email, password }) => {
     try {
       // 1. 邮箱登录，获取 accessToken

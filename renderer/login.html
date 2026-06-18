@@ -105,6 +105,23 @@
       min-height: 20px;
     }
 
+    .register-link {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .register-link a {
+      color: #667eea;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .register-link a:hover {
+      text-decoration: underline;
+    }
+
     .remember-row {
       display: flex;
       align-items: center;
@@ -146,6 +163,7 @@
       </div>
       <button type="submit" class="login-btn" id="loginBtn">登 录</button>
       <div class="error-msg" id="errorMsg"></div>
+      <div class="register-link">还没有账号？<a id="registerLink">注册账号</a></div>
     </form>
   </div>
 
@@ -165,6 +183,12 @@
       passwordInput.value = savedPassword || '';
       rememberCb.checked = true;
     }
+
+    // 注册链接
+    document.getElementById('registerLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.electronAPI.openExternal('https://wemeetapp.liuqi92.cn/user-center/register');
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
