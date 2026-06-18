@@ -374,6 +374,11 @@ function findPickerDeptById(node, id) {
 
 // ========== 事件绑定 ==========
 
+// 关闭按钮
+document.getElementById('userPickerCloseBtn').addEventListener('click', () => {
+  window.electronAPI.closeUserPickerWindow();
+});
+
 // 取消按钮
 document.getElementById('userPickerCancelBtn').addEventListener('click', () => {
   window.electronAPI.closeUserPickerWindow();

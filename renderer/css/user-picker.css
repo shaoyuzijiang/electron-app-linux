@@ -32,6 +32,7 @@ html, body {
   padding: 14px 24px;
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
+  position: relative;
   -webkit-app-region: drag; /* 允许拖拽窗口 */
 }
 
@@ -39,6 +40,30 @@ html, body {
   font-size: 16px;
   font-weight: 700;
   color: #1e1e1e;
+}
+
+.picker-close-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #999;
+  transition: background 0.15s, color 0.15s;
+  -webkit-app-region: no-drag; /* 关闭按钮不参与拖拽 */
+}
+
+.picker-close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
 }
 
 /* 主体 */

@@ -538,7 +538,7 @@ function openUserPickerWindow(type, cbMsg) {
     maximizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    frame: true,
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
