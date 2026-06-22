@@ -5,19 +5,25 @@ const rightContentEl = document.getElementById('rightContent');
 
 function showMeetingContent() {
   sdkLoadingEl.style.display = 'none';
-  leftPanelEl.style.display = '';
-  rightContentEl.style.display = '';
+  // 仅在当前是会议页签时才显示会议面板，避免影响通讯录页面
+  if (currentTab === 'meeting') {
+    leftPanelEl.style.display = '';
+    rightContentEl.style.display = '';
+  }
 }
 
 function showSdkError(msg) {
-  leftPanelEl.style.display = 'none';
-  rightContentEl.style.display = 'none';
-  sdkLoadingEl.style.display = '';
-  sdkLoadingEl.innerHTML = `
-    <div class="loading-error">${msg}</div>
-    <button class="retry-btn" id="retrySdkBtn">重试</button>
-  `;
-  document.getElementById('retrySdkBtn').addEventListener('click', retrySdkLogin);
+  // 仅在会议页签下显示 SDK 错误覆盖层，避免遮盖通讯录页面
+  if (currentTab === 'meeting') {
+    leftPanelEl.style.display = 'none';
+    rightContentEl.style.display = 'none';
+    sdkLoadingEl.style.display = '';
+    sdkLoadingEl.innerHTML = `
+      <div class="loading-error">${msg}</div>
+      <button class="retry-btn" id="retrySdkBtn">重试</button>
+    `;
+    document.getElementById('retrySdkBtn').addEventListener('click', retrySdkLogin);
+  }
 }
 
 async function retrySdkLogin() {
@@ -657,7 +663,7 @@ window.electronAPI.onMeetingListUpdate((result) => {
 
 // ========== 页签切换 ==========
 
-let currentTab = 'meeting';
+let currentTab = 'contacts';
 const navItems = document.querySelectorAll('.nav-item[data-tab]');
 const meetingContentEls = () => [leftPanelEl, rightContentEl];
 const contactsPageEl = document.getElementById('contactsPage');
@@ -691,4 +697,11 @@ navItems.forEach((item) => {
 // ========== 初始化 ==========
 loadProfile();
 loadMeetingList();
+
+// 默认显示通讯录页签
+meetingContentEls().forEach((el) => { el.style.display = 'none'; });
+sdkLoadingEl.style.display = 'none';
+contactsPageEl.style.display = '';
+initContacts();
+
 checkSdkStatus();
