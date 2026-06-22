@@ -45,9 +45,9 @@ function copyDir(src, dest) {
 
 if (process.platform === 'darwin') {
   const arch = process.arch;
-  const tmsdkPath = path.join(__dirname, 'wemeet_sdk', 'mac', 'Frameworks', arch === 'arm64' ? 'arm64' : 'x64');
+  const tmsdkPath = path.join(__dirname, '..', 'wemeet_sdk', 'mac', 'Frameworks', arch === 'arm64' ? 'arm64' : 'x64');
   const frameworkDest = path.join(
-    __dirname, 'node_modules', 'electron', 'dist',
+    __dirname, '..', 'node_modules', 'electron', 'dist',
     'Electron.app', 'Contents', 'Frameworks'
   );
 
