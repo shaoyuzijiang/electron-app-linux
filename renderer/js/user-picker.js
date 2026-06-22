@@ -50,28 +50,66 @@ window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
   }
 });
 
+// ========== 本地缓存（复用首页通讯录的 localStorage 缓存） ==========
+
+const CACHE_KEY_DEPT_TREE = 'contacts_dept_tree';
+const CACHE_KEY_DEPT_USERS_PREFIX = 'contacts_dept_users_';
+
+function loadPickerCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.warn('[选人组件] 缓存读取失败:', e);
+    return null;
+  }
+}
+
+function pickerDeptUsersCacheKey(deptId, recursive) {
+  return `${CACHE_KEY_DEPT_USERS_PREFIX}${deptId}_${recursive ? '1' : '0'}`;
+}
+
 // ========== 部门树 ==========
 
 async function loadPickerDeptTree() {
   const container = document.getElementById('userPickerDeptTree');
-  container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
 
+  // 1. 先读本地缓存，有则立即渲染
+  const cached = loadPickerCache(CACHE_KEY_DEPT_TREE);
+  if (cached) {
+    pickerDeptTreeRoot = cached;
+    pickerExpandedDepts.add(pickerDeptTreeRoot.id);
+    pickerSelectedDeptId = null;
+    renderPickerDeptTree();
+    if (pickerDeptTreeRoot) {
+      pickerSelectDepartment(pickerDeptTreeRoot);
+    }
+  } else {
+    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+  }
+
+  // 2. 后台请求最新数据
   try {
     const result = await window.electronAPI.getDepartmentTree();
     if (result.success && result.data) {
-      pickerDeptTreeRoot = result.data;
-      pickerExpandedDepts.add(pickerDeptTreeRoot.id);
-      pickerSelectedDeptId = null;
-      renderPickerDeptTree();
-      if (pickerDeptTreeRoot) {
-        pickerSelectDepartment(pickerDeptTreeRoot);
+      const newTree = result.data;
+      if (!cached || JSON.stringify(cached) !== JSON.stringify(newTree)) {
+        pickerDeptTreeRoot = newTree;
+        pickerExpandedDepts.add(pickerDeptTreeRoot.id);
+        pickerSelectedDeptId = null;
+        renderPickerDeptTree();
+        if (pickerDeptTreeRoot) {
+          pickerSelectDepartment(pickerDeptTreeRoot);
+        }
       }
-    } else {
+    } else if (!cached) {
       container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
     }
   } catch (err) {
     console.error('[选人组件] 获取部门树失败:', err);
-    container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
+    if (!cached) {
+      container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
+    }
   }
 }
 
@@ -143,11 +181,19 @@ function pickerSelectDepartment(dept) {
 
 async function loadPickerDepartmentUsers(departmentId, recursive = true, page = 1) {
   const container = document.getElementById('userPickerUserList');
+  const cacheKey = pickerDeptUsersCacheKey(departmentId, recursive);
 
   if (page === 1) {
-    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+    // 1. 先读本地缓存，有则立即渲染（仅第一页）
+    const cached = loadPickerCache(cacheKey);
+    if (cached) {
+      renderPickerUserList(cached);
+    } else {
+      container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+    }
   }
 
+  // 2. 后台请求最新数据
   try {
     const result = await window.electronAPI.getDepartmentUsers(departmentId, recursive, page, pickerPageSize);
     if (result.success && result.data) {
@@ -157,18 +203,27 @@ async function loadPickerDepartmentUsers(departmentId, recursive = true, page = 
       pickerHasMoreUsers = list && list.length < pickerTotalUsers && (page * pickerPageSize) < pickerTotalUsers;
 
       if (page === 1) {
-        renderPickerUserList(list || []);
+        // 缓存第一页
+        const cached = loadPickerCache(cacheKey);
+        if (!cached || JSON.stringify(cached) !== JSON.stringify(list)) {
+          localStorage.setItem(cacheKey, JSON.stringify(list));
+        }
+        if (pickerSelectedDeptId === departmentId) {
+          renderPickerUserList(list || []);
+        }
       } else {
-        appendPickerUserList(list || []);
+        if (pickerSelectedDeptId === departmentId) {
+          appendPickerUserList(list || []);
+        }
       }
     } else {
-      if (page === 1) {
+      if (page === 1 && !loadPickerCache(cacheKey)) {
         container.innerHTML = `<div class="meeting-empty">${result.message || '获取用户列表失败'}</div>`;
       }
     }
   } catch (err) {
     console.error('[选人组件] 获取部门用户失败:', err);
-    if (page === 1) {
+    if (page === 1 && !loadPickerCache(cacheKey)) {
       container.innerHTML = `<div class="meeting-empty">获取用户列表失败</div>`;
     }
   }
