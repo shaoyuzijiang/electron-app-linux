@@ -71,14 +71,14 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ### macOS
 
 ```bash
-# 仅编译当前架构（arm64）
-npm run build:native:arm64
+# 仅编译 arm64 架构
+npm run build:native:mac-arm64
 
 # 编译 Intel 架构（需要 Rosetta 2）
-npm run build:native:x64
+npm run build:native:mac-x64
 
 # 同时编译双架构
-npm run build:native
+npm run build:native:mac
 ```
 
 > Intel 架构编译需要 Rosetta 2，如未安装请执行：
@@ -114,17 +114,26 @@ copy.bat
 
 ## 打包安装包
 
+### macOS
+
 ```bash
-# 打包当前平台安装包
+# 按架构打包
+npm run dist:mac:arm64       # Apple Silicon 专用
+npm run dist:mac:x64         # Intel 专用
+npm run dist:mac:universal   # 通用二进制（同时支持两种架构）
+
+# 快捷打包当前平台
 npm run dist
+```
 
-# macOS 按架构打包
-npm run dist:arm64       # Apple Silicon 专用
-npm run dist:x64         # Intel 专用
-npm run dist:universal   # 通用二进制（同时支持两种架构）
+### Windows
 
-# Windows 打包
-npm run dist:x64         # Windows x64 安装包（NSIS）
+```bash
+# 打包 Windows x64 安装包（NSIS）
+npm run dist:win:x64
+
+# 快捷打包当前平台
+npm run dist
 ```
 
 打包产物输出到 `dist/` 目录。macOS 生成 `.dmg`，Windows 生成 `.exe`（NSIS 安装包）。
@@ -133,10 +142,10 @@ npm run dist:x64         # Windows x64 安装包（NSIS）
 
 ```bash
 # macOS
-npm run build:native && npm run dist
+npm run build:native:mac && npm run dist:mac:universal
 
 # Windows
-npm run build:native:win-x64 && npm run dist
+npm run build:native:win-x64 && npm run dist:win:x64
 ```
 
 ## 可用脚本
@@ -144,14 +153,15 @@ npm run build:native:win-x64 && npm run dist
 | 命令 | 说明 |
 |------|------|
 | `npm run dev` | 启动开发模式 |
-| `npm run build:native` | 编译 macOS 双架构原生模块 |
-| `npm run build:native:arm64` | 仅编译 macOS arm64 原生模块 |
-| `npm run build:native:x64` | 编译 macOS x64 原生模块 |
+| `npm run build:native:mac-arm64` | 编译 macOS arm64 原生模块 |
+| `npm run build:native:mac-x64` | 编译 macOS x64 原生模块 |
+| `npm run build:native:mac` | 编译 macOS 双架构原生模块 |
 | `npm run build:native:win-x64` | 编译 Windows x64 原生模块 |
 | `npm run dist` | 打包当前平台安装包 |
-| `npm run dist:arm64` | 打包 arm64 安装包（macOS） |
-| `npm run dist:x64` | 打包 x64 安装包（macOS/Windows） |
-| `npm run dist:universal` | 打包 macOS 通用安装包 |
+| `npm run dist:mac:arm64` | 打包 macOS arm64 安装包 |
+| `npm run dist:mac:x64` | 打包 macOS x64 安装包 |
+| `npm run dist:mac:universal` | 打包 macOS 通用安装包 |
+| `npm run dist:win:x64` | 打包 Windows x64 安装包（NSIS） |
 | `npm run pack` | 仅打包目录（不生成安装包） |
 
 ## 注意事项
@@ -176,7 +186,7 @@ npm run build:native:win-x64 && npm run dist
 
 Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用二进制，需注意以下几点：
 
-1. **原生模块需双架构编译**：运行 `npm run build:native` 生成 arm64 和 x64 两个 `.node` 文件，`dist:universal` 会自动通过 `lipo -create` 将它们合并为通用二进制
+1. **原生模块需双架构编译**：运行 `npm run build:native:mac` 生成 arm64 和 x64 两个 `.node` 文件，`dist:mac:universal` 会自动通过 `lipo -create` 将它们合并为通用二进制
 2. **SDK Framework 符号链接**：`wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 必须是**相对符号链接**（`../arm64/TMSDK.framework`），不能是绝对路径符号链接，否则 `@electron/universal` 合并时因路径不一致会报 mach-o mismatch 错误
 3. **架构特定 .node 文件已排除**：`package.json` 的 `files` 配置中排除了 `wemeet_electron_sdk.arm64.node` 和 `wemeet_electron_sdk.x64.node`，只保留合并后的通用 `wemeet_electron_sdk.node`
 
@@ -201,8 +211,8 @@ Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用�
 4. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
    ```bash
    # macOS
-   npm run build:native
-   
+   npm run build:native:mac
+
    # Windows
    npm run build:native:win-x64
    ```
