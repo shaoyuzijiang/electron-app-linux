@@ -149,4 +149,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fetch-image-data', { path }),
   openCachedFile: (path, filename) =>
     ipcRenderer.invoke('open-cached-file', { path, filename }),
+
+  // 渲染进程日志转发
+  rendererLog: (level, message) =>
+    ipcRenderer.send('renderer-log', { level, message }),
 });

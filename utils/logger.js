@@ -217,4 +217,4 @@ function install() {
   }
 }
 
-module.exports = { install, closeLog };
+module.exports = { install, closeLog, writeLog };

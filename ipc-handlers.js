@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const api = require('./backend_api/api');
 const tokenStore = require('./utils/token-store');
+const logger = require('./utils/logger');
 
 // 本地缓存目录
 const CACHE_DIR = path.join(app.getPath('userData'), 'cache', 'uploads');
@@ -74,6 +75,11 @@ function register(ipcMain, deps) {
   } = deps;
 
   // ========== 通用接口 ==========
+
+  // 渲染进程日志转发到主进程文件日志
+  ipcMain.on('renderer-log', (_event, { level, message }) => {
+    logger.writeLog(level, ['[Renderer]', message]);
+  });
 
   ipcMain.handle('open-external', async (_event, { url }) => {
     await shell.openExternal(url);
