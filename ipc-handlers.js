@@ -1,7 +1,32 @@
-const { shell } = require('electron');
+const { shell, app } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const api = require('./backend_api/api');
 const tokenStore = require('./utils/token-store');
+
+// 本地缓存目录
+const CACHE_DIR = path.join(app.getPath('userData'), 'cache', 'uploads');
+
+// 确保缓存目录存在
+function ensureCacheDir() {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+// 从 path 提取文件名（如 /uploads/xxx.jpg → xxx.jpg）
+function getCacheFilename(serverPath) {
+  const basename = path.basename(serverPath);
+  return basename || null;
+}
+
+// 获取本地缓存路径（若存在）
+function getCachePath(serverPath) {
+  const name = getCacheFilename(serverPath);
+  if (!name) return null;
+  const cachePath = path.join(CACHE_DIR, name);
+  return fs.existsSync(cachePath) ? cachePath : null;
+}
 
 /**
  * 注册所有 IPC 通信接口
@@ -781,6 +806,86 @@ function register(ipcMain, deps) {
   // 获取文件完整 URL
   ipcMain.handle('get-file-url', (_event, { path }) => {
     return { success: true, url: api.getFileUrl(path) };
+  });
+
+  // 获取图片数据（base64 data URL，带本地缓存）
+  ipcMain.handle('fetch-image-data', async (_event, { path: serverPath }) => {
+    try {
+      ensureCacheDir();
+
+      // 1. 检查本地缓存
+      const cachePath = getCachePath(serverPath);
+      if (cachePath) {
+        const buffer = fs.readFileSync(cachePath);
+        const ext = path.extname(cachePath).toLowerCase();
+        const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' };
+        const contentType = mimeMap[ext] || 'image/png';
+        return { success: true, data: `data:${contentType};base64,${buffer.toString('base64')}` };
+      }
+
+      // 2. 从服务器下载
+      const accessToken = await getValidAccessToken();
+      const url = api.getFileUrl(serverPath);
+      console.log(`[IM] fetch-image-data: GET ${url}`);
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const contentType = res.headers['content-type'] || 'image/png';
+
+      // 3. 写入本地缓存
+      const name = getCacheFilename(serverPath);
+      if (name) {
+        const cacheFilePath = path.join(CACHE_DIR, name);
+        fs.writeFileSync(cacheFilePath, buffer);
+        console.log(`[IM] 图片已缓存: ${cacheFilePath} (${buffer.length} bytes)`);
+      }
+
+      const b64 = buffer.toString('base64');
+      return { success: true, data: `data:${contentType};base64,${b64}` };
+    } catch (err) {
+      console.error(`[IM] fetch-image-data 失败:`, err.message);
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 打开/下载文件（带本地缓存）
+  ipcMain.handle('open-cached-file', async (_event, { path: serverPath, filename }) => {
+    try {
+      ensureCacheDir();
+
+      // 1. 检查本地缓存
+      let cachePath = getCachePath(serverPath);
+
+      // 2. 没有缓存则从服务器下载
+      if (!cachePath) {
+        const accessToken = await getValidAccessToken();
+        const url = api.getFileUrl(serverPath);
+        console.log(`[IM] open-cached-file: GET ${url}`);
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const name = getCacheFilename(serverPath);
+        if (name) {
+          cachePath = path.join(CACHE_DIR, name);
+          fs.writeFileSync(cachePath, buffer);
+          console.log(`[IM] 文件已缓存: ${cachePath} (${buffer.length} bytes)`);
+        }
+      }
+
+      if (cachePath) {
+        // 用系统默认程序打开
+        shell.openPath(cachePath);
+        return { success: true };
+      }
+      return { success: false, message: '无法获取文件' };
+    } catch (err) {
+      console.error(`[IM] open-cached-file 失败:`, err.message);
+      return { success: false, message: err.message };
+    }
   });
 
   // 获取会话列表

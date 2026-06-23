@@ -1047,40 +1047,33 @@ function updateSendButton() {
   }
 }
 
-// 异步加载图片 URL
+// 异步加载图片（通过 IPC 带认证获取 base64 data URL）
 async function loadImagesInMessages() {
   const container = document.getElementById('imMessagesContainer');
   if (!container) return;
-  const imgs = container.querySelectorAll('.im-msg-image[data-url]:not([src])');
+  const imgs = container.querySelectorAll('.im-msg-image[data-url]:not([data-loaded])');
   for (const img of imgs) {
     const url = img.getAttribute('data-url');
-    if (url) {
-      try {
-        const result = await window.electronAPI.getFileUrl(url);
-        if (result.success) {
-          img.src = result.url;
-        }
-      } catch (err) {
-        console.error('[IM] 加载图片 URL 失败:', err);
+    if (!url) continue;
+    img.setAttribute('data-loaded', 'true'); // 标记已处理，避免重复请求
+    try {
+      const result = await window.electronAPI.fetchImageData(url);
+      if (result.success && result.data) {
+        img.src = result.data;
+      } else {
+        console.warn('[IM] 图片加载失败:', result.message || '未知错误');
+        img.alt = '[图片加载失败]';
       }
+    } catch (err) {
+      console.error('[IM] 加载图片失败:', err);
+      img.alt = '[图片加载失败]';
     }
   }
 
-  // 文件链接
+  // 文件链接 - 不再需要预加载 URL，点击时通过 IPC 下载缓存后打开
   const files = container.querySelectorAll('.im-msg-file[data-url]:not([data-loaded])');
   for (const fileEl of files) {
-    const url = fileEl.getAttribute('data-url');
     fileEl.setAttribute('data-loaded', 'true');
-    if (url) {
-      try {
-        const result = await window.electronAPI.getFileUrl(url);
-        if (result.success) {
-          fileEl.setAttribute('data-full-url', result.url);
-        }
-      } catch (err) {
-        console.error('[IM] 加载文件 URL 失败:', err);
-      }
-    }
   }
 }
 
@@ -1216,9 +1209,13 @@ function bindIMEvents() {
 
     const fileEl = e.target.closest('.im-msg-file');
     if (fileEl) {
-      const fullUrl = fileEl.getAttribute('data-full-url');
-      if (fullUrl) {
-        window.electronAPI.openExternal(fullUrl);
+      const url = fileEl.getAttribute('data-url');
+      const filename = fileEl.querySelector('.im-msg-file-name')?.textContent || '文件';
+      if (url) {
+        const result = await window.electronAPI.openCachedFile(url, filename);
+        if (!result.success) {
+          alert(result.message || '文件打开失败');
+        }
       }
     }
   });

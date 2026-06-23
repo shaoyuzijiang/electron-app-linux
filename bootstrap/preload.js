@@ -145,4 +145,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('im-upload-file', { filePath, filename, mimetype, fileData }),
   imSearchUsers: (keyword) =>
     ipcRenderer.invoke('im-search-users', { keyword }),
+  fetchImageData: (path) =>
+    ipcRenderer.invoke('fetch-image-data', { path }),
+  openCachedFile: (path, filename) =>
+    ipcRenderer.invoke('open-cached-file', { path, filename }),
 });
