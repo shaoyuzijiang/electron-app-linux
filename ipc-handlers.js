@@ -761,6 +761,186 @@ function register(ipcMain, deps) {
     }
   });
 
+  // ========== IM 即时通讯 IPC 接口 ==========
+
+  // 获取 accessToken（供渲染进程建立 WebSocket 连接）
+  ipcMain.handle('get-access-token', async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      return { success: true, accessToken };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取 WebSocket URL
+  ipcMain.handle('get-ws-url', () => {
+    return { success: true, url: api.getWsUrl() };
+  });
+
+  // 获取文件完整 URL
+  ipcMain.handle('get-file-url', (_event, { path }) => {
+    return { success: true, url: api.getFileUrl(path) };
+  });
+
+  // 获取会话列表
+  ipcMain.handle('im-get-conversations', async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getConversations(accessToken);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 创建会话
+  ipcMain.handle('im-create-conversation', async (_event, { type, name, memberIds }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.createConversation(accessToken, { type, name, memberIds });
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取会话详情
+  ipcMain.handle('im-get-conversation-detail', async (_event, { conversationId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getConversationDetail(accessToken, conversationId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取历史消息
+  ipcMain.handle('im-get-messages', async (_event, { conversationId, before, after, limit }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getMessages(accessToken, conversationId, { before, after, limit });
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 发送消息（HTTP 备用）
+  ipcMain.handle('im-send-message', async (_event, { conversationId, type, content }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.sendMessageHttp(accessToken, conversationId, { type, content });
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 标记已读
+  ipcMain.handle('im-mark-read', async (_event, { conversationId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      await api.markConversationRead(accessToken, conversationId);
+      return { success: true };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取会话成员
+  ipcMain.handle('im-get-members', async (_event, { conversationId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getConversationMembers(accessToken, conversationId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 添加成员
+  ipcMain.handle('im-add-member', async (_event, { conversationId, userId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.addConversationMember(accessToken, conversationId, userId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 移除成员
+  ipcMain.handle('im-remove-member', async (_event, { conversationId, userId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.removeConversationMember(accessToken, conversationId, userId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取总未读数
+  ipcMain.handle('im-get-unread-count', async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getUnreadCount(accessToken);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取在线用户
+  ipcMain.handle('im-get-online-users', async () => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getOnlineUsers(accessToken);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 上传文件
+  ipcMain.handle('im-upload-file', async (_event, { filePath, filename, mimetype }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const fs = require('fs');
+      const fileBuffer = fs.readFileSync(filePath);
+      const data = await api.uploadFile(accessToken, fileBuffer, filename, mimetype);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // IM 用户搜索（复用 user-picker/search 接口）
+  ipcMain.handle('im-search-users', async (_event, { keyword }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.searchUsers(accessToken, keyword);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
   ipcMain.handle('enable-custom-org-info', async (_event, { enable }) => {
     if (!wemeetSdk || !isSdkInitialized()) {
       return { success: false, message: 'SDK 未初始化' };

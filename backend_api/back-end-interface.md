@@ -6,6 +6,7 @@
 
 | 方法 | 路径 | 认证 | 加密 | 说明 |
 |------|------|------|------|------|
+| GET | `/api/healthcheck` | - | - | 健康检查 |
 | GET | `/api/auth/public-key` | - | - | 获取 RSA 公钥 |
 | GET | `/api/auth/sdk-token` | - | - | 获取腾讯会议 SDK Token |
 | GET | `/api/auth/id-token` | Bearer Token | - | 获取腾讯会议 ID Token |
@@ -14,6 +15,7 @@
 | POST | `/api/auth/logout` | Bearer Token | - | 登出（撤销 Token） |
 | GET | `/api/auth/profile` | Bearer Token | - | 获取用户信息 |
 | POST | `/api/auth/change-password` | Bearer Token | - | 修改密码 |
+| POST | `/api/auth/register` | - | - | 用户自助注册 |
 
 ### 腾讯会议接口
 
@@ -53,6 +55,26 @@
 | GET | `/api/user-picker/departments/:id/users` | Bearer Token | 获取部门下的用户（支持递归子部门） |
 | GET | `/api/user-picker/search` | Bearer Token | 搜索用户 |
 
+### IM 即时通讯接口
+
+> IM 即时通讯的完整 API 文档请参阅 [im-interface.md](./im-interface.md)，设计方案请参阅 [im.md](./im.md)。
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/chat/conversations` | Bearer Token | 创建会话（单聊/群聊） |
+| GET | `/api/chat/conversations` | Bearer Token | 会话列表（含未读数） |
+| GET | `/api/chat/conversations/:id` | Bearer Token | 会话详情 |
+| GET | `/api/chat/conversations/:id/messages` | Bearer Token | 历史消息（分页/增量同步） |
+| POST | `/api/chat/conversations/:id/messages` | Bearer Token | 发送消息（HTTP 备用通道） |
+| POST | `/api/chat/conversations/:id/read` | Bearer Token | 标记已读 |
+| POST | `/api/chat/conversations/:id/members` | Bearer Token | 添加成员（群聊） |
+| DELETE | `/api/chat/conversations/:id/members/:userId` | Bearer Token | 移除成员（群聊） |
+| GET | `/api/chat/conversations/:id/members` | Bearer Token | 成员列表 |
+| GET | `/api/chat/unread/count` | Bearer Token | 总未读消息数 |
+| GET | `/api/chat/online` | Bearer Token | 在线用户列表 |
+| POST | `/api/chat/upload` | Bearer Token | 上传文件/图片 |
+| WebSocket | `/ws/chat?token=<accessToken>` | JWT Query 参数 | 实时消息收发、已读回执、输入状态、心跳保活 |
+
 ### 响应格式
 
 ```json
@@ -66,6 +88,27 @@
 ---
 
 ## 认证接口详解
+
+### 0. 健康检查
+
+无需认证，无需加密。用于 Docker 健康检查和 entrypoint 自愈监控。该接口在日志中间件之前注册，不会记录访问日志。
+
+**请求**
+
+```bash
+curl http://localhost:3000/api/healthcheck
+```
+
+**响应**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "status": "ok"
+  }
+}
+```
 
 ### 1. 获取 RSA 公钥
 
@@ -186,7 +229,7 @@ curl http://localhost:3000/api/auth/id-token \
 
 ```json
 {
-  "username": "zhangsan",
+  "email": "zhangsan@example.com",
   "password": "<your-password>"
 }
 ```
@@ -223,7 +266,7 @@ curl -X POST http://localhost:3000/api/auth/login \
   "data": {
     "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
     "refreshToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "expiresIn": 900,
+    "expiresIn": 7200,
     "tokenType": "Bearer"
   }
 }
@@ -233,7 +276,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ```json
 // 缺少字段 400
-{ "code": 400, "message": "Missing username or password" }
+{ "code": 400, "message": "Missing email or password" }
 
 // 凭证错误 401
 { "code": 401, "message": "Invalid credentials" }
@@ -292,7 +335,7 @@ curl -X POST http://localhost:3000/api/auth/refresh \
   "data": {
     "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...(新 Access Token)",
     "refreshToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...(新 Refresh Token)",
-    "expiresIn": 900,
+    "expiresIn": 7200,
     "tokenType": "Bearer"
   }
 }
@@ -453,11 +496,145 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 
 ---
 
+### 9. 用户自助注册
+
+无需认证，无需加密。用户通过注册页面自助创建临时账号，注册成功后登录信息（邮箱和初始密码）自动发送至登记邮箱。受速率限制保护。
+
+**请求**
+
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "张三",
+    "email": "zhangsan@example.com",
+    "phone": "13800138000"
+  }'
+```
+
+**请求参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `username` | string | ✅ | 姓名，2-32个字符（支持中文、字母、数字、下划线） |
+| `email` | string | ✅ | 邮箱（同时作为用户ID和登录账号） |
+| `phone` | string | ✅ | 手机号，11位国内手机号 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "注册成功，登录信息已发送至您的邮箱",
+    "emailSent": true
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 缺少必填项 400
+{ "code": 400, "message": "姓名、邮箱和手机号均为必填项" }
+
+// 姓名格式错误 400
+{ "code": 400, "message": "姓名必须为2-32个字符（支持中文、字母、数字、下划线）" }
+
+// 邮箱格式错误 400
+{ "code": 400, "message": "邮箱格式不正确" }
+
+// 手机号格式错误 400
+{ "code": 400, "message": "手机号格式不正确" }
+
+// 邮箱已被注册 409
+{ "code": 409, "message": "该邮箱已被注册" }
+
+// 手机号已被注册 409
+{ "code": 409, "message": "该手机号已被注册" }
+
+// 速率超限 429
+{ "code": 429, "message": "Too many requests, please try again later" }
+```
+
+> **说明**：
+> - 注册用户自动归入"临时账号"（tempDep）部门，默认有效期为1天，到期后自动清理
+> - 有效期仅管理员可在管理后台修改
+> - 用户ID与邮箱保持一致
+> - 注册成功后系统自动生成随机密码，并通过邮件发送至登记邮箱
+> - 注册时同步创建腾讯会议账号（需配置腾讯会议相关环境变量，失败不影响注册）
+> - 清理过期账号时同步删除腾讯会议账号
+
+---
+
 ## 管理员接口详解
 
-### 9. 修改用户信息（管理员）
+### 10. 管理员登录
 
-需要管理员 Bearer Token 认证。支持修改用户名、手机号和所属部门，用户 ID 不可修改。
+无需认证，请求体不走加密通道（仅限 HTTPS 使用）。受速率限制保护。连续失败 5 次后账户锁定 15 分钟。仅 `admin` 或 `superadmin` 角色可登录。
+
+**请求**
+
+```bash
+# 邮箱登录
+curl -X POST http://localhost:3000/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "your-password"}'
+
+# 用户ID登录
+curl -X POST http://localhost:3000/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin", "password": "your-password"}'
+```
+
+> `email` 字段既可传入邮箱地址，也可传入用户ID。服务端通过是否包含 `@` 判断登录方式。
+
+**请求参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `email` | string | ✅ | 邮箱地址或用户ID |
+| `password` | string | ✅ | 密码 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": 7200,
+    "tokenType": "Bearer",
+    "role": "admin",
+    "username": "admin",
+    "userId": "admin",
+    "email": "admin@example.com"
+  }
+}
+```
+
+**失败响应**
+
+```json
+// 缺少字段 400
+{ "code": 400, "message": "Missing email or password" }
+
+// 凭证错误 401
+{ "code": 401, "message": "Invalid credentials" }
+
+// 非管理员 403
+{ "code": 403, "message": "Admin access required" }
+
+// 账户锁定 429
+{ "code": 429, "message": "Account temporarily locked, please try again later" }
+```
+
+---
+
+### 11. 修改用户信息（管理员）
+
+需要管理员 Bearer Token 认证。支持修改姓名、手机号、邮箱、所属部门和有效期，用户 ID 不可修改。姓名支持中文等多语言字符（2-32 字符，允许字母、数字、下划线、连字符、中文等）。有效期仅对临时账号（tempDep 部门）有意义，传入 `validityDays` 后将从当前时间起重新计算过期时间。
 
 **请求**
 
@@ -465,10 +642,10 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 curl -X PUT http://localhost:3000/api/admin/users/zhangsan \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
-  -d '{"newUsername": "zhangsan2", "phone": "13800138000", "departmentId": "tech"}'
+  -d '{"newUsername": "zhangsan2", "phone": "13800138000", "departmentId": "tech", "validityDays": 7}'
 ```
 
-> `newUsername`、`phone`、`departmentId` 均为可选字段，仅传需要修改的字段即可。`departmentId` 传空字符串可清除部门归属。
+> `newUsername`、`phone`、`email`、`departmentId`、`validityDays` 均为可选字段，仅传需要修改的字段即可。`departmentId` 传空字符串可清除部门归属。`validityDays` 仅接受 1/3/7/30，传入后将重新计算 `expiresAt`。
 
 **成功响应** `200`
 
@@ -487,22 +664,25 @@ curl -X PUT http://localhost:3000/api/admin/users/zhangsan \
 // 用户不存在 404
 { "code": 404, "message": "User not found" }
 
-// 用户名格式错误 400
-{ "code": 400, "message": "Username must be 2-32 characters (letters, numbers, underscore)" }
+// 姓名格式错误 400
+{ "code": 400, "message": "Username must be 2-32 characters (letters, numbers, underscore, Chinese, etc.)" }
 
 // 手机号格式错误 400
 { "code": 400, "message": "Invalid phone number format" }
 
-// 用户名已存在 409
+// 姓名已存在 409
 { "code": 409, "message": "Username already exists" }
 
 // 手机号已被占用 409
 { "code": 409, "message": "Phone number already exists" }
+
+// 有效期参数无效 400
+{ "code": 400, "message": "Invalid validity days, must be 1/3/7/30" }
 ```
 
 ---
 
-### 10. 重置用户密码（管理员）
+### 12. 重置用户密码（管理员）
 
 需要管理员 Bearer Token 认证。生成随机新密码，重置后该用户所有 Refresh Token 将被撤销，所有设备需重新登录。
 
@@ -537,7 +717,7 @@ curl -X POST http://localhost:3000/api/admin/users/zhangsan/reset-password \
 
 ---
 
-### 11. 组织架构（部门）管理
+### 13. 组织架构（部门）管理
 
 所有部门接口均需管理员 Bearer Token 认证。部门采用树形结构，通过 `parent_id` 实现层级嵌套。
 
@@ -1112,7 +1292,7 @@ curl "http://localhost:3000/api/user-picker/departments/tech/users?recursive=tru
 
 ### 3. 搜索用户
 
-按用户名（`username`）或用户 ID（`id`）模糊搜索用户，返回匹配的用户列表（最多 50 条）。
+按姓名（`username`）或用户 ID（`id`）模糊搜索用户，返回匹配的用户列表（最多 50 条）。
 
 **请求**
 
@@ -1125,7 +1305,7 @@ curl "http://localhost:3000/api/user-picker/search?q=zhang" \
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `q` | string | ✅ | 搜索关键词，匹配用户名和用户 ID |
+| `q` | string | ✅ | 搜索关键词，匹配姓名和用户 ID |
 
 **成功响应** `200`
 
@@ -1144,7 +1324,7 @@ curl "http://localhost:3000/api/user-picker/search?q=zhang" \
 }
 ```
 
-> 搜索关键词为空时返回空数组。搜索结果按用户名排序，最多返回 50 条。
+> 搜索关键词为空时返回空数组。搜索结果按姓名排序，最多返回 50 条。
 
 **Node.js 客户端加密示例**
 

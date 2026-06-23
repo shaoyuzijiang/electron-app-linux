@@ -117,4 +117,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAddUsersResultCallback: (callback) => {
     ipcRenderer.on('add-users-result-callback', (_event, msg) => callback(msg));
   },
+
+  // ========== IM 即时通讯接口 ==========
+  getAccessToken: () => ipcRenderer.invoke('get-access-token'),
+  getWsUrl: () => ipcRenderer.invoke('get-ws-url'),
+  getFileUrl: (path) => ipcRenderer.invoke('get-file-url', { path }),
+  imGetConversations: () => ipcRenderer.invoke('im-get-conversations'),
+  imCreateConversation: (type, name, memberIds) =>
+    ipcRenderer.invoke('im-create-conversation', { type, name, memberIds }),
+  imGetConversationDetail: (conversationId) =>
+    ipcRenderer.invoke('im-get-conversation-detail', { conversationId }),
+  imGetMessages: (conversationId, options) =>
+    ipcRenderer.invoke('im-get-messages', { conversationId, ...options }),
+  imSendMessage: (conversationId, type, content) =>
+    ipcRenderer.invoke('im-send-message', { conversationId, type, content }),
+  imMarkRead: (conversationId) =>
+    ipcRenderer.invoke('im-mark-read', { conversationId }),
+  imGetMembers: (conversationId) =>
+    ipcRenderer.invoke('im-get-members', { conversationId }),
+  imAddMember: (conversationId, userId) =>
+    ipcRenderer.invoke('im-add-member', { conversationId, userId }),
+  imRemoveMember: (conversationId, userId) =>
+    ipcRenderer.invoke('im-remove-member', { conversationId, userId }),
+  imGetUnreadCount: () => ipcRenderer.invoke('im-get-unread-count'),
+  imGetOnlineUsers: () => ipcRenderer.invoke('im-get-online-users'),
+  imUploadFile: (filePath, filename, mimetype) =>
+    ipcRenderer.invoke('im-upload-file', { filePath, filename, mimetype }),
+  imSearchUsers: (keyword) =>
+    ipcRenderer.invoke('im-search-users', { keyword }),
 });
