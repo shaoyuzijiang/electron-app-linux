@@ -40,14 +40,23 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ## 项目结构
 
 ```
-├── main.js                # Electron 主进程
-├── preload.js             # 预加载脚本（IPC 桥接）
-├── api.js                 # 后端 API 请求（RSA+AES 加密）
-├── token-store.js         # Token 持久化存储
-├── logger.js              # 文件日志模块（按小时滚动，本地时区时间戳）
-├── start.js               # 启动前脚本（拷贝 SDK Framework，仅 macOS；Windows 设置控制台 UTF-8 编码）
+├── main.js                # Electron 主进程（入口 + 模块组装）
+├── ipc-handlers.js        # IPC 通信接口注册
 ├── binding.gyp            # node-gyp 原生模块编译配置
 ├── entitlements.mac.plist # macOS 权限声明
+├── bootstrap/
+│   ├── start.js           # 启动前脚本（拷贝 SDK Framework，仅 macOS；Windows 设置控制台 UTF-8 编码）
+│   └── preload.js         # 预加载脚本（IPC 桥接）
+├── backend_api/
+│   ├── api.js             # 后端 API 请求（RSA+AES 加密）
+│   ├── meeting-polling.js # 会议列表防抖刷新 + 定时轮询
+│   └── back-end-interface.md # 后端接口文档
+├── utils/
+│   ├── logger.js          # 文件日志模块（按小时滚动，本地时区时间戳）
+│   └── token-store.js     # Token 持久化存储
+├── sdk_mgmt/
+│   ├── wemeet-sdk.js      # SDK 原生模块加载 + 生命周期管理（init/login/logout/回调/状态）
+│   └── user-picker.js     # 选人组件窗口管理（创建、定位、通信）
 ├── renderer/
 │   ├── login.html         # 登录页
 │   ├── index.html         # 会议主页
@@ -169,7 +178,7 @@ npm run build:native:win-x64 && npm run dist:win:x64
 ### macOS
 
 - 未签名/未公证的 `.dmg` 在其他 Mac 上打开时会被 Gatekeeper 拦截，需右键 → 打开，或执行 `xattr -cr <app路径>` 去除隔离属性
-- SDK Framework 在开发模式下通过 `start.js` 自动拷贝到 Electron.app 中，打包时通过 `extraResources` 自动处理
+- SDK Framework 在开发模式下通过 `bootstrap/start.js` 自动拷贝到 Electron.app 中，打包时通过 `extraResources` 自动处理
 
 ### Windows
 

@@ -101,7 +101,16 @@ SDK 提供 `GetMeetingWindowInfo()` 接口（>= 3.12.300），返回当前会中
 **封装函数：** 需要解析嵌套的 `data.window_rect`，而非直接使用顶层字段：
 
 ```javascript
-// main.js
+// sdk_mgmt/user-picker.js
+
+// 依赖注入：SDK 原生模块和主窗口引用通过 init() 注入
+let _wemeetSdk = null;
+let _getMainWindow = null;
+
+function init(deps) {
+  _wemeetSdk = deps.wemeetSdk;
+  _getMainWindow = deps.getMainWindow;
+}
 
 /**
  * 获取会中窗口位置信息
@@ -121,9 +130,9 @@ SDK 提供 `GetMeetingWindowInfo()` 接口（>= 3.12.300），返回当前会中
  * 仅在会中且非屏幕共享、非最小化时 window_rect 有效。
  */
 function getMeetingWindowInfo() {
-  if (!wemeetSdk) return null;
+  if (!_wemeetSdk) return null;
   try {
-    const raw = wemeetSdk.GetMeetingWindowInfo();
+    const raw = _wemeetSdk.GetMeetingWindowInfo();
     if (!raw || raw === '') return null;
     const result = JSON.parse(raw);
     // code 不为 0 表示不在会中或调用非法
@@ -159,9 +168,9 @@ function getMeetingWindowInfo() {
 ### 3.2 创建选人窗口并居中定位 — `openUserPickerWindow`
 
 ```javascript
-// main.js
+// sdk_mgmt/user-picker.js
 
-let userPickerWindow = null; // 选人组件独立窗口引用
+let userPickerWindow = null; // 选人组件独立窗口引用（模块级变量）
 
 /**
  * 打开选人组件独立窗口，定位到会中窗口上方
@@ -188,7 +197,8 @@ function openUserPickerWindow(type, cbMsg) {
     posY = Math.round(meetingWinInfo.y + (meetingWinInfo.height - pickerHeight) / 2);
     console.log('[选人组件] 基于 SDK 会中窗口定位:', { posX, posY });
   } else {
-    // 回退：居中于主窗口
+    // 回退：居中于主窗口（通过依赖注入获取）
+    const mainWindow = _getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       const mainBounds = mainWindow.getBounds();
       posX = Math.round(mainBounds.x + (mainBounds.width - pickerWidth) / 2);
@@ -212,15 +222,15 @@ function openUserPickerWindow(type, cbMsg) {
     maximizable: false,
     alwaysOnTop: true,    // 始终置顶，覆盖在会中窗口上方
     skipTaskbar: true,    // 不在任务栏显示
-    frame: true,
+    frame: false,         // 无边框窗口（自定义标题栏）
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '..', 'bootstrap', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  userPickerWindow.loadFile(path.join(__dirname, 'renderer', 'user-picker.html'));
+  userPickerWindow.loadFile(path.join(__dirname, '..', 'renderer', 'user-picker.html'));
 
   // 窗口加载完成后发送回调数据
   userPickerWindow.webContents.on('did-finish-load', () => {
@@ -263,29 +273,40 @@ SDK 会中窗口是独立于 Electron 主窗口的，
 改造前，`OnInviteUsers` 和 `OnInviteMeeting` 回调通过 IPC 转发到主窗口渲染进程；改造后，直接在主进程创建选人窗口：
 
 ```javascript
-// main.js — handleSDKCallback() 中
+// main.js — sdkEvents.on('callback', ...) 中
 
 } else if (func === 'OnInviteUsers') {
-  console.log('[选人组件] 收到 OnInviteUsers 回调:', msg);
-  openUserPickerWindow('invite_users', cbMsg);
+  console.log('[选人组件] 收到 OnInviteUsers 回调');
+  userPicker.openUserPickerWindow('invite_users', raw);
 } else if (func === 'OnInviteMeeting') {
-  console.log('[选人组件] 收到 OnInviteMeeting 回调:', msg);
-  openUserPickerWindow('invite_meeting', cbMsg);
+  console.log('[选人组件] 收到 OnInviteMeeting 回调');
+  userPicker.openUserPickerWindow('invite_meeting', raw);
 } else if (func === 'OnAddUsersResult') {
-  console.log('[选人组件] 收到 OnAddUsersResult 回调, code:', code, 'msg:', msg);
+  console.log('[选人组件] 收到 OnAddUsersResult 回调');
   // 邀请结果直接发送到选人窗口（而非主窗口）
-  if (userPickerWindow && !userPickerWindow.isDestroyed()) {
-    userPickerWindow.webContents.send('add-users-result-callback', cbMsg);
+  const win = userPicker.getUserPickerWindow();
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('add-users-result-callback', raw);
   }
 }
 ```
 
+> **注意：** `main.js` 通过 `require('./sdk_mgmt/user-picker')` 导入 `userPicker` 模块，并在启动时通过 `userPicker.init({ wemeetSdk, getMainWindow })` 注入依赖。SDK 回调通过 `sdkEvents.on('callback', ...)` 事件监听器分发。
+
 ### 3.4 IPC 接口
 
-主进程注册以下 IPC 接口供渲染进程调用：
+主进程注册以下 IPC 接口供渲染进程调用（在 `ipc-handlers.js` 中统一注册）：
 
 ```javascript
-// main.js
+// ipc-handlers.js — register(ipcMain, deps) 中
+
+// deps 通过 main.js 注入：
+// ipcHandlers.register(ipcMain, {
+//   getMeetingWindowInfo: userPicker.getMeetingWindowInfo,
+//   closeUserPickerWindow: userPicker.closeUserPickerWindow,
+//   getValidAccessToken: wemeetSdkModule.getValidAccessToken,
+//   ...
+// });
 
 // 获取部门树
 ipcMain.handle('get-department-tree', async () => {
@@ -316,10 +337,7 @@ ipcMain.handle('get-meeting-window-info', async () => {
 
 // 关闭选人组件窗口
 ipcMain.handle('close-user-picker-window', async () => {
-  if (userPickerWindow && !userPickerWindow.isDestroyed()) {
-    userPickerWindow.close();
-    userPickerWindow = null;
-  }
+  closeUserPickerWindow();
   return { success: true };
 });
 ```
@@ -327,7 +345,7 @@ ipcMain.handle('close-user-picker-window', async () => {
 ### 3.5 Preload 桥接
 
 ```javascript
-// preload.js
+// bootstrap/preload.js
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // ... 其他接口 ...
@@ -424,8 +442,10 @@ async function confirmInviteUsers() {
 
 | 文件 | 变更类型 | 说明 |
 |------|----------|------|
-| `main.js` | 修改 | 新增 `userPickerWindow` 变量；`OnInviteUsers`/`OnInviteMeeting` 改为调用 `openUserPickerWindow()`；`OnAddUsersResult` 转发到选人窗口；新增 `getMeetingWindowInfo()` 和 `openUserPickerWindow()` 函数；新增 `get-meeting-window-info` 和 `close-user-picker-window` IPC |
-| `preload.js` | 修改 | 新增 `getMeetingWindowInfo`、`closeUserPickerWindow`、`onPickerInitData`；移除旧的 `onInviteUsersCallback`/`onInviteMeetingCallback` |
+| `main.js` | 修改 | 导入 `sdk_mgmt/user-picker` 模块并通过 `userPicker.init()` 注入依赖；SDK 回调改为通过 `sdkEvents.on('callback', ...)` 分发，`OnInviteUsers`/`OnInviteMeeting` 调用 `userPicker.openUserPickerWindow()`，`OnAddUsersResult` 通过 `userPicker.getUserPickerWindow()` 转发到选人窗口；IPC 注册委托给 `ipc-handlers.js` |
+| `bootstrap/preload.js` | 修改 | 新增 `getMeetingWindowInfo`、`closeUserPickerWindow`、`onPickerInitData`；移除旧的 `onInviteUsersCallback`/`onInviteMeetingCallback` |
+| `sdk_mgmt/user-picker.js` | **新增** | 选人组件独立窗口管理模块，包含 `getMeetingWindowInfo()`、`openUserPickerWindow()`、`closeUserPickerWindow()`、`getUserPickerWindow()`，通过依赖注入接收 SDK 实例和主窗口引用 |
+| `ipc-handlers.js` | 修改 | 新增 `get-meeting-window-info` 和 `close-user-picker-window` IPC 接口，通过 `deps` 注入 `userPicker` 模块的方法 |
 | `renderer/user-picker.html` | **新增** | 选人组件独立窗口 HTML |
 | `renderer/js/user-picker.js` | 重写 | 移除 overlay 逻辑，改为通过 `onPickerInitData` 接收初始化数据，关闭窗口调用 `closeUserPickerWindow` |
 | `renderer/css/user-picker.css` | 重写 | 移除 overlay 遮罩层样式，改为全屏 flex 容器布局，头部支持 `-webkit-app-region: drag` 拖拽 |
@@ -448,7 +468,7 @@ async function confirmInviteUsers() {
 | `minimizable` | `false` | 禁止最小化（避免用户找不到窗口） |
 | `maximizable` | `false` | 禁止最大化 |
 | `resizable` | `true` | 允许调整大小 |
-| `frame` | `true` | 使用系统原生标题栏（含拖拽和关闭按钮） |
+| `frame` | `false` | 无边框窗口（使用自定义标题栏，支持 `-webkit-app-region: drag` 拖拽） |
 | `contextIsolation` | `true` | 启用上下文隔离（安全） |
 | `nodeIntegration` | `false` | 禁用 Node.js 集成（安全） |
 
@@ -485,7 +505,7 @@ async function confirmInviteUsers() {
 在 SDK 登录成功后，需要调用以下接口启用邀请回调并隐藏 SDK 默认通讯录：
 
 ```javascript
-// main.js
+// sdk_mgmt/wemeet-sdk.js
 
 function enableInviteCallbacks() {
   if (!wemeetSdk || !sdkInitialized) return;
