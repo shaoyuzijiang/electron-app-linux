@@ -1,15 +1,17 @@
 # 腾讯会议 SDK Demo
 
-基于 Electron + 腾讯会议 SDK 的桌面会议应用示例，支持加入会议、快速会议、预定会议、共享屏幕等功能。
+基于 Electron + 腾讯会议 SDK 的桌面会议应用示例，支持加入会议、快速会议、预定会议、共享屏幕、IM 即时通讯等功能。
 
 ## 功能特性
 
 - SSO 登录 / 自动登录
 - 加入会议、快速会议、预定会议、共享屏幕
 - 会议列表展示
+- IM 即时通讯：WebSocket 实时消息、单聊/群聊、文件上传、IndexedDB 本地缓存、输入中状态、已读未读
 - macOS Apple Silicon (arm64) & Intel (x64) 双架构支持
 - Windows x64 支持
 - SDK 日志同时输出到控制台和文件，便于调试；日志时间戳使用本地时区
+- 全进程日志：主进程与渲染进程 `console` 日志统一写入按小时滚动的文件，自动清理 7 天过期日志
 - Windows 控制台自动 UTF-8 编码，无中文乱码
 
 ## 环境要求
@@ -52,7 +54,7 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 │   ├── meeting-polling.js # 会议列表防抖刷新 + 定时轮询
 │   └── back-end-interface.md # 后端接口文档
 ├── utils/
-│   ├── logger.js          # 文件日志模块（按小时滚动，本地时区时间戳）
+│   ├── logger.js          # 文件日志模块（主进程 console 劫持 + 渲染进程 IPC 转发，按小时滚动，本地时区时间戳）
 │   └── token-store.js     # Token 持久化存储
 ├── sdk_mgmt/
 │   ├── wemeet-sdk.js      # SDK 原生模块加载 + 生命周期管理（init/login/logout/回调/状态）
@@ -60,7 +62,13 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ├── renderer/
 │   ├── login.html         # 登录页
 │   ├── index.html         # 会议主页
-│   └── user-picker.html   # 选人组件（独立窗口）
+│   ├── user-picker.html   # 选人组件（独立窗口）
+│   └── js/
+│       ├── renderer-logger.js # 渲染进程日志拦截（console 劫持 + IPC 转发到主进程）
+│       ├── contacts.js    # 通讯录模块
+│       ├── im.js          # IM 即时通讯模块
+│       ├── im-cache.js    # IM 本地缓存模块
+│       └── meeting.js     # 会议列表模块
 ├── wemeet_sdk/
 │   ├── wemeet.cpp         # C++ 原生模块封装（N-API）
 │   ├── jsoncpp.cpp        # JsonCpp 合并源文件
