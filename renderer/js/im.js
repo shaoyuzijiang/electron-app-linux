@@ -199,14 +199,38 @@ function wsSend(data) {
 
 async function loadConversations() {
   try {
+    // 先读取本地缓存，快速渲染
+    const cachedConvs = await window.IMCache.getCachedConversations();
+    if (cachedConvs && cachedConvs.length > 0) {
+      imConversations = cachedConvs;
+      renderConversationList();
+      updateTotalUnreadBadge();
+    }
+
+    // 再从服务器拉取最新数据
     const result = await window.electronAPI.imGetConversations();
     if (result.success && result.data) {
       imConversations = result.data;
       renderConversationList();
       updateTotalUnreadBadge();
+      // 缓存到 IndexedDB
+      await window.IMCache.cacheConversations(result.data);
     }
   } catch (err) {
     console.error('[IM] 获取会话列表失败:', err);
+    // 服务器拉取失败时，尝试用本地缓存兜底
+    if (imConversations.length === 0) {
+      try {
+        const cachedConvs = await window.IMCache.getCachedConversations();
+        if (cachedConvs && cachedConvs.length > 0) {
+          imConversations = cachedConvs;
+          renderConversationList();
+          updateTotalUnreadBadge();
+        }
+      } catch (cacheErr) {
+        console.warn('[IM] 读取本地会话缓存失败:', cacheErr);
+      }
+    }
   }
 }
 
@@ -313,6 +337,10 @@ function updateConversationLastMessage(convId, message) {
       imConversations.unshift(conv);
     }
     renderConversationList();
+    // 同步更新本地缓存
+    if (window.IMCache) {
+      window.IMCache.updateCachedConversation(conv).catch(() => {});
+    }
   }
 }
 
@@ -361,39 +389,139 @@ async function loadMessages(convId, loadMore = false) {
   }
 
   try {
-    const options = { limit: 50 };
-    if (loadMore && imMessagePage[convId] && imMessagePage[convId].oldestCreatedAt) {
-      options.before = imMessagePage[convId].oldestCreatedAt;
-    }
+    if (!loadMore) {
+      // ---- 初始加载：本地缓存优先 ----
+      const cachedMsgs = await window.IMCache.getCachedMessages(convId, 50);
 
-    const result = await window.electronAPI.imGetMessages(convId, options);
-    if (result.success && result.data) {
-      const msgs = result.data;
+      if (cachedMsgs && cachedMsgs.length > 0) {
+        // 1. 立即渲染本地缓存，无需等待网络
+        imMessages[convId] = cachedMsgs;
+        imMessagePage[convId] = {
+          hasMore: true,
+          oldestCreatedAt: cachedMsgs[0].createdAt,
+        };
+        renderMessages(cachedMsgs);
+        scrollMessagesToBottom();
 
-      if (loadMore) {
-        // 向上加载更多
-        const prevScrollHeight = container.scrollHeight;
-        imMessages[convId] = [...msgs, ...(imMessages[convId] || [])];
+        // 2. 增量同步：从服务器拉取本地最新消息之后的新消息
+        const latestCached = cachedMsgs[cachedMsgs.length - 1].createdAt;
+        try {
+          const incResult = await window.electronAPI.imGetMessages(convId, {
+            after: latestCached,
+            limit: 50,
+          });
+          if (incResult.success && incResult.data && incResult.data.length > 0) {
+            const newMsgs = incResult.data;
+            await window.IMCache.cacheMessages(newMsgs);
+            imMessages[convId] = [...cachedMsgs, ...newMsgs];
+            renderMessages(imMessages[convId]);
+            scrollMessagesToBottom();
+          }
+        } catch (incErr) {
+          console.warn('[IM] 增量同步失败，使用本地缓存:', incErr);
+        }
+
+        // 更新分页状态
+        const syncState = await window.IMCache.getSyncState(convId);
+        const cachedCount = await window.IMCache.getCachedMessageCount(convId);
+        const localOldest = await window.IMCache.getOldestCachedCreatedAt(convId);
+        imMessagePage[convId].oldestCreatedAt = localOldest || cachedMsgs[0].createdAt;
+        // 本地有更多消息 或 远程可能还有更多
+        imMessagePage[convId].hasMore =
+          cachedCount > imMessages[convId].length || !(syncState && syncState.noMoreRemote);
         renderMessages(imMessages[convId]);
-        // 保持滚动位置
-        container.scrollTop = container.scrollHeight - prevScrollHeight;
-      } else {
+        scrollMessagesToBottom();
+        return;
+      }
+
+      // 3. 本地无缓存，从服务器全量拉取
+      const result = await window.electronAPI.imGetMessages(convId, { limit: 50 });
+      if (result.success && result.data) {
+        const msgs = result.data;
+        await window.IMCache.cacheMessages(msgs);
         imMessages[convId] = msgs;
         renderMessages(msgs);
         scrollMessagesToBottom();
+
+        if (msgs.length > 0) {
+          const hasMore = msgs.length >= 50;
+          imMessagePage[convId] = {
+            hasMore,
+            oldestCreatedAt: msgs[0].createdAt,
+          };
+          await window.IMCache.setSyncState(convId, {
+            noMoreRemote: !hasMore,
+            oldestLocalCreatedAt: msgs[0].createdAt,
+          });
+        }
+      }
+    } else {
+      // ---- 加载更多：本地缓存优先 ----
+      const oldestCurrent = imMessagePage[convId] && imMessagePage[convId].oldestCreatedAt;
+      if (!oldestCurrent) return;
+
+      // 尝试从本地缓存读取更早的消息
+      const olderMsgs = await window.IMCache.getOlderCachedMessages(convId, oldestCurrent, 50);
+
+      if (olderMsgs && olderMsgs.length > 0) {
+        const prevScrollHeight = container.scrollHeight;
+        imMessages[convId] = [...olderMsgs, ...(imMessages[convId] || [])];
+        renderMessages(imMessages[convId]);
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
+
+        // 更新分页状态
+        const localOldest = await window.IMCache.getOldestCachedCreatedAt(convId);
+        imMessagePage[convId].oldestCreatedAt = localOldest || olderMsgs[0].createdAt;
+        const syncState = await window.IMCache.getSyncState(convId);
+        const cachedCount = await window.IMCache.getCachedMessageCount(convId);
+        imMessagePage[convId].hasMore =
+          cachedCount > imMessages[convId].length || (syncState && !syncState.noMoreRemote);
+        renderMessages(imMessages[convId]);
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
+        return;
       }
 
-      // 更新分页状态
-      if (msgs.length > 0) {
+      // 本地没有更早的消息，检查服务器是否还有更多
+      const syncState = await window.IMCache.getSyncState(convId);
+      if (syncState && syncState.noMoreRemote) {
+        imMessagePage[convId].hasMore = false;
+        renderMessages(imMessages[convId]);
+        return;
+      }
+
+      // 从服务器拉取更早的消息
+      const result = await window.electronAPI.imGetMessages(convId, {
+        before: oldestCurrent,
+        limit: 50,
+      });
+      if (result.success && result.data) {
+        const msgs = result.data;
+        if (msgs.length > 0) {
+          await window.IMCache.cacheMessages(msgs);
+          const prevScrollHeight = container.scrollHeight;
+          imMessages[convId] = [...msgs, ...(imMessages[convId] || [])];
+          renderMessages(imMessages[convId]);
+          container.scrollTop = container.scrollHeight - prevScrollHeight;
+        }
+
+        const hasMore = msgs.length >= 50;
         imMessagePage[convId] = {
-          hasMore: msgs.length >= 50,
-          oldestCreatedAt: msgs[0].createdAt,
+          hasMore,
+          oldestCreatedAt: msgs.length > 0 ? msgs[0].createdAt : oldestCurrent,
         };
+        if (!hasMore) {
+          await window.IMCache.setSyncState(convId, {
+            noMoreRemote: true,
+            oldestLocalCreatedAt: imMessagePage[convId].oldestCreatedAt,
+          });
+        }
       }
     }
   } catch (err) {
     console.error('[IM] 加载消息失败:', err);
-    container.innerHTML = `<div class="meeting-empty">加载消息失败</div>`;
+    if (!loadMore) {
+      container.innerHTML = `<div class="meeting-empty">加载消息失败</div>`;
+    }
   }
 }
 
@@ -515,6 +643,12 @@ function addMessageToCache(convId, msg) {
   // 避免重复
   if (!imMessages[convId].find((m) => m.id === msg.id)) {
     imMessages[convId].push(msg);
+  }
+  // 持久化到 IndexedDB
+  if (window.IMCache) {
+    window.IMCache.cacheMessages([msg]).catch((err) => {
+      console.warn('[IM] 缓存消息到 IndexedDB 失败:', err);
+    });
   }
 }
 

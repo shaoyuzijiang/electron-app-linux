@@ -430,40 +430,44 @@
 
 /* 输入区域 */
 .im-input-area {
-  padding: 12px 24px 16px;
+  padding: 10px 20px 14px;
   background: #fff;
   border-top: 1px solid #e8e8e8;
   flex-shrink: 0;
+  box-shadow: 0 -1px 4px rgba(0,0,0,0.04);
 }
 
 .im-input-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .im-input-toolbar .im-tool-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.15s;
 }
 
 .im-input-toolbar .im-tool-btn:hover {
-  background: #f0f0f0;
+  background: #e8e8e8;
+  transform: scale(1.08);
 }
 
 .im-input-toolbar .im-tool-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: #666;
+  width: 20px;
+  height: 20px;
+  fill: #555;
 }
 
 .im-input-row {
@@ -474,29 +478,36 @@
 
 .im-input-row textarea {
   flex: 1;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border: 1px solid #d9d9d9;
   border-radius: 10px;
   font-size: 14px;
+  line-height: 1.5;
   outline: none;
   resize: none;
   min-height: 40px;
   max-height: 120px;
-  font-family: inherit;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fff;
+  background: #fafafa;
   color: #1e1e1e;
+  box-sizing: border-box;
 }
 
 .im-input-row textarea:focus {
   border-color: #1e6fff;
-  box-shadow: 0 0 0 3px rgba(30, 111, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(30, 111, 255, 0.12);
+  background: #fff;
+}
+
+.im-input-row textarea::placeholder {
+  color: #bbb;
 }
 
 .im-send-btn {
-  padding: 9px 20px;
+  padding: 9px 22px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: #fff;
   background: #1e6fff;
   border: none;
@@ -505,6 +516,8 @@
   transition: background 0.2s, opacity 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
+  height: 40px;
+  line-height: 1;
 }
 
 .im-send-btn:hover {
