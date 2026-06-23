@@ -864,3 +864,196 @@
   max-height: 90%;
   border-radius: 8px;
 }
+
+/* 会议邀请卡片 */
+.im-msg-card {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  background: #fff;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.message-row.self .im-msg-card {
+  background: #1a5fdb;
+}
+
+.im-msg-meeting-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.im-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+}
+
+.im-card-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.message-row.self .im-card-icon path {
+  fill: #b3d4ff;
+}
+
+.im-card-icon path {
+  fill: #1e6fff;
+}
+
+.im-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e1e1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row.self .im-card-title {
+  color: #fff;
+}
+
+.im-card-body {
+  padding: 4px 14px 10px;
+}
+
+.im-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.im-card-label {
+  font-size: 11px;
+  color: #999;
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.message-row.self .im-card-label {
+  color: rgba(255,255,255,0.65);
+}
+
+.im-card-value {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+
+.message-row.self .im-card-value {
+  color: #e8f0fe;
+}
+
+.im-card-code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+
+.im-card-code:hover {
+  text-decoration: underline;
+}
+
+.im-card-status {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #888;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.im-card-status.active {
+  background: #e6f7e6;
+  color: #389e0d;
+}
+
+.message-row.self .im-card-status.active {
+  background: rgba(255,255,255,0.15);
+  color: #73d13d;
+}
+
+.im-card-action {
+  margin: 4px 10px 10px;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e6fff;
+  background: transparent;
+  border-top: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border-radius: 0 0 10px 10px;
+  user-select: none;
+}
+
+.im-card-action:hover {
+  background: #f0f6ff;
+}
+
+.message-row.self .im-card-action {
+  color: #b3d4ff;
+  border-top-color: rgba(255,255,255,0.12);
+}
+
+.message.row.self .im-card-action:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.im-card-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 通用卡片 */
+.im-msg-generic-card {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.im-card-cover {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 12px 12px 0 0;
+  display: block;
+}
+
+.im-card-desc {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.message-row.self .im-card-desc {
+  color: rgba(255,255,255,0.8);
+}
+
+.im-card-link {
+  display: block;
+  margin: 4px 14px 10px;
+  padding: 6px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #1e6fff;
+  border-top: 1px solid #eee;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 0 0 10px 10px;
+}
+
+.message-row.self .im-card-link {
+  color: #b3d4ff;
+  border-top-color: rgba(255,255,255,0.12);
+}

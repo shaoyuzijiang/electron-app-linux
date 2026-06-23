@@ -65,7 +65,7 @@
 | id | TEXT PRIMARY KEY | 消息ID (UUID) |
 | conversation_id | TEXT | 会话ID |
 | sender_id | TEXT | 发送者用户ID |
-| type | TEXT | `text` \| `image` \| `file` \| `system` |
+| type | TEXT | `text` \| `image` \| `file` \| `card` \| `system` |
 | content | TEXT | 消息内容（文本或JSON） |
 | created_at | TEXT | 发送时间 |
 
@@ -147,9 +147,48 @@ GET /api/user-picker/search?q=<关键词>
 ### 4. 文件/图片发送
 
 ```
-1. POST /api/chat/upload (multipart/form-data) → 返回 { url, filename, size }
+1. POST /api/chat/upload (multipart/form-data, field=file)
+   → 返回 { url, filename, size, mimetype, isImage }
 2. WebSocket 发送 {"action":"send","type":"image|file","content":"{\"url\":\"...\",\"filename\":\"...\",\"size\":12345}"}
+   - type 为 "image"（图片）或 "file"（其他文件），isImage 可用于判断
 ```
+
+### 5. 会议邀请卡片
+
+客户端集成腾讯会议 SDK 后，可在 IM 会话中发送会议邀请卡片消息。
+
+**卡片消息格式（`type: "card"`）：**
+
+```json
+{
+  "title": "快速会议",
+  "description": "121274901",
+  "url": "",
+  "meetingCode": "121274901",
+  "status": "进行中"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| title | 固定为 `"快速会议"` |
+| description | 会议号 |
+| url | 空字符串 |
+| meetingCode | 会议号 |
+| status | 会议状态 |
+
+**发起流程：**
+
+```
+1. 调用 SDK quickMeeting() 发起快速会议
+2. 监听 SDK 回调 OnJoinMeeting（code 为字符串 "0" 表示成功）
+   → 从 param.meeting_code 获取会议号
+3. 调用 GET /api/chat/conversations/:id/members 获取会话成员
+4. 调用 SDK AddUsersWithParam 呼叫会话其他成员入会（排除自己）
+5. WebSocket 发送卡片消息 {"action":"send","type":"card","content":"{...}"}
+```
+
+> SDK 回调中 `code` 字段为**字符串类型** `"0"`（非数字 `0`），判断成功时需用 `String(cb.code) === '0'`。
 
 ## 六、安全设计
 
@@ -159,7 +198,7 @@ GET /api/user-picker/search?q=<关键词>
 4. **SQL 注入防护**：所有查询使用 better-sqlite3 参数绑定
 5. **消息长度限制**：单条消息最大 5000 字符
 6. **速率限制**：WebSocket 消息发送频率限制（10条/秒）
-7. **文件上传限制**：最大 20MB，仅允许图片/文档/压缩包类型
+7. **文件上传限制**：最大 20MB，仅允许图片/文档/压缩包/文本/音视频类型（MIME 白名单校验）
 8. **连接数限制**：单用户最多 5 个 WebSocket 连接
 9. **文件服务安全**：上传文件通过自定义中间件提供静态服务，使用 `path.basename` 防止目录遍历攻击
 
@@ -288,7 +327,7 @@ IM 功能**不维护独立的登录认证**，完全复用 `interface.md` 中已
 7. 心跳保活 — ping/pong 机制，30 秒间隔
 8. 离线消息同步 — 用 `after` 参数增量拉取
 9. 历史消息分页 — 用 `before` 向上翻页，`limit` 默认 50 最大 200
-10. 文件上传 — multipart/form-data、字段名 `file`、MIME 白名单、20MB 限制
-11. 消息内容格式 — text/image/file/system 四种类型的 content 格式
+10. 文件上传 — multipart/form-data、字段名 `file`、MIME 白名单（图片/文档/压缩包/文本/音视频）、20MB 限制
+11. 消息内容格式 — text/image/file/card/system 五种类型的 content 格式，其中 card 包含会议邀请卡片（title 固定"快速会议"、description 为会议号、url 为空）
 12. 速率限制 — WebSocket 每秒 10 条，超限错误消息
 13. 安全约束 — 消息最大 5000 字符、单用户最多 5 个连接、权限校验规则

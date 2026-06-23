@@ -197,7 +197,7 @@ GET /api/auth/profile
   conversationId: string;  // 会话ID
   senderId: string;        // 发送者用户ID（系统消息为 "system"）
   senderName: string;      // 发送者用户名（系统消息为 "System"）
-  type: string;            // "text" | "image" | "file" | "system"
+  type: string;            // "text" | "image" | "file" | "card" | "system"
   content: string;         // 消息内容
   createdAt: string;       // 发送时间 "2025-06-23 14:30:00"
 }
@@ -210,7 +210,19 @@ GET /api/auth/profile
 | `text` | 纯文本字符串 | `"你好"` |
 | `image` | JSON 字符串 | `{"url":"/uploads/123_abc.jpg","filename":"photo.jpg","size":102400}` |
 | `file` | JSON 字符串 | `{"url":"/uploads/456_def.pdf","filename":"doc.pdf","size":2048000}` |
+| `card` | JSON 字符串 | `{"title":"快速会议","description":"121274901","url":"","meetingCode":"121274901","status":"进行中"}` |
 | `system` | JSON 字符串 | `{"action":"conversation_created","conversationId":"xxx","conversationName":"群聊1"}` |
+
+**卡片消息（`card`）content 字段说明：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | string | 是 | 卡片标题（≤200字符），快速会议固定为 `"快速会议"` |
+| description | string | 否 | 卡片描述（≤1000字符），会议邀请卡片为会议号 |
+| url | string | 否 | 卡片链接 URL，会议邀请卡片为空字符串 |
+| imageUrl | string | 否 | 卡片封面图片 URL（通常为 `/uploads/xxx.jpg`） |
+| meetingCode | string | 否 | 会议号（仅会议邀请卡片使用） |
+| status | string | 否 | 会议状态，如 `"进行中"`（仅会议邀请卡片使用） |
 
 ### 4.2 ConversationListItem 会话列表项
 
@@ -491,7 +503,7 @@ POST /api/chat/conversations/:id/messages
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| type | string | 否 | 默认 `"text"`，可选 `"text"` / `"image"` / `"file"` |
+| type | string | 否 | 默认 `"text"`，可选 `"text"` / `"image"` / `"file"` / `"card"` |
 | content | string | 是 | 消息内容（纯文本或 JSON 字符串） |
 
 **响应：**
@@ -802,7 +814,7 @@ ws://<host>:<port>/ws/chat?token=<accessToken>
 |------|------|------|------|
 | action | string | 是 | 固定 `"send"` |
 | conversationId | string | 是 | 目标会话ID |
-| type | string | 否 | 默认 `"text"`，可选 `"text"` / `"image"` / `"file"` |
+| type | string | 否 | 默认 `"text"`，可选 `"text"` / `"image"` / `"file"` / `"card"` |
 | content | string | 是 | 消息内容（纯文本或 JSON 字符串，最大 5000 字符） |
 
 > 消息保存后，服务端会向会话所有在线成员（**包括发送者自己**，用于多端同步）推送 `message` 事件。
@@ -1014,6 +1026,19 @@ WebSocket 连接建立后，服务端立即发送：
      "content": "{\"url\":\"/uploads/xxx.jpg\",\"filename\":\"photo.jpg\",\"size\":102400}"
    }
 ```
+
+**卡片消息 — 会议邀请（WebSocket）：**
+
+```json
+{
+  "action": "send",
+  "conversationId": "conv-uuid-1",
+  "type": "card",
+  "content": "{\"title\":\"快速会议\",\"description\":\"121274901\",\"url\":\"\",\"meetingCode\":\"121274901\",\"status\":\"进行中\"}"
+}
+```
+
+> 会议邀请卡片由客户端集成腾讯会议 SDK 生成。流程：调用 SDK `quickMeeting` 发起快速会议 → 监听 `OnJoinMeeting` 回调获取 `meeting_code`（回调 `code` 为字符串 `"0"` 表示成功）→ 调用 SDK `AddUsersWithParam` 呼叫会话其他成员入会 → 发送卡片消息。卡片 `title` 固定为 `"快速会议"`，`description` 为会议号，`url` 为空。
 
 ### 8.5 离线消息同步
 

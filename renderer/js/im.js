@@ -288,6 +288,14 @@ function formatLastMessagePreview(lastMessage) {
       return '[图片]';
     case 'file':
       return '[文件]';
+    case 'card':
+      try {
+        const cardData = typeof lastMessage.content === 'string' ? JSON.parse(lastMessage.content) : lastMessage.content;
+        if (cardData.meetingCode) return '[会议邀请]';
+        return '[卡片]';
+      } catch {
+        return '[卡片]';
+      }
     case 'system':
       return '[系统消息]';
     default:
@@ -601,6 +609,27 @@ function renderMessageHTML(msg) {
       break;
     }
 
+    case 'card': {
+      try {
+        const cardData = typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content;
+        if (cardData.meetingCode) {
+          contentHTML = renderMeetingCardBubble(cardData);
+        } else if (cardData.title) {
+          contentHTML = `<div class="im-msg-card im-msg-generic-card">
+            ${cardData.imageUrl ? `<img class="im-card-cover" src="${escapeHtml(cardData.imageUrl)}" />` : ''}
+            <div class="im-card-header"><span class="im-card-title">${escapeHtml(cardData.title)}</span></div>
+            ${cardData.description ? `<div class="im-card-body"><div class="im-card-desc">${escapeHtml(cardData.description)}</div></div>` : ''}
+            ${cardData.url ? `<a class="im-card-link" href="${escapeHtml(cardData.url)}" target="_blank">查看详情</a>` : ''}
+          </div>`;
+        } else {
+          contentHTML = `<div class="im-msg-bubble">[卡片]</div>`;
+        }
+      } catch {
+        contentHTML = `<div class="im-msg-bubble">[卡片解析失败]</div>`;
+      }
+      break;
+    }
+
     default:
       contentHTML = `<div class="im-msg-bubble">${escapeHtml(msg.content || '')}</div>`;
   }
@@ -616,6 +645,34 @@ function renderMessageHTML(msg) {
         ${contentHTML}
         <div class="im-msg-time">${escapeHtml(time)}</div>
       </div>
+    </div>
+  `;
+}
+
+function renderMeetingCardBubble(cardData) {
+  const subject = escapeHtml(cardData.title || '快速会议');
+  const meetingCode = escapeHtml(cardData.meetingCode || '');
+  const startTime = escapeHtml(cardData.startTime || '');
+  const status = escapeHtml(cardData.status || '');
+
+  return `
+    <div class="im-msg-card im-msg-meeting-card" data-meeting-code="${meetingCode}">
+      <div class="im-card-header">
+        <svg viewBox="0 0 24 24" class="im-card-icon"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+        <span class="im-card-title">${subject}</span>
+      </div>
+      <div class="im-card-body">
+        <div class="im-card-row">
+          <span class="im-card-label">会议号</span>
+          <span class="im-card-value im-card-code">${meetingCode}</span>
+        </div>
+        ${startTime ? `<div class="im-card-row">
+          <span class="im-card-label">时间</span>
+          <span class="im-card-value">${startTime}</span>
+        </div>` : ''}
+        ${status ? `<div class="im-card-status ${status === '进行中' ? 'active' : ''}">${status}</div>` : ''}
+      </div>
+      <div class="im-card-action" data-meeting-code="${meetingCode}">加入会议</div>
     </div>
   `;
 }
@@ -870,6 +927,105 @@ async function handleFileUpload(file, isImage) {
     }
   } catch (err) {
     alert('上传失败: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---------- 发起会议并发送邀请卡片 ----------
+
+async function sendMeetingInvite() {
+  if (!imActiveConversationId) {
+    alert('请先选择一个会话');
+    return;
+  }
+
+  const btn = document.getElementById('imMeetingBtn');
+  btn.disabled = true;
+
+  try {
+    // 1. 调用腾讯会议 SDK 快速会议接口
+    const quickResult = await window.electronAPI.quickMeeting();
+    if (!quickResult.success) {
+      alert(quickResult.message || '发起快速会议失败');
+      return;
+    }
+
+    // 2. 等待 OnJoinMeeting 回调获取 meeting_code
+    const meetingCode = await new Promise((resolve) => {
+      let done = false;
+
+      const timer = setTimeout(() => {
+        done = true;
+        resolve(null);
+      }, 30000);
+
+      function handler(rawMsg) {
+        if (done) return;
+        try {
+          const cb = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
+          // SDK 回调中 code 是字符串 "0" 表示成功
+          if (cb.func === 'OnJoinMeeting' && String(cb.code) === '0') {
+            done = true;
+            clearTimeout(timer);
+            const code = (cb.param && cb.param.meeting_code) || cb.meeting_code || cb.meetingCode || '';
+            resolve(code);
+          }
+        } catch {}
+      }
+
+      window.electronAPI.onSdkCallback(handler);
+    });
+
+    if (!meetingCode) {
+      alert('已发起快速会议，但未收到入会成功回调，无法获取会议号');
+      return;
+    }
+
+    // 3. 获取会话成员，调用 SDK AddUsersWithParam 呼叫对方入会
+    try {
+      const membersResult = await window.electronAPI.imGetMembers(imActiveConversationId);
+      if (membersResult.success && membersResult.data) {
+        const otherUserIds = membersResult.data
+          .filter((m) => m.userId !== imCurrentUserId)
+          .map((m) => m.userId);
+        if (otherUserIds.length > 0) {
+          const jsonParam = JSON.stringify({
+            users: otherUserIds,
+            user_type: 3, // 会中邀请入会
+          });
+          await window.electronAPI.addUsersWithParam(jsonParam);
+        }
+      }
+    } catch (e) {
+      console.warn('[IM] AddUsersWithParam 调用失败:', e.message);
+    }
+
+    // 4. 构造并发送会议邀请卡片消息
+    const cardContent = JSON.stringify({
+      title: '快速会议',
+      description: meetingCode,
+      url: '',
+      meetingCode: meetingCode,
+      status: '进行中',
+    });
+
+    const convId = imActiveConversationId;
+    const sent = wsSend({
+      action: 'send',
+      conversationId: convId,
+      type: 'card',
+      content: cardContent,
+    });
+
+    if (!sent) {
+      const httpResult = await window.electronAPI.imSendMessage(convId, 'card', cardContent);
+      if (!httpResult.success) {
+        alert(httpResult.message || '发送会议邀请失败');
+      }
+    }
+  } catch (err) {
+    alert('发起会议失败: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -1223,6 +1379,9 @@ function bindIMEvents() {
     e.target.value = '';
   });
 
+  // 发起会议
+  document.getElementById('imMeetingBtn').addEventListener('click', sendMeetingInvite);
+
   // 加载更多消息
   document.getElementById('imMessagesContainer').addEventListener('click', (e) => {
     if (e.target.id === 'imLoadMoreBtn') {
@@ -1237,7 +1396,7 @@ function bindIMEvents() {
   });
   observer.observe(messagesContainer, { childList: true, subtree: true });
 
-  // 图片点击预览 + 文件点击下载
+  // 图片点击预览 + 文件点击下载 + 会议卡片加入会议
   messagesContainer.addEventListener('click', async (e) => {
     const img = e.target.closest('.im-msg-image');
     if (img && img.src) {
@@ -1258,6 +1417,35 @@ function bindIMEvents() {
           alert(result.message || '文件打开失败');
         }
       }
+    }
+
+    // 会议邀请卡片 - 加入会议按钮
+    const joinBtn = e.target.closest('.im-card-action');
+    if (joinBtn) {
+      const code = joinBtn.getAttribute('data-meeting-code');
+      if (!code) return;
+      joinBtn.textContent = '加入中...';
+      joinBtn.disabled = true;
+      try {
+        const result = await window.electronAPI.joinMeeting(code, '', '');
+        if (!result.success) alert(result.message || '入会失败');
+      } catch (err) {
+        alert('入会失败: ' + err.message);
+      } finally {
+        joinBtn.textContent = '加入会议';
+        joinBtn.disabled = false;
+      }
+    }
+
+    // 会议邀请卡片 - 会议号点击复制
+    const codeEl = e.target.closest('.im-card-code');
+    if (codeEl) {
+      const code = codeEl.textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const original = codeEl.textContent;
+        codeEl.textContent = '已复制';
+        setTimeout(() => { codeEl.textContent = original; }, 1200);
+      });
     }
   });
 
