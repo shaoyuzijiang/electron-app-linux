@@ -782,6 +782,47 @@ async function handleFileUpload(file, isImage) {
     return;
   }
 
+  // file.type 在 contextIsolation 下可能为空，根据扩展名推断 MIME 类型
+  const extMimeMap = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+    '.pdf': 'application/pdf', '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.zip': 'application/zip', '.rar': 'application/x-rar-compressed',
+    '.7z': 'application/x-7z-compressed',
+    '.txt': 'text/plain', '.csv': 'text/csv',
+    '.mp4': 'video/mp4', '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4',
+    '.json': 'application/json',
+  };
+  let mimetype = file.type;
+  if (!mimetype) {
+    const ext = file.name.toLowerCase().match(/\.[^.]+$/);
+    mimetype = ext ? (extMimeMap[ext] || 'application/octet-stream') : 'application/octet-stream';
+  }
+
+  // 服务端允许的 MIME 白名单
+  const ALLOWED_MIMES = new Set([
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed',
+    'text/plain', 'text/csv', 'application/json',
+    'video/mp4', 'video/quicktime', 'audio/mpeg', 'audio/mp4',
+  ]);
+  if (!ALLOWED_MIMES.has(mimetype)) {
+    alert(`不支持的文件类型: ${mimetype}\n支持的类型: 图片、PDF、Word/Excel/PPT、压缩包(zip/rar/7z)、文本/CSV/JSON、MP4/MP3`);
+    return;
+  }
+
   const convId = imActiveConversationId;
   const btn = isImage ? document.getElementById('imImageBtn') : document.getElementById('imFileBtn');
   btn.disabled = true;
@@ -800,7 +841,7 @@ async function handleFileUpload(file, isImage) {
       });
     }
 
-    const result = await window.electronAPI.imUploadFile(file.path || null, file.name, file.type, fileArrayBuffer || null);
+    const result = await window.electronAPI.imUploadFile(file.path || null, file.name, mimetype, fileArrayBuffer || null);
 
     if (result.success && result.data) {
       const uploadData = result.data;
