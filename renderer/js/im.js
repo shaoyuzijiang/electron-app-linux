@@ -674,7 +674,7 @@ function renderChatHeader(conv) {
 
   // 显示聊天内容区
   document.getElementById('imChatEmpty').style.display = 'none';
-  document.getElementById('imChatContent').style.display = '';
+  document.getElementById('imChatContent').style.display = 'flex';
 
   // 绑定成员列表按钮
   const membersBtn = document.getElementById('imShowMembersBtn');
@@ -722,7 +722,6 @@ async function sendMessage() {
   }
 
   input.value = '';
-  input.style.height = 'auto';
   updateSendButton();
 
   // 停止输入中状态
@@ -1104,9 +1103,6 @@ function bindIMEvents() {
   messageInput.addEventListener('input', () => {
     updateSendButton();
     handleTyping();
-    // 自动调整高度
-    messageInput.style.height = 'auto';
-    messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
   });
 
   messageInput.addEventListener('keydown', (e) => {
@@ -1118,6 +1114,47 @@ function bindIMEvents() {
 
   // 发送按钮
   document.getElementById('imSendBtn').addEventListener('click', sendMessage);
+
+  // 输入区域拖拽调整高度
+  const inputArea = document.querySelector('.im-input-area');
+  let isResizing = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  if (inputArea) {
+    inputArea.addEventListener('mousedown', (e) => {
+      // 只响应顶部拖拽区域 (y 偏移小于 12px)
+      const rect = inputArea.getBoundingClientRect();
+      if (e.clientY - rect.top > 12) return;
+      
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = inputArea.offsetHeight;
+      inputArea.classList.add('resizing');
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const delta = startY - e.clientY; // 向上拖为正（增大）
+      const minHeight = 120;  // 最小高度：完整显示工具栏+一行文本+发送按钮
+      const maxHeight = 300;  // 最大高度
+      const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + delta));
+      inputArea.style.height = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      inputArea.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // 滚动消息到底部
+      scrollMessagesToBottom();
+    });
+  }
 
   // 图片上传
   document.getElementById('imImageBtn').addEventListener('click', () => {
