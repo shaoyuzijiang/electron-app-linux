@@ -787,9 +787,20 @@ async function handleFileUpload(file, isImage) {
   btn.disabled = true;
 
   try {
-    // 在 Electron 中，file 对象有 path 属性
-    const filePath = file.path || file.name;
-    const result = await window.electronAPI.imUploadFile(filePath, file.name, file.type);
+    // 用 FileReader 在渲染进程读取文件内容，避免依赖 file.path（contextIsolation 下可能不可用）
+    let fileArrayBuffer;
+    if (file.path) {
+      // 如果 path 可用，优先让主进程读取（性能更好）
+    } else {
+      const reader = new FileReader();
+      fileArrayBuffer = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    const result = await window.electronAPI.imUploadFile(file.path || null, file.name, file.type, fileArrayBuffer || null);
 
     if (result.success && result.data) {
       const uploadData = result.data;

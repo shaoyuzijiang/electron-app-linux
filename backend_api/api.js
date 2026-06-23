@@ -489,29 +489,39 @@ async function getOnlineUsers(accessToken) {
  * @returns {UploadFile}
  */
 async function uploadFile(accessToken, fileBuffer, filename, mimetype) {
-  const FormData = require('form-data');
-  const form = new FormData();
-  form.append('file', fileBuffer, { filename, contentType: mimetype });
-
-  const headers = form.getHeaders();
-  headers['Authorization'] = `Bearer ${accessToken}`;
+  // 手动构造 multipart/form-data，避免 FormData/Blob 在 Electron 主进程的兼容问题
+  const boundary = '----FormBoundary' + crypto.randomBytes(16).toString('hex');
+  const header = Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `Content-Type: ${mimetype}\r\n\r\n`,
+    'utf8'
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  const body = Buffer.concat([header, fileBuffer, footer]);
 
   const url = `${BASE_URL}/api/chat/upload`;
-  console.log(`[API] >>> POST ${url} (multipart upload: ${filename}, ${mimetype})`);
+  console.log(`[API] >>> POST ${url} (multipart upload: ${filename}, ${mimetype}, size=${fileBuffer.length})`);
 
   let res;
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers,
-      body: form,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+      body,
     });
   } catch (err) {
     throw new Error(`文件上传失败：${err.message}`);
   }
 
   if (!res.ok && res.status !== 400) {
-    throw new Error(`服务器返回 HTTP ${res.status}`);
+    const respText = await res.text().catch(() => '');
+    console.error(`[API] <<< POST ${url} HTTP ${res.status}`, respText);
+    throw new Error(`服务器返回 HTTP ${res.status}${respText ? ': ' + respText.substring(0, 200) : ''}`);
   }
 
   const json = await res.json();

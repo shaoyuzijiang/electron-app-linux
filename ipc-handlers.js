@@ -916,14 +916,27 @@ function register(ipcMain, deps) {
   });
 
   // 上传文件
-  ipcMain.handle('im-upload-file', async (_event, { filePath, filename, mimetype }) => {
+  ipcMain.handle('im-upload-file', async (_event, { filePath, filename, mimetype, fileData }) => {
     try {
       const accessToken = await getValidAccessToken();
-      const fs = require('fs');
-      const fileBuffer = fs.readFileSync(filePath);
+      console.log('[IM-Upload] 开始上传:', { filePath, filename, mimetype, hasFileData: !!fileData, dataSize: fileData?.byteLength || 'N/A', tokenPrefix: accessToken?.substring(0, 20) + '...' });
+
+      let fileBuffer;
+      if (fileData && fileData.byteLength) {
+        // 前端通过 FileReader 读取的数据（ArrayBuffer）
+        fileBuffer = Buffer.from(fileData);
+        console.log('[IM-Upload] 使用前端数据，buffer大小:', fileBuffer.length);
+      } else {
+        // 回退到从磁盘路径读取
+        const fs = require('fs');
+        if (!filePath) throw new Error('未提供文件路径或数据');
+        fileBuffer = fs.readFileSync(filePath);
+        console.log('[IM-Upload] 从磁盘读取文件，buffer大小:', fileBuffer.length);
+      }
       const data = await api.uploadFile(accessToken, fileBuffer, filename, mimetype);
       return { success: true, data };
     } catch (err) {
+      console.error('[IM-Upload] 上传失败:', err.message);
       if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
       return { success: false, message: err.message };
     }

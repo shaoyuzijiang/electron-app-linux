@@ -141,8 +141,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('im-remove-member', { conversationId, userId }),
   imGetUnreadCount: () => ipcRenderer.invoke('im-get-unread-count'),
   imGetOnlineUsers: () => ipcRenderer.invoke('im-get-online-users'),
-  imUploadFile: (filePath, filename, mimetype) =>
-    ipcRenderer.invoke('im-upload-file', { filePath, filename, mimetype }),
+  imUploadFile: (filePath, filename, mimetype, fileData) =>
+    ipcRenderer.invoke('im-upload-file', { filePath, filename, mimetype, fileData }),
   imSearchUsers: (keyword) =>
     ipcRenderer.invoke('im-search-users', { keyword }),
 });
