@@ -99,7 +99,10 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 │   ├── start.js           # 启动前脚本（拷贝 SDK Framework，仅 macOS；Windows 设置控制台 UTF-8 编码）
 │   └── preload.js         # 预加载脚本（IPC 桥接）
 ├── backend_api/
-│   ├── api.js             # 后端 API 请求（RSA+AES 加密）
+│   ├── httpClient.js      # 通用 HTTP 客户端（fetch 封装、RSA+AES 加密、publicKey 缓存）
+│   ├── api.js             # 后端 API 聚合层（auth + user-picker，re-export im/meeting）
+│   ├── im.js              # IM 即时通讯 API（会话、消息、上传、WebSocket）
+│   ├── meeting.js         # 腾讯会议 API（创建会议、会议列表）
 │   ├── meeting-polling.js # 会议列表防抖刷新 + 定时轮询
 │   ├── back-end-interface.md # 后端接口文档（认证/用户/会议 API）
 │   ├── im-interface.md    # IM API 接口文档（REST/WebSocket 协议、数据模型）
