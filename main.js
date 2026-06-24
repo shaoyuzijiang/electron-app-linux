@@ -32,6 +32,12 @@ userPicker.init({
   getMainWindow,
 });
 
+// Refresh token 失效时停止会议轮询
+sdkEvents.on('auth-expired', () => {
+  console.log('[认证失效] Refresh token 已被撤销，停止会议轮询');
+  meetingPolling.stopMeetingListPolling();
+});
+
 // 监听 SDK 回调事件，分发到各模块
 sdkEvents.on('callback', ({ func, success, raw }) => {
   if (func === 'OnLogin' && success) {

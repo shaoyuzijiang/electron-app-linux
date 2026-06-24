@@ -28,6 +28,9 @@ let sdkInitializing = false;
 let sdkLoggingIn = false;
 const MAX_RETRY = 3;
 
+// 刷新令牌锁，防止并发刷新导致 refresh token 被复用
+let refreshPromise = null;
+
 // SDK 事件发射器，供外部模块监听 SDK 回调事件
 const sdkEvents = new EventEmitter();
 
@@ -103,6 +106,7 @@ try {
 
 /**
  * 获取有效的 accessToken，如果已过期则自动刷新
+ * 使用 Promise 锁确保同一时间只有一个刷新请求，避免并发刷新导致 refresh token 被复用
  */
 async function getValidAccessToken() {
   const tokens = tokenStore.getTokens();
@@ -114,9 +118,37 @@ async function getValidAccessToken() {
     return tokens.accessToken;
   }
 
-  const newTokenData = await api.refreshToken(tokens.refreshToken);
-  tokenStore.saveTokens(newTokenData);
-  return newTokenData.accessToken;
+  // 如果已有刷新请求在进行中，复用该 Promise 避免并发刷新
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const newTokenData = await api.refreshToken(tokens.refreshToken);
+      tokenStore.saveTokens(newTokenData);
+      return newTokenData.accessToken;
+    } catch (err) {
+      // Refresh token 失效（被撤销或过期），清除凭据并通知 UI 重新登录
+      console.error('刷新令牌失败:', err.message);
+      tokenStore.clearTokens();
+      tokenStore.clearMeetingTokens();
+
+      // 通知主进程停止轮询并跳转登录页
+      sdkEvents.emit('auth-expired');
+
+      const mainWindow = _getMainWindow ? _getMainWindow() : null;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'login.html'));
+      }
+
+      throw new Error('登录已过期，请重新登录');
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
 /**
