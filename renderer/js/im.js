@@ -181,9 +181,48 @@ function handleWSMessage(msg) {
       loadConversations();
       break;
 
+    case 'message_update': {
+      handleMessageUpdate(msg.data);
+      break;
+    }
+
     case 'error':
       console.error('[IM] WebSocket 错误消息:', msg.message);
       break;
+  }
+}
+
+/**
+ * 处理消息更新事件（如会议结束后卡片自动置灰）
+ * 文档 7.4.9 / 8.5
+ */
+function handleMessageUpdate(data) {
+  if (!data || !data.id || !data.conversationId) return;
+
+  // 1. 更新当前会话的消息列表
+  if (data.conversationId === imActiveConversationId) {
+    const msgs = imMessages[data.conversationId];
+    if (msgs) {
+      const msg = msgs.find((m) => m.id === data.id);
+      if (msg) {
+        msg.content = data.content;
+        renderMessages(msgs);
+      }
+    }
+  }
+
+  // 2. 更新 IndexedDB 缓存（cacheMessages 使用 put，存在则更新）
+  if (window.IMCache) {
+    window.IMCache.cacheMessages([data]).catch((err) => {
+      console.warn('[IM] 更新缓存消息失败:', err);
+    });
+  }
+
+  // 3. 更新会话列表的最后消息预览
+  const conv = imConversations.find((c) => c.id === data.conversationId);
+  if (conv && conv.lastMessage && conv.lastMessage.id === data.id) {
+    conv.lastMessage.content = data.content;
+    renderConversationList();
   }
 }
 
@@ -615,11 +654,15 @@ function renderMessageHTML(msg) {
         if (cardData.meetingCode) {
           contentHTML = renderMeetingCardBubble(cardData);
         } else if (cardData.title) {
-          contentHTML = `<div class="im-msg-card im-msg-generic-card">
+          const isCardDisabled = cardData.disabled === true;
+          const cardDisabledClass = isCardDisabled ? ' disabled' : '';
+          contentHTML = `<div class="im-msg-card im-msg-generic-card${cardDisabledClass}">
             ${cardData.imageUrl ? `<img class="im-card-cover" src="${escapeHtml(cardData.imageUrl)}" />` : ''}
             <div class="im-card-header"><span class="im-card-title">${escapeHtml(cardData.title)}</span></div>
             ${cardData.description ? `<div class="im-card-body"><div class="im-card-desc">${escapeHtml(cardData.description)}</div></div>` : ''}
-            ${cardData.url ? `<a class="im-card-link" href="${escapeHtml(cardData.url)}" target="_blank">查看详情</a>` : ''}
+            ${isCardDisabled
+              ? `<div class="im-card-link disabled">已失效</div>`
+              : (cardData.url ? `<a class="im-card-link" href="${escapeHtml(cardData.url)}" target="_blank">查看详情</a>` : '')}
           </div>`;
         } else {
           contentHTML = `<div class="im-msg-bubble">[卡片]</div>`;
@@ -650,13 +693,15 @@ function renderMessageHTML(msg) {
 }
 
 function renderMeetingCardBubble(cardData) {
+  const isDisabled = cardData.disabled === true;
   const subject = escapeHtml(cardData.title || '快速会议');
   const meetingCode = escapeHtml(cardData.meetingCode || '');
   const startTime = escapeHtml(cardData.startTime || '');
   const status = escapeHtml(cardData.status || '');
+  const disabledClass = isDisabled ? ' disabled' : '';
 
   return `
-    <div class="im-msg-card im-msg-meeting-card" data-meeting-code="${meetingCode}">
+    <div class="im-msg-card im-msg-meeting-card${disabledClass}" data-meeting-code="${meetingCode}">
       <div class="im-card-header">
         <svg viewBox="0 0 24 24" class="im-card-icon"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
         <span class="im-card-title">${subject}</span>
@@ -672,7 +717,9 @@ function renderMeetingCardBubble(cardData) {
         </div>` : ''}
         ${status ? `<div class="im-card-status ${status === '进行中' ? 'active' : ''}">${status}</div>` : ''}
       </div>
-      <div class="im-card-action" data-meeting-code="${meetingCode}">加入会议</div>
+      ${isDisabled
+        ? `<div class="im-card-action disabled">已失效</div>`
+        : `<div class="im-card-action" data-meeting-code="${meetingCode}">加入会议</div>`}
     </div>
   `;
 }

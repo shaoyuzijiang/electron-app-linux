@@ -85,6 +85,7 @@
 | action | 说明 | 字段 |
 |--------|------|------|
 | `message` | 新消息推送 | data(消息对象) |
+| `message_update` | 消息更新推送（如卡片置灰） | data(更新后的消息对象) |
 | `read` | 已读回执 | conversationId, userId |
 | `typing` | 对方输入中 | conversationId, userId, username |
 | `ping` | 心跳 | - |
@@ -190,6 +191,81 @@ GET /api/user-picker/search?q=<关键词>
 
 > SDK 回调中 `code` 字段为**字符串类型** `"0"`（非数字 `0`），判断成功时需用 `String(cb.code) === '0'`。
 
+### 6. 会议卡片自动置灰（Webhook）
+
+会议结束后，腾讯会议开放平台通过回调通知服务端，服务端自动置灰对应的会议邀请卡片消息。
+
+**工作流程：**
+
+```
+腾讯会议后台                     服务端                         客户端
+    │                               │                              │
+    │  GET /api/wemeet/webhook      │                              │
+    │  ?check_str=<encrypted>       │                              │
+    │  Header: signature            │                              │
+    │ ─────────────────────────────>│ 1. SHA1 签名验证             │
+    │                               │ 2. AES-256-CBC 解密 check_str│
+    │  返回解密明文                 │                              │
+    │ <─────────────────────────────│                              │
+    │                               │                              │
+    │  POST /api/wemeet/webhook     │                              │
+    │  {"data": "encrypted"}       │                              │
+    │  Header: signature            │                              │
+    │ ─────────────────────────────>│ 1. SHA1 签名验证             │
+    │                               │ 2. AES-256-CBC 解密 payload   │
+    │                               │ 3. 查找含该 meetingCode 的卡片 │
+    │                               │ 4. 更新 content: disabled=true│
+    │                               │ 5. WebSocket 推送 message_update
+    │                               │ ────────────────────────────>│ 卡片变灰
+    │  "successfully received       │                              │
+    │   callback"                   │                              │
+    │ <─────────────────────────────│                              │
+```
+
+**前置条件：**
+
+1. 在 `.env` 中配置 `WEMEET_WEBHOOK_TOKEN`（在腾讯会议开放平台配置事件订阅时生成）
+2. 在 `.env` 中配置 `WEMEET_WEBHOOK_ENCRYPT_KEY`（EncodingAESKey，43 位字符串，在开放平台配置事件订阅时生成；不配置则不启用加密）
+3. 在腾讯会议开放平台「事件订阅」页面：
+   - 回调 URL 填写：`https://your-domain.com/api/wemeet/webhook`
+   - 设置 Token（与 `.env` 中一致）
+   - 设置 EncodingAESKey（与 `.env` 中一致，启用消息加密）
+   - 订阅 `meeting.end` 事件
+   - 配置时腾讯会议发送 GET 请求验证 URL 连通性（`check_str` 参数），服务端自动处理
+
+**置灰后卡片内容：**
+
+```json
+{
+  "title": "会议已结束",
+  "description": "121274901",
+  "url": "",
+  "meetingCode": "121274901",
+  "status": "已结束",
+  "disabled": true
+}
+```
+
+**客户端处理 `message_update` 事件：**
+
+客户端收到 `message_update` 事件后，需执行以下步骤：
+
+```
+1. 从 data.id 和 data.conversationId 获取更新信息
+2. 如果当前正在查看该会话（currentConvId === data.conversationId）：
+   a. 在本地消息列表中按 id 查找对应消息
+   b. 用 data.content 替换消息的 content 字段
+   c. 重新渲染消息列表（卡片会根据 disabled: true 显示灰色不可点击样式）
+3. 更新会话列表预览：
+   a. 在会话列表中找到 data.conversationId 对应的会话
+   b. 如果该会话的 lastMessage.id === data.id，更新 lastMessage.content
+   c. 刷新会话列表显示
+4. 离线补偿：用户离线期间错过的 message_update 无需特殊处理
+   → 下次加载历史消息时，REST API 返回的是数据库中最新的 content（已含 disabled: true）
+```
+
+> `disabled: true` 使卡片以灰色不可点击状态显示：标题变为"会议已结束"，状态显示"已结束"，链接不可点击并显示"已失效"。
+
 ## 六、安全设计
 
 1. **WebSocket 认证**：连接时验证 JWT Access Token，过期断开
@@ -215,6 +291,10 @@ WS_MAX_CONNECTIONS_PER_USER=5
 CHAT_MESSAGE_MAX_LENGTH=5000
 # 文件上传最大大小（MB），默认 20
 CHAT_UPLOAD_MAX_SIZE=20
+# 腾讯会议 Webhook 签名验证 Token（在开放平台配置事件订阅时生成）
+WEMEET_WEBHOOK_TOKEN=
+# 腾讯会议 Webhook 加密密钥 EncodingAESKey（43位字符串，在开放平台配置事件订阅时生成；不配置则不启用加密）
+WEMEET_WEBHOOK_ENCRYPT_KEY=
 ```
 
 ### 持久化
@@ -322,7 +402,7 @@ IM 功能**不维护独立的登录认证**，完全复用 `interface.md` 中已
 2. 认证完整流程 — 获取公钥 → RSA+AES 混合加密登录 → Token 刷新 → Token 过期重连
 3. 5 个数据模型 — Message、ConversationListItem、ConversationDetail、User、UploadFile
 4. 13 个 REST API — 每个都有请求体示例、字段说明、响应 JSON、错误码表
-5. WebSocket 协议 — 4 种客户端消息 + 8 种服务端事件，完整 JSON 示例
+5. WebSocket 协议 — 4 种客户端消息 + 9 种服务端事件（含 `message_update` 消息更新），完整 JSON 示例
 6. WebSocket 关闭码 — 4001（认证失败）、4002（连接超限）
 7. 心跳保活 — ping/pong 机制，30 秒间隔
 8. 离线消息同步 — 用 `after` 参数增量拉取

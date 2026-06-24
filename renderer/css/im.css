@@ -1057,3 +1057,24 @@
   color: #b3d4ff;
   border-top-color: rgba(255,255,255,0.12);
 }
+
+/* 卡片置灰状态（disabled: true，如会议已结束） */
+.im-msg-card.disabled {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+}
+
+.im-msg-card.disabled .im-card-action,
+.im-msg-card.disabled .im-card-link {
+  color: #999;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.im-msg-card.disabled .im-card-code {
+  cursor: default;
+}
+
+.im-msg-card.disabled .im-card-code:hover {
+  text-decoration: none;
+}

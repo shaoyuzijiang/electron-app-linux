@@ -210,7 +210,7 @@ GET /api/auth/profile
 | `text` | 纯文本字符串 | `"你好"` |
 | `image` | JSON 字符串 | `{"url":"/uploads/123_abc.jpg","filename":"photo.jpg","size":102400}` |
 | `file` | JSON 字符串 | `{"url":"/uploads/456_def.pdf","filename":"doc.pdf","size":2048000}` |
-| `card` | JSON 字符串 | `{"title":"快速会议","description":"121274901","url":"","meetingCode":"121274901","status":"进行中"}` |
+| `card` | JSON 字符串 | `{"title":"快速会议","description":"121274901","url":"","meetingCode":"121274901","status":"进行中"}` 或 `{"title":"会议已结束","description":"该会议已结束","url":"https://...","disabled":true}` |
 | `system` | JSON 字符串 | `{"action":"conversation_created","conversationId":"xxx","conversationName":"群聊1"}` |
 
 **卡片消息（`card`）content 字段说明：**
@@ -223,6 +223,7 @@ GET /api/auth/profile
 | imageUrl | string | 否 | 卡片封面图片 URL（通常为 `/uploads/xxx.jpg`） |
 | meetingCode | string | 否 | 会议号（仅会议邀请卡片使用） |
 | status | string | 否 | 会议状态，如 `"进行中"`（仅会议邀请卡片使用） |
+| disabled | boolean | 否 | 是否置灰失效（默认 `false`）。为 `true` 时卡片以灰色不可点击状态显示，链接不可点击，显示"已失效" |
 
 ### 4.2 ConversationListItem 会话列表项
 
@@ -967,7 +968,38 @@ WebSocket 连接建立后，服务端立即发送：
 | Message rate limit exceeded | 发送频率超限（10条/秒） |
 | Failed to save message | 消息保存失败 |
 
----
+#### 7.4.9 消息更新 `message_update`
+
+当服务端更新已有消息内容时（如腾讯会议结束后通过 Webhook 自动置灰会议卡片），所有在线成员收到：
+
+```json
+{
+  "action": "message_update",
+  "data": {
+    "id": "msg-uuid-1",
+    "conversationId": "conv-uuid-1",
+    "senderId": "system",
+    "senderName": "System",
+    "type": "card",
+    "content": "{\"title\":\"会议已结束\",\"description\":\"121274901\",\"url\":\"\",\"meetingCode\":\"121274901\",\"status\":\"已结束\",\"disabled\":true}",
+    "createdAt": "2025-06-23 14:00:00",
+    "updatedAt": "2025-06-23 15:30:00"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 被更新的消息ID |
+| conversationId | string | 会话ID |
+| senderId | string | 原始发送者ID |
+| senderName | string | 原始发送者名称 |
+| type | string | 消息类型（通常为 `"card"`） |
+| content | string | 更新后的消息内容（JSON 字符串） |
+| createdAt | string | 原始创建时间 |
+| updatedAt | string | 更新时间（ISO 8601） |
+
+> 客户端收到此事件后，应根据 `id` 在本地消息列表中找到对应消息，用新的 `content` 替换，并触发 UI 重新渲染。对于卡片消息，`disabled: true` 会使卡片以灰色不可点击状态显示。
 
 ## 八、客户端开发指南
 
@@ -1040,7 +1072,79 @@ WebSocket 连接建立后，服务端立即发送：
 
 > 会议邀请卡片由客户端集成腾讯会议 SDK 生成。流程：调用 SDK `quickMeeting` 发起快速会议 → 监听 `OnJoinMeeting` 回调获取 `meeting_code`（回调 `code` 为字符串 `"0"` 表示成功）→ 调用 SDK `AddUsersWithParam` 呼叫会话其他成员入会 → 发送卡片消息。卡片 `title` 固定为 `"快速会议"`，`description` 为会议号，`url` 为空。
 
-### 8.5 离线消息同步
+**卡片消息 — 置灰失效（WebSocket）：**
+
+```json
+{
+  "action": "send",
+  "conversationId": "conv-uuid-1",
+  "type": "card",
+  "content": "{\"title\":\"会议已结束\",\"description\":\"该会议已结束\",\"url\":\"https://meeting.example.com/123\",\"disabled\":true}"
+}
+```
+
+> 设置 `disabled: true` 后，卡片以灰色不可点击状态显示，链接不可点击，显示"已失效"文字。适用于活动已过期、会议已结束等场景。
+
+### 8.5 会议卡片自动置灰处理
+
+会议结束后，服务端通过腾讯会议 Webhook 收到 `meeting.end` 事件，自动更新对应卡片消息的 `content`（设置 `disabled: true`），并通过 WebSocket 推送 `message_update` 事件给会话所有在线成员。
+
+**客户端处理流程：**
+
+```
+收到 WebSocket message_update 事件
+    │
+    ├── data.conversationId === 当前打开的会话？
+    │   ├── 是 → 在本地消息列表中按 data.id 查找
+    │   │        ├── 找到 → 替换 content，重新渲染消息列表
+    │   │        └── 未找到 → 忽略（消息不在当前加载的页面中）
+    │   └── 否 → 跳过（不在当前会话视图中）
+    │
+    └── 更新会话列表预览
+        ├── 找到 data.conversationId 对应的会话
+        ├── 会话的 lastMessage.id === data.id？
+        │   ├── 是 → 更新 lastMessage.content，刷新会话列表
+        │   └── 否 → 无需更新预览
+        └── 完成
+```
+
+**伪代码示例：**
+
+```javascript
+function handleMessageUpdate(data) {
+  // 1. 更新当前会话的消息列表
+  if (currentConvId === data.conversationId) {
+    const msg = messages.find(m => m.id === data.id);
+    if (msg) {
+      msg.content = data.content;  // 替换为更新后的内容
+      renderMessages();             // 重新渲染
+    }
+  }
+
+  // 2. 更新会话列表的最后消息预览
+  const conv = conversations.find(c => c.id === data.conversationId);
+  if (conv && conv.lastMessage && conv.lastMessage.id === data.id) {
+    conv.lastMessage.content = data.content;
+    renderConversations();
+  }
+}
+```
+
+**卡片渲染规则（`disabled: true` 时）：**
+
+| 元素 | 正常状态 | 置灰状态（`disabled: true`） |
+|------|---------|--------------------------|
+| 卡片容器 | 正常颜色 | 灰色/半透明样式 |
+| 标题 | `"快速会议"` | `"会议已结束"` |
+| 状态 | `"进行中"` | `"已结束"` |
+| 链接 | 可点击"查看详情" | 不可点击，显示"已失效" |
+| 图片 | 可点击放大 | 不可点击 |
+
+**离线补偿：**
+
+用户离线期间错过的 `message_update` 无需特殊处理。下次上线加载历史消息时，REST API（`GET /api/chat/conversations/:id/messages`）返回的 `content` 已是数据库中更新后的值（含 `disabled: true`），客户端按正常渲染流程即可显示置灰效果。
+
+### 8.6 离线消息同步
 
 ```
 1. 上线后 GET /api/chat/conversations → 获取会话列表（含 unreadCount）
@@ -1052,7 +1156,7 @@ WebSocket 连接建立后，服务端立即发送：
    或 WebSocket: {"action":"markRead","conversationId":"xxx"}
 ```
 
-### 8.6 历史消息分页
+### 8.7 历史消息分页
 
 ```
 1. 首次加载: GET /api/chat/conversations/:id/messages?limit=50
@@ -1060,7 +1164,7 @@ WebSocket 连接建立后，服务端立即发送：
 3. 增量同步: GET /api/chat/conversations/:id/messages?after=<最新一条消息的createdAt>
 ```
 
-### 8.7 速率限制
+### 8.8 速率限制
 
 - WebSocket 消息发送频率限制：每秒最多 10 条
 - 超限时收到 `{"action":"error","message":"Message rate limit exceeded"}`
@@ -1078,3 +1182,5 @@ WebSocket 连接建立后，服务端立即发送：
 | CHAT_UPLOAD_MAX_SIZE | 20 | 文件上传最大大小（MB） |
 | JWT_ACCESS_EXPIRES_IN | 2h | Access Token 有效期 |
 | JWT_REFRESH_EXPIRES_IN | 30d | Refresh Token 有效期 |
+| WEMEET_WEBHOOK_TOKEN | (空) | 腾讯会议 Webhook 签名验证 Token（在开放平台配置事件订阅时生成，25字符） |
+| WEMEET_WEBHOOK_ENCRYPT_KEY | (空) | 腾讯会议 Webhook 加密密钥 EncodingAESKey（43位字符串，在开放平台配置事件订阅时生成；不配置则不启用加密） |
