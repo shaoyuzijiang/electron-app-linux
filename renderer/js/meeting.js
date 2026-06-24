@@ -668,6 +668,7 @@ const navItems = document.querySelectorAll('.nav-item[data-tab]');
 const meetingContentEls = () => [leftPanelEl, rightContentEl];
 const contactsPageEl = document.getElementById('contactsPage');
 const imPageEl = document.getElementById('imPage');
+const calendarPageEl = document.getElementById('calendarPage');
 
 function switchTab(tab) {
   if (tab === currentTab) return;
@@ -682,6 +683,7 @@ function switchTab(tab) {
   sdkLoadingEl.style.display = 'none';
   contactsPageEl.style.display = 'none';
   if (imPageEl) imPageEl.style.display = 'none';
+  if (calendarPageEl) calendarPageEl.style.display = 'none';
 
   if (tab === 'meeting') {
     meetingContentEls().forEach((el) => { el.style.display = ''; });
@@ -691,6 +693,9 @@ function switchTab(tab) {
   } else if (tab === 'im') {
     if (imPageEl) imPageEl.style.display = '';
     if (window.IMModule) window.IMModule.init();
+  } else if (tab === 'calendar') {
+    if (calendarPageEl) calendarPageEl.style.display = '';
+    if (window.CalendarModule) window.CalendarModule.init();
   }
 }
 
@@ -710,6 +715,7 @@ meetingContentEls().forEach((el) => { el.style.display = 'none'; });
 sdkLoadingEl.style.display = 'none';
 contactsPageEl.style.display = 'none';
 if (imPageEl) imPageEl.style.display = '';
+if (calendarPageEl) calendarPageEl.style.display = 'none';
 if (window.IMModule) window.IMModule.init();
 
 checkSdkStatus();

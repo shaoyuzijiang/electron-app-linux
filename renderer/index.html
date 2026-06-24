@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="css/meeting.css" />
   <link rel="stylesheet" href="css/contacts.css" />
   <link rel="stylesheet" href="css/im.css" />
+  <link rel="stylesheet" href="css/calendar.css" />
 </head>
 <body>
   <!-- 左侧窄导航 -->
@@ -16,6 +17,10 @@
     <div class="nav-item active" data-tab="im" title="消息">
       <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
       <span class="nav-badge" id="imNavBadge" style="display:none;"></span>
+    </div>
+
+    <div class="nav-item" data-tab="calendar" title="日程">
+      <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
     </div>
 
     <div class="nav-item" data-tab="contacts" title="通讯录">
@@ -212,6 +217,148 @@
     <img id="imImagePreviewImg" src="" alt="图片预览" />
   </div>
 
+  <!-- 日程页面 -->
+  <div class="calendar-page" id="calendarPage" style="display:none;">
+    <!-- 左侧日程列表 -->
+    <div class="calendar-sidebar">
+      <div class="calendar-sidebar-header">
+        <div class="calendar-sidebar-title">
+          <h2>日程</h2>
+          <button class="calendar-create-btn" id="calendarCreateBtn">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            新建日程
+          </button>
+        </div>
+        <div class="calendar-filter-bar">
+          <input type="date" id="calendarStartDate" class="calendar-date-input" />
+          <span style="color:#bbb;font-size:11px;">至</span>
+          <input type="date" id="calendarEndDate" class="calendar-date-input" />
+          <select id="calendarStatusFilter" class="calendar-filter-status">
+            <option value="active">进行中</option>
+            <option value="cancelled">已取消</option>
+            <option value="">全部</option>
+          </select>
+        </div>
+      </div>
+      <div class="calendar-event-list" id="calendarEventList">
+        <!-- 动态渲染 -->
+      </div>
+    </div>
+
+    <!-- 右侧详情 -->
+    <div class="calendar-detail">
+      <div class="calendar-detail-empty" id="calendarDetailEmpty">
+        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+        <div>选择一个日程查看详情</div>
+      </div>
+      <div id="calendarDetailContent" style="display:none;">
+        <!-- 动态渲染 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建/编辑日程弹窗 -->
+  <div class="modal-overlay" id="calendarEventModal">
+    <div class="modal-card" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+      <h2 id="calendarEventModalTitle">新建日程</h2>
+      <p class="calendar-modal-desc">填写日程信息后保存</p>
+      <div class="calendar-form-group">
+        <label>日程标题<span class="required">*</span></label>
+        <input type="text" id="calendarEventTitle" placeholder="请输入日程标题" maxlength="200" />
+      </div>
+      <div class="calendar-form-group">
+        <label>日程描述</label>
+        <textarea id="calendarEventDescription" placeholder="详细描述（最多 2000 字符）" maxlength="2000"></textarea>
+      </div>
+      <div class="calendar-form-row">
+        <div class="calendar-form-group">
+          <label>开始时间<span class="required">*</span></label>
+          <input type="datetime-local" id="calendarEventStart" />
+        </div>
+        <div class="calendar-form-group">
+          <label>结束时间<span class="required">*</span></label>
+          <input type="datetime-local" id="calendarEventEnd" />
+        </div>
+      </div>
+      <div class="calendar-form-group">
+        <label>地点</label>
+        <input type="text" id="calendarEventLocation" placeholder="请输入地点" maxlength="200" />
+      </div>
+
+      <!-- 参与者 -->
+      <div class="calendar-form-group">
+        <label>参与者</label>
+        <div id="calendarFormSelectedParticipants" class="calendar-form-selected-list" style="display:none;"></div>
+        <div class="calendar-participant-picker">
+          <input type="text" id="calendarEventParticipantSearch" class="calendar-participant-search-input" placeholder="搜索用户名添加参与者" />
+          <div id="calendarEventParticipantSearchResults" class="calendar-participant-pick-list">
+            <div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">输入关键词搜索用户</div>
+          </div>
+        </div>
+        <div class="calendar-form-hint">组织者会自动加入，无需添加自己</div>
+      </div>
+
+      <!-- 会议信息 -->
+      <div class="calendar-meeting-section">
+        <div class="calendar-meeting-section-header">
+          <label class="calendar-meeting-toggle">
+            <input type="checkbox" id="calendarEventMeetingEnabled" />
+            <span>关联在线会议</span>
+          </label>
+        </div>
+        <div id="calendarMeetingSection" style="display:none;">
+          <div class="calendar-form-group">
+            <label>会议类型</label>
+            <select id="calendarMeetingType">
+              <option value="custom">自定义会议</option>
+              <option value="wemeet">腾讯会议</option>
+            </select>
+          </div>
+          <div class="calendar-form-group">
+            <label>会议主题</label>
+            <input type="text" id="calendarEventMeetingSubject" placeholder="会议主题" />
+          </div>
+          <div class="calendar-form-row">
+            <div class="calendar-form-group">
+              <label>会议号</label>
+              <input type="text" id="calendarEventMeetingCode" placeholder="如：123-456-789" />
+            </div>
+            <div class="calendar-form-group">
+              <label>腾讯会议 ID</label>
+              <input type="text" id="calendarEventMeetingId" placeholder="wemeet 类型专用" />
+            </div>
+          </div>
+          <div class="calendar-form-group">
+            <label>会议链接<span class="required">*</span></label>
+            <input type="text" id="calendarEventMeetingJoinUrl" placeholder="https://..." />
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="calendarEventCancel">取消</button>
+        <button class="btn-submit" id="calendarEventSubmit">保存</button>
+      </div>
+      <div class="modal-error" id="calendarEventError"></div>
+    </div>
+  </div>
+
+  <!-- 添加参与者弹窗 -->
+  <div class="modal-overlay" id="calendarAddParticipantModal">
+    <div class="modal-card" style="max-width:480px;">
+      <h2>添加参与者</h2>
+      <p class="calendar-modal-desc">搜索用户并添加到日程</p>
+      <input type="text" id="calendarAddParticipantSearchInput" class="calendar-participant-search-input" placeholder="搜索用户名或邮箱" style="margin-bottom:10px;" />
+      <div id="calendarAddParticipantSearchResults" style="max-height:340px;overflow-y:auto;">
+        <div style="padding:12px;text-align:center;color:#bbb;font-size:12px;">输入关键词搜索用户</div>
+      </div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn-submit" id="calendarAddParticipantClose">关闭</button>
+      </div>
+      <div class="modal-error" id="calendarAddParticipantError"></div>
+    </div>
+  </div>
+
   <!-- 头像下拉菜单 -->
   <div class="avatar-menu" id="avatarMenu">
     <div class="avatar-menu-item" id="changePasswordMenu">修改密码</div>
@@ -298,5 +445,6 @@
   <script src="js/im-cache.js"></script>
   <script src="js/im.js"></script>
   <script src="js/meeting.js"></script>
+  <script src="js/calendar.js"></script>
 </body>
 </html>

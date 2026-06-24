@@ -1088,6 +1088,116 @@ function register(ipcMain, deps) {
       return { success: false, message: err.message };
     }
   });
+
+  // ========== 日程（calendar）IPC 接口 ==========
+
+  // 创建日程
+  ipcMain.handle('calendar-create-event', async (_event, params) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.createEvent(accessToken, params);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 日程列表
+  ipcMain.handle('calendar-get-events', async (_event, options = {}) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getEvents(accessToken, options);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 日程详情
+  ipcMain.handle('calendar-get-event-detail', async (_event, { eventId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getEventDetail(accessToken, eventId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 修改日程
+  ipcMain.handle('calendar-update-event', async (_event, { eventId, params }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.updateEvent(accessToken, eventId, params);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 取消日程
+  ipcMain.handle('calendar-cancel-event', async (_event, { eventId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.cancelEvent(accessToken, eventId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 添加参与者
+  ipcMain.handle('calendar-add-participant', async (_event, { eventId, userId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.addEventParticipant(accessToken, eventId, userId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 删除参与者
+  ipcMain.handle('calendar-remove-participant', async (_event, { eventId, userId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.removeEventParticipant(accessToken, eventId, userId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 参与者列表
+  ipcMain.handle('calendar-get-participants', async (_event, { eventId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getEventParticipants(accessToken, eventId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 查询空闲时间
+  ipcMain.handle('calendar-get-freebusy', async (_event, params) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.getFreeBusy(accessToken, params);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
 }
 
 module.exports = { register };

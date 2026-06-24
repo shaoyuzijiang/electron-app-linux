@@ -18,6 +18,7 @@ const {
 
 const im = require('./im');
 const meeting = require('./meeting');
+const calendar = require('./calendar');
 
 /**
  * 用户登录（邮箱）
@@ -166,4 +167,6 @@ module.exports = {
   ...im,
   // 会议（re-export，保持兼容）
   ...meeting,
+  // 日程（re-export，保持兼容）
+  ...calendar,
 };

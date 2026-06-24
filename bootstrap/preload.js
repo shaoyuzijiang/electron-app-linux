@@ -153,4 +153,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 渲染进程日志转发
   rendererLog: (level, message) =>
     ipcRenderer.send('renderer-log', { level, message }),
+
+  // ========== 日程（calendar）接口 ==========
+  calendarCreateEvent: (params) => ipcRenderer.invoke('calendar-create-event', params),
+  calendarGetEvents: (options) => ipcRenderer.invoke('calendar-get-events', options || {}),
+  calendarGetEventDetail: (eventId) =>
+    ipcRenderer.invoke('calendar-get-event-detail', { eventId }),
+  calendarUpdateEvent: (eventId, params) =>
+    ipcRenderer.invoke('calendar-update-event', { eventId, params }),
+  calendarCancelEvent: (eventId) =>
+    ipcRenderer.invoke('calendar-cancel-event', { eventId }),
+  calendarAddParticipant: (eventId, userId) =>
+    ipcRenderer.invoke('calendar-add-participant', { eventId, userId }),
+  calendarRemoveParticipant: (eventId, userId) =>
+    ipcRenderer.invoke('calendar-remove-participant', { eventId, userId }),
+  calendarGetParticipants: (eventId) =>
+    ipcRenderer.invoke('calendar-get-participants', { eventId }),
+  calendarGetFreeBusy: (params) =>
+    ipcRenderer.invoke('calendar-get-freebusy', params),
 });
