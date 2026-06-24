@@ -13,6 +13,7 @@ let imConversations = [];
 let imActiveConversationId = null;
 let imMessages = {}; // { conversationId: [messages] }
 let imMessagePage = {}; // { conversationId: { hasMore, oldestCreatedAt } }
+let imLastLoadTime = {}; // { conversationId: timestamp } — 记录每次会话加载时间，用于防重复请求
 
 // 输入中状态
 let imTypingTimer = null;
@@ -412,8 +413,9 @@ async function selectConversation(convId) {
   // 渲染聊天头部
   renderChatHeader(conv);
 
-  // 加载消息
+  // 加载消息（内部会判断是否需要增量同步）
   await loadMessages(convId);
+  imLastLoadTime[convId] = Date.now();
 
   // 标记已读
   await markConversationRead(convId);
@@ -451,21 +453,25 @@ async function loadMessages(convId, loadMore = false) {
         scrollMessagesToBottom();
 
         // 2. 增量同步：从服务器拉取本地最新消息之后的新消息
-        const latestCached = cachedMsgs[cachedMsgs.length - 1].createdAt;
-        try {
-          const incResult = await window.electronAPI.imGetMessages(convId, {
-            after: latestCached,
-            limit: 50,
-          });
-          if (incResult.success && incResult.data && incResult.data.length > 0) {
-            const newMsgs = incResult.data;
-            await window.IMCache.cacheMessages(newMsgs);
-            imMessages[convId] = [...cachedMsgs, ...newMsgs];
-            renderMessages(imMessages[convId]);
-            scrollMessagesToBottom();
+        //    如果距离上次加载不超过 10 秒，跳过增量同步（新消息已由 WebSocket 实时推送）
+        const lastLoad = imLastLoadTime[convId] || 0;
+        if (Date.now() - lastLoad >= 10000) {
+          const latestCached = cachedMsgs[cachedMsgs.length - 1].createdAt;
+          try {
+            const incResult = await window.electronAPI.imGetMessages(convId, {
+              after: latestCached,
+              limit: 50,
+            });
+            if (incResult.success && incResult.data && incResult.data.length > 0) {
+              const newMsgs = incResult.data;
+              await window.IMCache.cacheMessages(newMsgs);
+              imMessages[convId] = [...cachedMsgs, ...newMsgs];
+              renderMessages(imMessages[convId]);
+              scrollMessagesToBottom();
+            }
+          } catch (incErr) {
+            console.warn('[IM] 增量同步失败，使用本地缓存:', incErr);
           }
-        } catch (incErr) {
-          console.warn('[IM] 增量同步失败，使用本地缓存:', incErr);
         }
 
         // 更新分页状态
