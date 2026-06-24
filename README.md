@@ -4,15 +4,64 @@
 
 ## 功能特性
 
+### 用户认证
+
+- 账号密码登录（RSA + AES 混合加密传输）
 - SSO 登录 / 自动登录
+- Token 自动刷新（AccessToken 过期后用 RefreshToken 续期）
+- 记住密码、修改密码（密码强度校验）
+
+### 会议功能
+
 - 加入会议、快速会议、预定会议、共享屏幕
-- 会议列表展示
-- IM 即时通讯：WebSocket 实时消息、单聊/群聊、文件上传、IndexedDB 本地缓存、输入中状态、已读未读
+- 会议列表展示：按日期分组、分页加载、进行中/周期标签、一键入会、会议号复制
+- 预定会议详情：会议号、主题、密码、时间、入会链接，一键复制全部信息
+- 会议列表自动刷新（登录/离会/入会事件触发 + 5 分钟定时轮询 + 窗口恢复刷新）
+- SDK 设置、上传日志、历史会议、会议详情、录音笔、AI 小助手
+- 字幕开关与设置、会中布局切换、会中窗口操作（置顶/最小化/最大化/关闭）
+- 响铃邀请（开启/关闭、接受/拒绝）
+
+### 通讯录
+
+- 部门树浏览（展开/折叠）、部门用户列表（分页加载，每页 50 条）
+- 递归查询、加载更多、按姓名关键词实时搜索（300ms 防抖）
+- 本地缓存（localStorage，秒开）+ 缓存版本管理
+
+### 会中选人组件（自定义通讯录）
+
+- 替代 SDK 默认通讯录，独立窗口打开，自动定位到会中窗口上方
+- 部门树浏览、分页加载、搜索用户、多选勾选
+- 已在会议中用户标识、已选用户管理、确认邀请（SDK `AddUsersWithParam`）
+
+### IM 即时通讯
+
+- WebSocket 实时消息 + HTTP 备用通道（降级保证消息可达）
+- 单聊 / 群聊（群名称、成员搜索选择）
+- 会话列表（按最近消息排序、未读数角标、搜索过滤）
+- 消息类型：文本、图片（点击预览）、文件（点击下载）、系统消息、会议邀请卡片
+- 文件上传（20MB 限制，MIME 白名单校验）
+- 消息分页（加载更多历史消息，保持滚动位置）
+- IndexedDB 本地缓存（本地优先加载秒开 + 增量同步）
+- 未读管理（会话级未读计数 + 总未读数角标）
+- 输入中状态（3s 节流）、已读未读
+- 群成员管理（角色展示、移除成员、退出群聊）
+- 用户搜索（新建会话，300ms 防抖）、在线用户查询
+- 会议邀请卡片消息（SDK 快速会议 → 卡片消息 → 会议结束自动置灰）
+- 定时刷新会话列表（60 秒）、图片通过 IPC 带认证头请求转 base64 显示
+
+### 平台与架构
+
 - macOS Apple Silicon (arm64) & Intel (x64) 双架构支持
-- Windows x64 支持
+- Windows x64 支持（NSIS 安装包）
+- RSA + AES 混合加密、公钥本地缓存
+- Context Isolation（启用上下文隔离，preload 安全暴露 API）
+- Token 持久化（文件存储，重启自动恢复）
+- SDK 并发保护（初始化和登录并发锁）
 - SDK 日志同时输出到控制台和文件，便于调试；日志时间戳使用本地时区
 - 全进程日志：主进程与渲染进程 `console` 日志统一写入按小时滚动的文件，自动清理 7 天过期日志
 - Windows 控制台自动 UTF-8 编码，无中文乱码
+
+> 详细功能说明请参阅 [releasenotes.md](./releasenotes.md)。
 
 ## 环境要求
 
@@ -52,7 +101,9 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ├── backend_api/
 │   ├── api.js             # 后端 API 请求（RSA+AES 加密）
 │   ├── meeting-polling.js # 会议列表防抖刷新 + 定时轮询
-│   └── back-end-interface.md # 后端接口文档
+│   ├── back-end-interface.md # 后端接口文档（认证/用户/会议 API）
+│   ├── im-interface.md    # IM API 接口文档（REST/WebSocket 协议、数据模型）
+│   └── im.md              # IM 设计方案（架构、数据库、安全、部署）
 ├── utils/
 │   ├── logger.js          # 文件日志模块（主进程 console 劫持 + 渲染进程 IPC 转发，按小时滚动，本地时区时间戳）
 │   └── token-store.js     # Token 持久化存储
@@ -63,12 +114,18 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 │   ├── login.html         # 登录页
 │   ├── index.html         # 会议主页
 │   ├── user-picker.html   # 选人组件（独立窗口）
+│   ├── css/
+│   │   ├── contacts.css   # 通讯录样式
+│   │   ├── im.css         # IM 聊天样式
+│   │   ├── meeting.css    # 会议列表样式
+│   │   └── user-picker.css # 选人组件样式
 │   └── js/
 │       ├── renderer-logger.js # 渲染进程日志拦截（console 劫持 + IPC 转发到主进程）
 │       ├── contacts.js    # 通讯录模块
 │       ├── im.js          # IM 即时通讯模块
 │       ├── im-cache.js    # IM 本地缓存模块
-│       └── meeting.js     # 会议列表模块
+│       ├── meeting.js     # 会议列表模块
+│       └── user-picker.js # 会中选人组件渲染脚本（部门树、搜索、多选、邀请）
 ├── wemeet_sdk/
 │   ├── wemeet.cpp         # C++ 原生模块封装（N-API）
 │   ├── jsoncpp.cpp        # JsonCpp 合并源文件
@@ -80,7 +137,9 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 │           └── copy.bat   # SDK 文件一键拷贝脚本
 ├── output/
 │   └── mac/               # macOS 编译产物（.node 原生模块）
-└── include/               # C++ 公共头文件（JsonCpp 等）
+├── include/               # C++ 公共头文件（JsonCpp 等）
+├── releasenotes.md        # 功能发布说明（完整功能清单）
+└── PC端如何将自定义邀请通讯录组件居中置顶显示.md # 选人组件定位说明
 ```
 
 ## 构建原生模块
