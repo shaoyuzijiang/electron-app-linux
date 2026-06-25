@@ -339,34 +339,16 @@
         <div class="calendar-meeting-section-header">
           <label class="calendar-meeting-toggle">
             <input type="checkbox" id="calendarEventMeetingEnabled" />
-            <span>关联在线会议</span>
+            <span>创建腾讯会议</span>
           </label>
         </div>
         <div id="calendarMeetingSection" style="display:none;">
           <div class="calendar-form-group">
-            <label>会议类型</label>
-            <select id="calendarMeetingType">
-              <option value="custom">自定义会议</option>
-              <option value="wemeet">腾讯会议</option>
-            </select>
-          </div>
-          <div class="calendar-form-group">
             <label>会议主题</label>
-            <input type="text" id="calendarEventMeetingSubject" placeholder="会议主题" />
+            <input type="text" id="calendarEventMeetingSubject" placeholder="不填则使用日程标题" />
           </div>
-          <div class="calendar-form-row">
-            <div class="calendar-form-group">
-              <label>会议号</label>
-              <input type="text" id="calendarEventMeetingCode" placeholder="如：123-456-789" />
-            </div>
-            <div class="calendar-form-group">
-              <label>腾讯会议 ID</label>
-              <input type="text" id="calendarEventMeetingId" placeholder="wemeet 类型专用" />
-            </div>
-          </div>
-          <div class="calendar-form-group">
-            <label>会议链接<span class="required">*</span></label>
-            <input type="text" id="calendarEventMeetingJoinUrl" placeholder="https://..." />
+          <div class="calendar-form-hint" style="margin-top:-4px;margin-bottom:10px;color:#888;font-size:12px;line-height:1.5;">
+            保存日程时将自动创建腾讯会议，并把会议号、入会链接等信息关联到日程。
           </div>
         </div>
       </div>
