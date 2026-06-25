@@ -219,39 +219,75 @@
 
   <!-- 日程页面 -->
   <div class="calendar-page" id="calendarPage" style="display:none;">
-    <!-- 左侧日程列表 -->
-    <div class="calendar-sidebar">
-      <div class="calendar-sidebar-header">
-        <div class="calendar-sidebar-title">
-          <h2>日程</h2>
-          <button class="calendar-create-btn" id="calendarCreateBtn">
-            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            新建日程
-          </button>
-        </div>
-        <div class="calendar-filter-bar">
-          <input type="date" id="calendarStartDate" class="calendar-date-input" />
-          <span style="color:#bbb;font-size:11px;">至</span>
-          <input type="date" id="calendarEndDate" class="calendar-date-input" />
-          <select id="calendarStatusFilter" class="calendar-filter-status">
-            <option value="active">进行中</option>
-            <option value="cancelled">已取消</option>
-            <option value="">全部</option>
-          </select>
-        </div>
+    <!-- 左侧：紧凑月历 + 选中日期的日程列表 -->
+    <div class="calendar-mini-sidebar">
+      <div class="calendar-mini-header">
+        <button class="calendar-mini-nav-btn" id="calendarPrevMonthBtn" title="上一月">
+          <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </button>
+        <div class="calendar-mini-title" id="calendarMiniTitle">2026年6月</div>
+        <button class="calendar-mini-nav-btn" id="calendarNextMonthBtn" title="下一月">
+          <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </button>
       </div>
-      <div class="calendar-event-list" id="calendarEventList">
-        <!-- 动态渲染 -->
+
+      <button class="calendar-today-btn" id="calendarTodayBtn">回到今天</button>
+
+      <div class="calendar-mini-weekdays">
+        <span>一</span><span>二</span><span>三</span><span>四</span>
+        <span>五</span><span style="color:#ff4d4f;">六</span><span style="color:#ff4d4f;">日</span>
+      </div>
+      <div class="calendar-mini-grid" id="calendarMiniGrid">
+        <!-- 动态渲染 6 行 × 7 列 -->
+      </div>
+
+      <div class="calendar-day-schedule-section">
+        <div class="calendar-day-schedule-title" id="calendarDayScheduleTitle">选中日期的日程</div>
+        <div class="calendar-day-schedule-list" id="calendarDayScheduleList">
+          <!-- 选中日期的日程 -->
+        </div>
       </div>
     </div>
 
-    <!-- 右侧详情 -->
-    <div class="calendar-detail">
-      <div class="calendar-detail-empty" id="calendarDetailEmpty">
-        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
-        <div>选择一个日程查看详情</div>
+    <!-- 主区域：周/月/日视图 -->
+    <div class="calendar-main">
+      <div class="calendar-main-header">
+        <div class="calendar-main-title-row">
+          <div class="calendar-main-title" id="calendarMainTitle">本周</div>
+          <div class="calendar-main-nav">
+            <button class="calendar-main-nav-btn" id="calendarPrevBtn" title="上一段">
+              <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+            <button class="calendar-main-nav-btn" id="calendarNextBtn" title="下一段">
+              <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            </button>
+          </div>
+          <button class="calendar-create-main-btn" id="calendarCreateBtn">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            新建日程
+          </button>
+          <div class="calendar-view-tabs">
+            <button class="calendar-view-tab" data-view="day">日</button>
+            <button class="calendar-view-tab active" data-view="week">周</button>
+            <button class="calendar-view-tab" data-view="month">月</button>
+          </div>
+        </div>
       </div>
-      <div id="calendarDetailContent" style="display:none;">
+
+      <div class="calendar-main-body" id="calendarMainBody">
+        <!-- 周视图 / 日视图 / 月视图 动态渲染 -->
+      </div>
+    </div>
+
+    <!-- 右侧详情面板（默认隐藏，点击日程显示） -->
+    <div class="calendar-detail-panel" id="calendarDetailPanel" style="display:none;">
+      <div class="calendar-detail-panel-header">
+        <button class="calendar-detail-close-btn" id="calendarDetailCloseBtn" title="关闭">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+        <h2 class="calendar-detail-panel-title">日程详情</h2>
+      </div>
+      <div id="calendarDetailPanelContent" class="calendar-detail-panel-body">
         <!-- 动态渲染 -->
       </div>
     </div>

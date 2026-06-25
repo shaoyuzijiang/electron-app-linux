@@ -1,4 +1,4 @@
-/* ========== 日程（calendar）页面样式 ========== */
+/* ========== 日程（calendar）页面样式 - 飞书风格 ========== */
 
 .calendar-page {
   flex: 1;
@@ -7,370 +7,1025 @@
   background: #fff;
 }
 
-/* ---- 左侧列表 ---- */
-.calendar-sidebar {
-  width: 320px;
-  border-right: 1px solid #e8e8e8;
-  display: flex;
-  flex-direction: column;
+/* ========== 左侧栏：紧凑月历 + 选中日日程 ========== */
+
+.calendar-mini-sidebar {
+  width: 280px;
   flex-shrink: 0;
-  background: #fafafa;
-}
-
-.calendar-sidebar-header {
-  padding: 14px 14px 10px;
-  background: #fff;
-  border-bottom: 1px solid #eee;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  border-right: 1px solid #ececec;
+  background: #fafbfc;
+  overflow: hidden;
 }
 
-.calendar-sidebar-title {
+.calendar-mini-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 16px 16px 8px;
+  gap: 8px;
 }
 
-.calendar-sidebar-title h2 {
+.calendar-mini-title {
   font-size: 15px;
   font-weight: 600;
-  margin: 0;
   color: #1e1e1e;
+  flex: 1;
+  text-align: center;
+  user-select: none;
 }
 
-.calendar-create-btn {
+.calendar-mini-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.calendar-mini-nav-btn:hover {
+  background: #e8e8e8;
+}
+
+.calendar-mini-nav-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: #555;
+}
+
+.calendar-today-btn {
+  margin: 0 16px 8px;
+  padding: 6px 0;
+  border: 1px solid #1e6fff;
+  background: #fff;
+  color: #1e6fff;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.calendar-today-btn:hover {
+  background: #1e6fff;
+  color: #fff;
+}
+
+.calendar-mini-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 0 8px;
+  margin-bottom: 4px;
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  font-weight: 500;
+}
+
+.calendar-mini-weekdays span {
+  padding: 4px 0;
+}
+
+.calendar-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 0 8px;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.calendar-mini-cell {
+  position: relative;
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 0;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.calendar-mini-cell:hover {
+  background: #eef3ff;
+}
+
+.calendar-mini-cell.other-month {
+  color: #c8c8c8;
+}
+
+.calendar-mini-cell.other-month .calendar-mini-cell-date {
+  color: #c8c8c8;
+}
+
+.calendar-mini-cell-date {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #1e1e1e;
+  font-weight: 500;
+  border-radius: 50%;
+  margin-bottom: 2px;
+}
+
+.calendar-mini-cell.is-today .calendar-mini-cell-date {
+  background: #1e6fff;
+  color: #fff;
+  font-weight: 600;
+}
+
+.calendar-mini-cell.is-selected {
+  background: #e6efff;
+}
+
+.calendar-mini-cell.is-selected .calendar-mini-cell-date {
+  color: #1e6fff;
+  font-weight: 600;
+}
+
+.calendar-mini-cell.is-selected.is-today .calendar-mini-cell-date {
+  background: #1e6fff;
+  color: #fff;
+}
+
+.calendar-mini-cell-dots {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  height: 5px;
+}
+
+.calendar-mini-cell-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #1e6fff;
+}
+
+.calendar-mini-cell-dot.has-meeting {
+  background: #ff8c00;
+}
+
+.calendar-mini-cell-dot.is-cancelled {
+  background: #c0c4cc;
+}
+
+.calendar-mini-cell-more {
+  font-size: 9px;
+  color: #999;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+/* 选中日期的日程列表 */
+.calendar-day-schedule-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid #ececec;
+  margin-top: 8px;
+  background: #fff;
+}
+
+.calendar-day-schedule-title {
+  padding: 12px 16px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.calendar-day-schedule-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.calendar-day-schedule-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.calendar-day-schedule-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.calendar-day-schedule-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 4px;
+  border-left: 3px solid #1e6fff;
+  background: #f8f9fa;
+}
+
+.calendar-day-schedule-item:hover {
+  background: #eef3ff;
+}
+
+.calendar-day-schedule-item.is-cancelled {
+  border-left-color: #c0c4cc;
+  opacity: 0.6;
+}
+
+.calendar-day-schedule-item-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.calendar-day-schedule-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.calendar-day-schedule-item-title {
+  font-size: 12px;
+  color: #1e1e1e;
+  font-weight: 500;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-schedule-item-meta {
+  font-size: 10px;
+  color: #999;
+}
+
+.calendar-day-schedule-empty {
+  text-align: center;
+  padding: 30px 20px;
+  color: #c0c4cc;
+  font-size: 12px;
+}
+
+/* ========== 主区域：周/日/月视图 ========== */
+
+.calendar-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  min-width: 0;
+}
+
+.calendar-main-header {
+  padding: 14px 20px 0;
+  border-bottom: 1px solid #ececec;
+  flex-shrink: 0;
+}
+
+.calendar-main-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.calendar-main-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e1e1e;
+  min-width: 200px;
+}
+
+.calendar-main-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.calendar-main-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.calendar-main-nav-btn:hover {
+  border-color: #1e6fff;
+  color: #1e6fff;
+}
+
+.calendar-main-nav-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.calendar-create-main-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 6px;
   border: none;
   background: #1e6fff;
   color: #fff;
   font-size: 12px;
   cursor: pointer;
+  margin-left: auto;
   transition: background 0.2s;
 }
 
-.calendar-create-btn:hover {
+.calendar-create-main-btn:hover {
   background: #165ce0;
 }
 
-.calendar-create-btn svg {
+.calendar-create-main-btn svg {
   width: 14px;
   height: 14px;
   fill: #fff;
 }
 
-.calendar-filter-bar {
+.calendar-view-tabs {
   display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.calendar-date-input {
-  flex: 1;
-  padding: 6px 8px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
-  font-size: 12px;
-  outline: none;
-  background: #fff;
-  color: #1e1e1e;
-  font-family: inherit;
-}
-
-.calendar-date-input:focus {
-  border-color: #1e6fff;
-}
-
-.calendar-filter-status {
-  padding: 6px 8px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  font-size: 12px;
-  outline: none;
-  background: #fff;
-  color: #1e1e1e;
-  cursor: pointer;
-}
-
-.calendar-event-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 0;
-}
-
-.calendar-event-list::-webkit-scrollbar {
-  width: 5px;
-}
-
-.calendar-event-list::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 3px;
-}
-
-.calendar-day-group {
-  padding: 8px 0 4px;
-}
-
-.calendar-day-label {
-  padding: 6px 14px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.calendar-event-item {
-  padding: 10px 14px;
-  margin: 2px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  position: relative;
-}
-
-.calendar-event-item:hover {
-  background: #eee;
-}
-
-.calendar-event-item.active {
-  background: #e6efff;
-}
-
-.calendar-event-item.active .calendar-event-title {
-  color: #165ce0;
-}
-
-.calendar-event-time-block {
-  flex-shrink: 0;
-  width: 50px;
-  text-align: center;
-  border-right: 1px solid #e0e0e0;
-  padding-right: 8px;
-}
-
-.calendar-event-time-start {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  line-height: 1.2;
-}
-
-.calendar-event-time-end {
-  font-size: 11px;
-  color: #999;
-  line-height: 1.2;
-  margin-top: 2px;
-}
-
-.calendar-event-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.calendar-event-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #1e1e1e;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.calendar-event-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  color: #888;
-  align-items: center;
-}
-
-.calendar-event-meta-dot {
-  width: 3px;
-  height: 3px;
-  background: #ccc;
-  border-radius: 50%;
-}
-
-.calendar-event-tag {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: #f0f0f0;
-  color: #666;
-}
-
-.calendar-event-tag.meeting {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-.calendar-event-tag.cancelled {
-  background: #ffe0e0;
-  color: #c62828;
-  text-decoration: line-through;
-}
-
-.calendar-event-tag.organizer {
-  background: #e3f2fd;
-  color: #1565c0;
-}
-
-/* ---- 右侧详情 ---- */
-.calendar-detail {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: #fff;
-}
-
-.calendar-detail-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #bbb;
-  font-size: 14px;
-}
-
-.calendar-detail-empty svg {
-  width: 64px;
-  height: 64px;
-  fill: #ddd;
-  margin-bottom: 12px;
-}
-
-.calendar-detail-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
-.calendar-detail-header {
-  padding: 24px 28px 16px;
-  border-bottom: 1px solid #eee;
-}
-
-.calendar-detail-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1e1e1e;
-  margin: 0 0 8px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.calendar-detail-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.calendar-action-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid #d9d9d9;
+.calendar-view-tab {
+  padding: 5px 16px;
+  border: none;
   background: #fff;
   color: #555;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  border-right: 1px solid #d9d9d9;
 }
 
-.calendar-action-btn:hover {
-  border-color: #1e6fff;
+.calendar-view-tab:last-child {
+  border-right: none;
+}
+
+.calendar-view-tab:hover {
   color: #1e6fff;
 }
 
-.calendar-action-btn.danger:hover {
-  border-color: #ff4d4f;
-  color: #ff4d4f;
+.calendar-view-tab.active {
+  background: #1e6fff;
+  color: #fff;
 }
 
-.calendar-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.calendar-detail-body {
+.calendar-main-body {
   flex: 1;
-  overflow-y: auto;
-  padding: 20px 28px;
+  overflow: hidden;
+  position: relative;
 }
 
-.calendar-detail-row {
+/* ========== 周视图（默认） ========== */
+
+.calendar-week-view {
   display: flex;
-  margin-bottom: 14px;
-  font-size: 13px;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
-.calendar-detail-label {
-  width: 80px;
+.calendar-week-header {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  border-bottom: 1px solid #ececec;
   flex-shrink: 0;
+  background: #fafbfc;
+}
+
+.calendar-week-header-spacer {
+  border-right: 1px solid #ececec;
+}
+
+.calendar-week-day-header {
+  text-align: center;
+  padding: 10px 0;
+  border-right: 1px solid #ececec;
+  font-size: 12px;
+  color: #666;
+}
+
+.calendar-week-day-header:last-child {
+  border-right: none;
+}
+
+.calendar-week-day-header.is-today {
+  background: #e6efff;
+  color: #1e6fff;
+}
+
+.calendar-week-day-date {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e1e1e;
+  margin-top: 2px;
+}
+
+.calendar-week-day-header.is-today .calendar-week-day-date {
+  color: #1e6fff;
+}
+
+.calendar-week-day-label {
+  font-size: 11px;
   color: #999;
 }
 
-.calendar-detail-value {
+.calendar-week-grid {
   flex: 1;
-  color: #1e1e1e;
-  word-break: break-word;
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  overflow-y: auto;
+  position: relative;
 }
 
-.calendar-detail-value .meeting-code {
+.calendar-week-grid::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.calendar-week-grid::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.calendar-week-time-col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ececec;
+  flex-shrink: 0;
+}
+
+.calendar-week-time-cell {
+  height: 48px;
+  position: relative;
+  font-size: 10px;
+  color: #999;
+  text-align: right;
+  padding-right: 6px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.calendar-week-time-cell::after {
+  content: attr(data-time);
+  position: absolute;
+  top: -6px;
+  right: 6px;
+  background: #fafbfc;
+  padding: 0 2px;
+}
+
+.calendar-week-day-col {
+  position: relative;
+  border-right: 1px solid #ececec;
+}
+
+.calendar-week-day-col:last-child {
+  border-right: none;
+}
+
+.calendar-week-day-col.is-today {
+  background: rgba(230, 239, 255, 0.3);
+}
+
+.calendar-week-hour-cell {
+  height: 48px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.calendar-week-event {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  background: #1e6fff;
+  color: #fff;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: transform 0.1s, box-shadow 0.1s;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendar-week-event:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(30, 111, 255, 0.3);
+  z-index: 2;
+}
+
+.calendar-week-event-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-week-event-time {
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.calendar-week-event.is-cancelled {
+  background: #c0c4cc;
+  text-decoration: line-through;
+}
+
+.calendar-week-event.is-organizing {
+  border-left: 3px solid #fff;
+}
+
+.calendar-week-event-all-day {
+  background: #f0f5ff;
+  color: #1e6fff;
+  border-left: 3px solid #1e6fff;
+  margin-bottom: 1px;
+}
+
+.calendar-week-event-all-day.is-cancelled {
+  background: #f5f5f5;
+  color: #999;
+  border-left-color: #c0c4cc;
+}
+
+.calendar-week-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #ff4d4f;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.calendar-week-now-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  background: #ff4d4f;
+  border-radius: 50%;
+}
+
+/* ========== 日视图（24小时） ========== */
+
+.calendar-day-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.calendar-day-header {
+  padding: 12px 20px;
+  border-bottom: 1px solid #ececec;
+  flex-shrink: 0;
+  background: #fafbfc;
+}
+
+.calendar-day-header-title {
+  font-size: 18px;
   font-weight: 600;
-  color: #165ce0;
+  color: #1e1e1e;
+}
+
+.calendar-day-header-date {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.calendar-day-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  overflow-y: auto;
+  position: relative;
+}
+
+.calendar-day-time-col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ececec;
+  flex-shrink: 0;
+}
+
+.calendar-day-time-cell {
+  height: 48px;
+  position: relative;
+  font-size: 10px;
+  color: #999;
+  text-align: right;
+  padding-right: 6px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.calendar-day-time-cell::after {
+  content: attr(data-time);
+  position: absolute;
+  top: -6px;
+  right: 6px;
+  background: #fff;
+  padding: 0 2px;
+}
+
+.calendar-day-events-col {
+  position: relative;
+}
+
+.calendar-day-hour-cell {
+  height: 48px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.calendar-day-event {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  background: #1e6fff;
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-day-event:hover {
+  box-shadow: 0 2px 8px rgba(30, 111, 255, 0.3);
+  z-index: 2;
+}
+
+.calendar-day-event-title {
+  font-weight: 500;
+}
+
+.calendar-day-event-time {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.calendar-day-event-loc {
+  font-size: 11px;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.calendar-day-event.is-cancelled {
+  background: #c0c4cc;
+  text-decoration: line-through;
+}
+
+/* ========== 月视图（紧凑月历） ========== */
+
+.calendar-month-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.calendar-month-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: #fafbfc;
+  border-bottom: 1px solid #ececec;
+  flex-shrink: 0;
+}
+
+.calendar-month-header-cell {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  border-right: 1px solid #ececec;
+}
+
+.calendar-month-header-cell:last-child {
+  border-right: none;
+}
+
+.calendar-month-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  overflow-y: auto;
+}
+
+.calendar-month-cell {
+  border-right: 1px solid #ececec;
+  border-bottom: 1px solid #ececec;
+  padding: 6px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 80px;
+  transition: background 0.15s;
+}
+
+.calendar-month-cell:hover {
+  background: #f8f9fa;
+}
+
+.calendar-month-cell.is-other-month {
+  background: #fafbfc;
+  color: #c0c4cc;
+}
+
+.calendar-month-cell.is-today {
+  background: #f0f5ff;
+}
+
+.calendar-month-cell-date {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e1e1e;
+  margin-bottom: 4px;
+}
+
+.calendar-month-cell.is-today .calendar-month-cell-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: #1e6fff;
+  color: #fff;
+  border-radius: 11px;
+  font-weight: 600;
+}
+
+.calendar-month-cell-event {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #e6efff;
+  color: #1e6fff;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid #1e6fff;
   cursor: pointer;
 }
 
-.calendar-detail-value .meeting-code:hover {
-  text-decoration: underline;
+.calendar-month-cell-event:hover {
+  background: #d1e0ff;
 }
+
+.calendar-month-cell-event.is-cancelled {
+  background: #f0f0f0;
+  color: #999;
+  border-left-color: #c0c4cc;
+  text-decoration: line-through;
+}
+
+.calendar-month-cell-event.has-meeting {
+  background: #fff3e0;
+  color: #e65100;
+  border-left-color: #ff8c00;
+}
+
+.calendar-month-cell-more {
+  font-size: 10px;
+  color: #999;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.calendar-month-cell-more:hover {
+  color: #1e6fff;
+}
+
+/* ========== 右侧详情面板 ========== */
+
+.calendar-detail-panel {
+  width: 360px;
+  flex-shrink: 0;
+  border-left: 1px solid #ececec;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow: hidden;
+  animation: slideInRight 0.2s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.calendar-detail-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #ececec;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.calendar-detail-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-detail-close-btn:hover {
+  background: #f0f0f0;
+}
+
+.calendar-detail-close-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.calendar-detail-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e1e1e;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-detail-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.calendar-detail-panel-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.calendar-detail-panel-body::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.calendar-detail-color-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #1e6fff;
+  margin-bottom: 12px;
+}
+
+.calendar-detail-panel-title-big {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e1e1e;
+  margin: 0 0 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.calendar-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.calendar-detail-meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #444;
+}
+
+.calendar-detail-meta-row svg {
+  width: 16px;
+  height: 16px;
+  fill: #999;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.calendar-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.calendar-detail-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 16px 0;
+}
+
+.calendar-detail-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.calendar-detail-description {
+  background: #f8f9fa;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ========== 详情面板内：会议卡片 ========== */
 
 .calendar-meeting-card {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  padding: 14px 16px;
-  background: #fafafa;
-  margin-top: 4px;
+  padding: 12px 14px;
+  background: #fafbfc;
 }
 
 .calendar-meeting-card-header {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: #333;
   display: flex;
   align-items: center;
   gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #1e1e1e;
 }
 
 .calendar-meeting-card-header svg {
   width: 16px;
   height: 16px;
-  fill: #165ce0;
+  fill: #1e6fff;
 }
 
 .calendar-meeting-card-row {
   display: flex;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
+  margin-bottom: 4px;
 }
 
 .calendar-meeting-card-label {
-  width: 70px;
   color: #999;
+  width: 60px;
   flex-shrink: 0;
 }
 
@@ -378,6 +1033,16 @@
   color: #1e1e1e;
   flex: 1;
   word-break: break-all;
+}
+
+.calendar-meeting-card-code {
+  font-weight: 600;
+  color: #1e6fff;
+  cursor: pointer;
+}
+
+.calendar-meeting-card-code:hover {
+  text-decoration: underline;
 }
 
 .calendar-meeting-card-link {
@@ -390,41 +1055,31 @@
   font-size: 12px;
   text-decoration: none;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
 .calendar-meeting-card-link:hover {
   background: #165ce0;
 }
 
-.calendar-description {
-  white-space: pre-wrap;
-  background: #fafafa;
-  padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #444;
-}
+/* ========== 详情面板内：参与者列表 ========== */
 
-/* ---- 参与者列表 ---- */
 .calendar-participants-section {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
 }
 
 .calendar-participants-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 10px;
 }
 
 .calendar-add-participant-btn {
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 4px;
   border: 1px solid #1e6fff;
   background: #fff;
@@ -440,24 +1095,25 @@
 }
 
 .calendar-participants-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .calendar-participant-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  background: #fafafa;
+  padding: 6px 8px;
+  background: #f8f9fa;
   border-radius: 6px;
   font-size: 12px;
+  position: relative;
 }
 
 .calendar-participant-avatar {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: #fff;
@@ -480,11 +1136,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
 }
 
 .calendar-participant-status {
   font-size: 10px;
-  color: #999;
 }
 
 .calendar-participant-status.accepted { color: #4caf50; }
@@ -513,7 +1169,101 @@
   color: #ff4d4f;
 }
 
-/* ---- 表单弹窗 ---- */
+/* ========== 通用 ========== */
+
+.calendar-action-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #555;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.calendar-action-btn:hover {
+  border-color: #1e6fff;
+  color: #1e6fff;
+}
+
+.calendar-action-btn.danger:hover {
+  border-color: #ff4d4f;
+  color: #ff4d4f;
+}
+
+.calendar-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.calendar-event-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #f0f0f0;
+  color: #666;
+  display: inline-block;
+}
+
+.calendar-event-tag.cancelled {
+  background: #ffe0e0;
+  color: #c62828;
+  text-decoration: line-through;
+}
+
+.calendar-event-tag.organizer {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* ========== 空闲时间 ========== */
+
+.calendar-freebusy-bar {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fafbfc;
+  font-size: 12px;
+  color: #555;
+}
+
+.calendar-freebusy-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+  font-size: 12px;
+}
+
+.calendar-freebusy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-freebusy-item {
+  font-size: 11px;
+  color: #777;
+}
+
+.calendar-freebusy-slot {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  background: #fff3e0;
+  color: #e65100;
+  border-radius: 3px;
+}
+
+.calendar-free-empty {
+  color: #4caf50;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* ========== 弹窗相关（保留原有表单样式） ========== */
+
 .calendar-form-group {
   margin-bottom: 14px;
 }
@@ -545,6 +1295,7 @@
   background: #fff;
   color: #1e1e1e;
   transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
 
 .calendar-form-group input:focus,
@@ -579,7 +1330,7 @@
   border-radius: 8px;
   padding: 12px 14px;
   margin-top: 8px;
-  background: #fafafa;
+  background: #fafbfc;
 }
 
 .calendar-meeting-section-header {
@@ -603,7 +1354,6 @@
   cursor: pointer;
 }
 
-/* ---- 参与者选择（弹窗中复用联系人搜索） ---- */
 .calendar-participant-picker {
   border: 1px solid #d9d9d9;
   border-radius: 6px;
@@ -621,6 +1371,7 @@
   font-size: 12px;
   outline: none;
   margin-bottom: 8px;
+  box-sizing: border-box;
 }
 
 .calendar-participant-search-input:focus {
@@ -650,10 +1401,6 @@
 
 .calendar-participant-pick-item.selected {
   background: #e6efff;
-}
-
-.calendar-participant-pick-item input[type="checkbox"] {
-  cursor: pointer;
 }
 
 .calendar-participant-pick-avatar {
@@ -692,50 +1439,12 @@
   gap: 6px;
 }
 
-/* ---- 空闲时间视图 ---- */
-.calendar-freebusy-bar {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #fafafa;
+.calendar-modal-desc {
   font-size: 12px;
-  color: #555;
+  color: #888;
+  margin-bottom: 14px;
 }
 
-.calendar-freebusy-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-  color: #333;
-}
-
-.calendar-freebusy-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.calendar-freebusy-item {
-  font-size: 11px;
-  color: #777;
-}
-
-.calendar-freebusy-slot {
-  display: inline-block;
-  padding: 1px 6px;
-  margin-left: 4px;
-  background: #fff3e0;
-  color: #e65100;
-  border-radius: 3px;
-}
-
-.calendar-free-empty {
-  color: #4caf50;
-  font-size: 11px;
-  margin-left: 4px;
-}
-
-/* ---- 空状态 ---- */
 .calendar-list-empty {
   padding: 60px 20px;
   text-align: center;
@@ -757,9 +1466,10 @@
   font-size: 12px;
 }
 
-/* ---- 弹窗描述 ---- */
-.calendar-modal-desc {
-  font-size: 12px;
-  color: #888;
-  margin-bottom: 14px;
+/* 视图内容切换 */
+.calendar-view-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }

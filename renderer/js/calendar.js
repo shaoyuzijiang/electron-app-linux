@@ -4,32 +4,133 @@ let calendarInitialized = false;
 let calendarCurrentUserId = null;
 let calendarCurrentUsername = null;
 
-// 日程列表数据
-let calendarEvents = [];
+// 视图状态
+let calendarView = 'week'; // 'day' | 'week' | 'month'
+let calendarViewDate = new Date(); // 当前视图聚焦的日期
+let calendarSelectedDate = new Date(); // 用户选中的日期（用于左侧列表）
 let calendarActiveEventId = null;
 let calendarActiveEventDetail = null;
 
-// 日期范围（YYYY-MM-DD）
-function calendarTodayStr() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+// 日程数据（已加载到当前视图窗口）
+let calendarEvents = [];
 
-function calendarAddDaysStr(dateStr, days) {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-let calendarStartDate = calendarTodayStr();
-let calendarEndDate = calendarAddDaysStr(calendarStartDate, 30);
-let calendarStatusFilter = 'active';
-
-// 参与者选择缓存
-let calendarParticipantSearchResults = [];
+// 参与者搜索相关
 let calendarParticipantSearchTimer = null;
+
+// 弹窗内状态
+let calendarFormState = {
+  participants: [],
+  meetingEnabled: false,
+  meetingType: 'custom',
+  participantSearchTimer: null,
+};
+
+// ---------- 工具函数 ----------
+
+function calendarPad(n) {
+  return String(n).padStart(2, '0');
+}
+
+function calendarDateStr(d) {
+  return `${d.getFullYear()}-${calendarPad(d.getMonth() + 1)}-${calendarPad(d.getDate())}`;
+}
+
+function calendarParseEventTime(timeStr) {
+  if (!timeStr) return null;
+  // "YYYY-MM-DD HH:MM:SS"
+  const parts = timeStr.split(' ');
+  if (parts.length < 2) return null;
+  const [datePart, timePart] = parts;
+  const [y, mo, d] = datePart.split('-').map(Number);
+  const [h, mi, s] = timePart.split(':').map(Number);
+  return new Date(y, mo - 1, d, h, mi, s || 0);
+}
+
+function calendarIsSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function calendarIsToday(d) {
+  return calendarIsSameDay(d, new Date());
+}
+
+function calendarStartOfWeek(d) {
+  // 周一作为一周的开始
+  const result = new Date(d);
+  const day = result.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + diff);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function calendarEndOfWeek(d) {
+  const result = calendarStartOfWeek(d);
+  result.setDate(result.getDate() + 6);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
+function calendarStartOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function calendarEndOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function calendarAddDays(d, days) {
+  const result = new Date(d);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function calendarAddMonths(d, months) {
+  return new Date(d.getFullYear(), d.getMonth() + months, 1);
+}
+
+// 把 src 日的"日"部分保持不变，截断到 ref 月份的合法范围内
+function clampDateToMonth(src, ref) {
+  const result = new Date(ref);
+  const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(src.getDate(), lastDay));
+  return result;
+}
+
+function calendarDayLabel(dateStr) {
+  if (!dateStr) return '';
+  const today = calendarDateStr(new Date());
+  const tomorrow = calendarDateStr(calendarAddDays(new Date(), 1));
+  if (dateStr === today) return '今天';
+  if (dateStr === tomorrow) return '明天';
+  const [, m, d] = dateStr.split('-');
+  return `${parseInt(m, 10)}月${parseInt(d, 10)}日`;
+}
+
+function calendarWeekdayLabel(d) {
+  return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+}
+
+function calendarFormatTime(timeStr) {
+  if (!timeStr) return '';
+  const parts = timeStr.split(' ');
+  if (parts.length < 2) return timeStr;
+  return parts[1].substring(0, 5);
+}
+
+function calendarToDateTimeLocal(timeStr) {
+  if (!timeStr) return '';
+  return timeStr.replace(' ', 'T').substring(0, 16);
+}
+
+function escapeHtml(text) {
+  if (text == null) return '';
+  const div = document.createElement('div');
+  div.textContent = String(text);
+  return div.innerHTML;
+}
 
 // ---------- 初始化 ----------
 
@@ -37,7 +138,6 @@ async function initCalendar() {
   if (calendarInitialized) return;
   calendarInitialized = true;
 
-  // 获取当前用户信息
   try {
     const profileResult = await window.electronAPI.getProfile();
     if (profileResult.success) {
@@ -49,298 +149,626 @@ async function initCalendar() {
   }
 
   bindCalendarEvents();
-
-  // 默认填充日期
-  const startInput = document.getElementById('calendarStartDate');
-  const endInput = document.getElementById('calendarEndDate');
-  if (startInput) startInput.value = calendarStartDate;
-  if (endInput) endInput.value = calendarEndDate;
-
-  await loadCalendarEvents();
+  await loadCalendarView();
 }
 
-// ---------- 日程列表 ----------
+function bindCalendarEvents() {
+  // 月份切换
+  const prevMonthBtn = document.getElementById('calendarPrevMonthBtn');
+  const nextMonthBtn = document.getElementById('calendarNextMonthBtn');
+  if (prevMonthBtn) prevMonthBtn.addEventListener('click', () => {
+    calendarViewDate = calendarAddMonths(calendarViewDate, -1);
+    // 同步选中日期为视图日期所在月的同一天（若超界则取月末）
+    calendarSelectedDate = clampDateToMonth(calendarSelectedDate, calendarViewDate);
+    loadCalendarView();
+  });
+  if (nextMonthBtn) nextMonthBtn.addEventListener('click', () => {
+    calendarViewDate = calendarAddMonths(calendarViewDate, 1);
+    calendarSelectedDate = clampDateToMonth(calendarSelectedDate, calendarViewDate);
+    loadCalendarView();
+  });
 
-async function loadCalendarEvents() {
-  const container = document.getElementById('calendarEventList');
-  if (container) container.innerHTML = '<div class="calendar-loading">加载中...</div>';
+  // 回到今天
+  const todayBtn = document.getElementById('calendarTodayBtn');
+  if (todayBtn) todayBtn.addEventListener('click', () => {
+    const now = new Date();
+    calendarViewDate = now;
+    calendarSelectedDate = now;
+    loadCalendarView();
+  });
+
+  // 主区上一段/下一段
+  const prevBtn = document.getElementById('calendarPrevBtn');
+  const nextBtn = document.getElementById('calendarNextBtn');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    if (calendarView === 'day') calendarViewDate = calendarAddDays(calendarViewDate, -1);
+    else if (calendarView === 'week') calendarViewDate = calendarAddDays(calendarViewDate, -7);
+    else calendarViewDate = calendarAddMonths(calendarViewDate, -1);
+    loadCalendarView();
+  });
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (calendarView === 'day') calendarViewDate = calendarAddDays(calendarViewDate, 1);
+    else if (calendarView === 'week') calendarViewDate = calendarAddDays(calendarViewDate, 7);
+    else calendarViewDate = calendarAddMonths(calendarViewDate, 1);
+    loadCalendarView();
+  });
+
+  // 视图切换
+  document.querySelectorAll('.calendar-view-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const v = tab.getAttribute('data-view');
+      if (v === calendarView) return;
+      calendarView = v;
+      document.querySelectorAll('.calendar-view-tab').forEach((t) => t.classList.toggle('active', t.getAttribute('data-view') === v));
+      // 切换视图时，将选中日期同步为视图日期
+      calendarSelectedDate = new Date(calendarViewDate);
+      loadCalendarView();
+    });
+  });
+
+  // 新建日程按钮
+  const createBtn = document.getElementById('calendarCreateBtn');
+  if (createBtn) createBtn.addEventListener('click', openCalendarCreateModal);
+
+  // 详情关闭按钮
+  const detailCloseBtn = document.getElementById('calendarDetailCloseBtn');
+  if (detailCloseBtn) detailCloseBtn.addEventListener('click', () => {
+    const panel = document.getElementById('calendarDetailPanel');
+    if (panel) panel.style.display = 'none';
+    calendarActiveEventId = null;
+    calendarActiveEventDetail = null;
+  });
+
+  // 创建/编辑弹窗事件
+  bindEventModalEvents();
+  // 添加参与者弹窗事件
+  bindAddParticipantModalEvents();
+}
+
+// ---------- 加载视图数据 ----------
+
+async function loadCalendarView() {
+  // 计算当前视图的数据时间范围
+  let startDate, endDate;
+  if (calendarView === 'day') {
+    const d = new Date(calendarViewDate);
+    d.setHours(0, 0, 0, 0);
+    startDate = d;
+    endDate = new Date(d);
+    endDate.setHours(23, 59, 59, 999);
+  } else if (calendarView === 'week') {
+    startDate = calendarStartOfWeek(calendarViewDate);
+    endDate = calendarEndOfWeek(calendarViewDate);
+  } else {
+    // month 视图：扩展到完整的月历网格（包含上月末尾和下月开头的几行）
+    const monthStart = calendarStartOfMonth(calendarViewDate);
+    const monthEnd = calendarEndOfMonth(calendarViewDate);
+    startDate = calendarStartOfWeek(monthStart);
+    endDate = calendarEndOfWeek(monthEnd);
+  }
+
+  // 加载日程
+  await loadCalendarEvents(startDate, endDate);
+
+  // 渲染所有视图组件
+  renderCalendarMini();
+  renderCalendarMain();
+  renderCalendarDayScheduleList();
+  renderCalendarDetailPanel();
+}
+
+async function loadCalendarEvents(startDate, endDate) {
+  const startDateStr = calendarDateStr(startDate);
+  const endDateStr = calendarDateStr(endDate);
 
   try {
     const result = await window.electronAPI.calendarGetEvents({
-      startDate: calendarStartDate,
-      endDate: calendarEndDate,
-      status: calendarStatusFilter,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      status: 'active', // 视图内仅显示进行中
     });
     if (result.success && result.data) {
       calendarEvents = result.data;
-      renderCalendarEventList();
     } else {
       calendarEvents = [];
-      renderCalendarEventList();
     }
   } catch (err) {
     console.error('[Calendar] 加载日程失败:', err);
-    if (container) {
-      container.innerHTML = `<div class="calendar-list-empty">${escapeHtml(err.message || '加载失败')}</div>`;
+    calendarEvents = [];
+  }
+
+  // 额外查询当前已选中日程的状态（包括已取消的）
+  if (calendarActiveEventId) {
+    try {
+      const detailRes = await window.electronAPI.calendarGetEventDetail(calendarActiveEventId);
+      if (detailRes.success && detailRes.data) {
+        calendarActiveEventDetail = detailRes.data;
+      }
+    } catch (err) {
+      // ignore
     }
   }
 }
 
-function groupCalendarEventsByDate(events) {
-  const groups = {};
-  events.forEach((ev) => {
-    const dateKey = (ev.startTime || '').split(' ')[0] || '未知';
-    if (!groups[dateKey]) groups[dateKey] = [];
-    groups[dateKey].push(ev);
+// ---------- 左侧：紧凑月历 ----------
+
+function renderCalendarMini() {
+  // 标题
+  const titleEl = document.getElementById('calendarMiniTitle');
+  if (titleEl) titleEl.textContent = `${calendarViewDate.getFullYear()}年${calendarViewDate.getMonth() + 1}月`;
+
+  // 网格
+  const grid = document.getElementById('calendarMiniGrid');
+  if (!grid) return;
+
+  const monthStart = calendarStartOfMonth(calendarViewDate);
+  const gridStart = calendarStartOfWeek(monthStart);
+
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const day = calendarAddDays(gridStart, i);
+    const dateStr = calendarDateStr(day);
+    const isCurrentMonth = day.getMonth() === calendarViewDate.getMonth();
+    const isToday = calendarIsToday(day);
+    const isSelected = calendarIsSameDay(day, calendarSelectedDate);
+
+    // 收集这一天的日程（仅 active）
+    const dayEvents = calendarEvents.filter((ev) => {
+      const st = calendarParseEventTime(ev.startTime);
+      return st && calendarIsSameDay(st, day);
+    });
+    const dots = dayEvents.slice(0, 3).map((ev) => {
+      const cls = ev.status === 'cancelled' ? 'is-cancelled' : (ev.meeting ? 'has-meeting' : '');
+      return `<span class="calendar-mini-cell-dot ${cls}"></span>`;
+    }).join('');
+    const more = dayEvents.length > 3 ? `<div class="calendar-mini-cell-more">+${dayEvents.length - 3}</div>` : '';
+
+    cells.push(`
+      <div class="calendar-mini-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}" data-date="${dateStr}">
+        <div class="calendar-mini-cell-date">${day.getDate()}</div>
+        <div class="calendar-mini-cell-dots">${dots}</div>
+        ${more}
+      </div>
+    `);
+  }
+  grid.innerHTML = cells.join('');
+
+  // 点击日期
+  grid.querySelectorAll('.calendar-mini-cell').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      const dateStr = cell.getAttribute('data-date');
+      if (!dateStr) return;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      calendarSelectedDate = new Date(y, m - 1, d);
+      // 跳转视图：若选了非本月日期，跳转到对应月；切换到日视图
+      if (calendarSelectedDate.getMonth() !== calendarViewDate.getMonth() || calendarSelectedDate.getFullYear() !== calendarViewDate.getFullYear()) {
+        calendarViewDate = new Date(calendarSelectedDate);
+      }
+      loadCalendarView();
+    });
   });
-
-  // 按日期排序
-  const sortedKeys = Object.keys(groups).sort();
-  return sortedKeys.map((key) => ({ date: key, items: groups[key] }));
 }
 
-function getCalendarDateLabel(dateStr) {
-  if (!dateStr) return '';
-  const today = calendarTodayStr();
-  const tomorrow = calendarAddDaysStr(today, 1);
-  if (dateStr === today) return '今天';
-  if (dateStr === tomorrow) return '明天';
-  const [y, m, d] = dateStr.split('-');
-  return `${parseInt(m, 10)}月${parseInt(d, 10)}日`;
-}
+// ---------- 左侧：选中日期的日程列表 ----------
 
-function formatCalendarTime(timeStr) {
-  if (!timeStr) return '';
-  // timeStr: "YYYY-MM-DD HH:MM:SS"
-  const parts = timeStr.split(' ');
-  if (parts.length < 2) return timeStr;
-  return parts[1].substring(0, 5); // HH:MM
-}
+function renderCalendarDayScheduleList() {
+  const titleEl = document.getElementById('calendarDayScheduleTitle');
+  const listEl = document.getElementById('calendarDayScheduleList');
+  if (!listEl) return;
 
-function renderCalendarEventList() {
-  const container = document.getElementById('calendarEventList');
-  if (!container) return;
+  const dateStr = calendarDateStr(calendarSelectedDate);
+  if (titleEl) titleEl.textContent = `${calendarDayLabel(dateStr)} · ${dateStr}`;
 
-  if (!calendarEvents || calendarEvents.length === 0) {
-    container.innerHTML = `
-      <div class="calendar-list-empty">
-        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
-        <div>暂无日程</div>
-        <div style="margin-top:6px;font-size:11px;">点击上方"新建日程"开始</div>
-      </div>`;
+  const dayEvents = calendarEvents.filter((ev) => {
+    const st = calendarParseEventTime(ev.startTime);
+    return st && calendarIsSameDay(st, calendarSelectedDate);
+  }).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+
+  if (dayEvents.length === 0) {
+    listEl.innerHTML = `<div class="calendar-day-schedule-empty">当日无日程</div>`;
     return;
   }
 
-  const grouped = groupCalendarEventsByDate(calendarEvents);
-
-  container.innerHTML = grouped.map((group) => {
-    const label = getCalendarDateLabel(group.date);
+  listEl.innerHTML = dayEvents.map((ev) => {
+    const isCancelled = ev.status === 'cancelled';
+    const isOrganizer = ev.organizerId === calendarCurrentUserId;
+    const start = calendarFormatTime(ev.startTime);
+    const end = calendarFormatTime(ev.endTime);
+    const isActive = ev.id === calendarActiveEventId;
     return `
-      <div class="calendar-day-group">
-        <div class="calendar-day-label">${escapeHtml(label)} · ${escapeHtml(group.date)}</div>
-        ${group.items.map((ev) => {
-          const isActive = ev.id === calendarActiveEventId;
-          const isCancelled = ev.status === 'cancelled';
-          const isOrganizer = ev.organizerId === calendarCurrentUserId;
-          const hasMeeting = !!ev.meeting;
-          const start = formatCalendarTime(ev.startTime);
-          const end = formatCalendarTime(ev.endTime);
-          return `
-            <div class="calendar-event-item ${isActive ? 'active' : ''}" data-event-id="${escapeHtml(ev.id)}">
-              <div class="calendar-event-time-block">
-                <div class="calendar-event-time-start">${escapeHtml(start)}</div>
-                <div class="calendar-event-time-end">${escapeHtml(end)}</div>
-              </div>
-              <div class="calendar-event-body">
-                <div class="calendar-event-title">${escapeHtml(ev.title || '未命名日程')}</div>
-                <div class="calendar-event-meta">
-                  ${hasMeeting ? '<span class="calendar-event-tag meeting">会议</span>' : ''}
-                  ${isOrganizer ? '<span class="calendar-event-tag organizer">组织者</span>' : ''}
-                  ${isCancelled ? '<span class="calendar-event-tag cancelled">已取消</span>' : ''}
-                  ${ev.location ? `<span>${escapeHtml(ev.location)}</span>` : ''}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
+      <div class="calendar-day-schedule-item ${isCancelled ? 'is-cancelled' : ''}" data-event-id="${escapeHtml(ev.id)}" style="${isActive ? 'background:#e6efff;' : ''}">
+        <div class="calendar-day-schedule-item-time">${escapeHtml(start)} - ${escapeHtml(end)}</div>
+        <div class="calendar-day-schedule-item-body">
+          <div class="calendar-day-schedule-item-title">${escapeHtml(ev.title || '未命名日程')}</div>
+          <div class="calendar-day-schedule-item-meta">
+            ${ev.meeting ? '会议 · ' : ''}${escapeHtml(ev.location || '')}
+            ${isOrganizer ? ' · 组织者' : ''}
+          </div>
+        </div>
       </div>
     `;
   }).join('');
+
+  listEl.querySelectorAll('.calendar-day-schedule-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const eventId = item.getAttribute('data-event-id');
+      if (eventId) selectCalendarEvent(eventId);
+    });
+  });
 }
 
-// ---------- 日程详情 ----------
+// ---------- 主区域 ----------
+
+function renderCalendarMain() {
+  const body = document.getElementById('calendarMainBody');
+  const titleEl = document.getElementById('calendarMainTitle');
+  if (!body) return;
+
+  if (calendarView === 'day') {
+    if (titleEl) titleEl.textContent = `${calendarViewDate.getMonth() + 1}月${calendarViewDate.getDate()}日 ${'日一二三四五六'[calendarViewDate.getDay()]}`;
+    body.innerHTML = renderDayView();
+    bindDayViewEvents();
+  } else if (calendarView === 'week') {
+    const start = calendarStartOfWeek(calendarViewDate);
+    const end = calendarEndOfWeek(calendarViewDate);
+    if (titleEl) titleEl.textContent = `${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+    body.innerHTML = renderWeekView(start);
+    bindWeekViewEvents();
+  } else {
+    if (titleEl) titleEl.textContent = `${calendarViewDate.getFullYear()}年${calendarViewDate.getMonth() + 1}月`;
+    body.innerHTML = renderMonthView();
+    bindMonthViewEvents();
+  }
+}
+
+// ---------- 周视图 ----------
+
+function renderWeekView(weekStart) {
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(calendarAddDays(weekStart, i));
+
+  // 头部
+  let html = '<div class="calendar-week-view">';
+  html += '<div class="calendar-week-header">';
+  html += '<div class="calendar-week-header-spacer"></div>';
+  days.forEach((d) => {
+    const isToday = calendarIsToday(d);
+    html += `
+      <div class="calendar-week-day-header ${isToday ? 'is-today' : ''}">
+        <div class="calendar-week-day-label">${calendarWeekdayLabel(d)}</div>
+        <div class="calendar-week-day-date">${d.getDate()}</div>
+      </div>
+    `;
+  });
+  html += '</div>';
+
+  // 主体：24小时 × 7天
+  html += '<div class="calendar-week-grid">';
+  // 时间列
+  html += '<div class="calendar-week-time-col">';
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="calendar-week-time-cell" data-time="${calendarPad(h)}:00"></div>`;
+  }
+  html += '</div>';
+
+  // 每天一列
+  const hourHeight = 48; // px
+  days.forEach((d) => {
+    const isToday = calendarIsToday(d);
+    html += `<div class="calendar-week-day-col ${isToday ? 'is-today' : ''}" data-date="${calendarDateStr(d)}">`;
+    // 小时背景格
+    for (let h = 0; h < 24; h++) {
+      html += `<div class="calendar-week-hour-cell"></div>`;
+    }
+    // 渲染该天的日程
+    const dayEvents = calendarEvents.filter((ev) => {
+      const st = calendarParseEventTime(ev.startTime);
+      return st && calendarIsSameDay(st, d);
+    });
+    dayEvents.forEach((ev) => {
+      const st = calendarParseEventTime(ev.startTime);
+      const et = calendarParseEventTime(ev.endTime);
+      if (!st) return;
+      // 跨天处理：结束时间超过当天 24:00，截断
+      const dayStart = new Date(d); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(d); dayEnd.setHours(24, 0, 0, 0);
+      const segStart = st < dayStart ? dayStart : st;
+      const segEnd = et > dayEnd ? dayEnd : et;
+      const startMin = segStart.getHours() * 60 + segStart.getMinutes();
+      const endMin = segEnd.getHours() * 60 + segEnd.getMinutes();
+      const top = (startMin / 60) * hourHeight;
+      const height = ((endMin - startMin) / 60) * hourHeight;
+      if (height <= 0) return;
+      const isCancelled = ev.status === 'cancelled';
+      const isOrganizer = ev.organizerId === calendarCurrentUserId;
+      html += `
+        <div class="calendar-week-event ${isCancelled ? 'is-cancelled' : ''} ${isOrganizer ? 'is-organizing' : ''}"
+             data-event-id="${escapeHtml(ev.id)}"
+             style="top:${top}px;height:${Math.max(height, 20)}px;${isCancelled ? '' : (isOrganizer ? 'background:#1e6fff;' : 'background:#5b8def;')}">
+          <div class="calendar-week-event-time">${escapeHtml(calendarFormatTime(ev.startTime))} - ${escapeHtml(calendarFormatTime(ev.endTime))}</div>
+          <div class="calendar-week-event-title">${escapeHtml(ev.title || '')}</div>
+        </div>
+      `;
+    });
+    // 当前时刻红线
+    if (isToday) {
+      const now = new Date();
+      const nowTop = (now.getHours() * 60 + now.getMinutes()) / 60 * hourHeight;
+      html += `<div class="calendar-week-now-line" style="top:${nowTop}px;"></div>`;
+    }
+    html += '</div>';
+  });
+  html += '</div>'; // grid
+  html += '</div>'; // week-view
+  return html;
+}
+
+function bindWeekViewEvents() {
+  document.querySelectorAll('.calendar-week-event').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const eventId = el.getAttribute('data-event-id');
+      if (eventId) selectCalendarEvent(eventId);
+    });
+  });
+}
+
+// ---------- 日视图 ----------
+
+function renderDayView() {
+  const d = calendarViewDate;
+  const dayStart = new Date(d); dayStart.setHours(0, 0, 0, 0);
+  const hourHeight = 48;
+  const dayEvents = calendarEvents.filter((ev) => {
+    const st = calendarParseEventTime(ev.startTime);
+    return st && calendarIsSameDay(st, d);
+  });
+
+  let html = '<div class="calendar-day-view">';
+  html += '<div class="calendar-day-header">';
+  html += `<div class="calendar-day-header-title">${d.getMonth() + 1}月${d.getDate()}日 · ${calendarWeekdayLabel(d)}</div>`;
+  html += `<div class="calendar-day-header-date">${d.getFullYear()}年 · ${dayEvents.length} 个日程</div>`;
+  html += '</div>';
+  html += '<div class="calendar-day-grid">';
+  html += '<div class="calendar-day-time-col">';
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="calendar-day-time-cell" data-time="${calendarPad(h)}:00"></div>`;
+  }
+  html += '</div>';
+  html += '<div class="calendar-day-events-col">';
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="calendar-day-hour-cell"></div>`;
+  }
+  dayEvents.forEach((ev) => {
+    const st = calendarParseEventTime(ev.startTime);
+    const et = calendarParseEventTime(ev.endTime);
+    if (!st) return;
+    const startMin = st.getHours() * 60 + st.getMinutes();
+    const endMin = et ? (et.getHours() * 60 + et.getMinutes()) : startMin + 60;
+    const top = (startMin / 60) * hourHeight;
+    const height = ((endMin - startMin) / 60) * hourHeight;
+    const isCancelled = ev.status === 'cancelled';
+    html += `
+      <div class="calendar-day-event ${isCancelled ? 'is-cancelled' : ''}" data-event-id="${escapeHtml(ev.id)}" style="top:${top}px;height:${Math.max(height, 30)}px;">
+        <div class="calendar-day-event-time">${escapeHtml(calendarFormatTime(ev.startTime))} - ${escapeHtml(calendarFormatTime(ev.endTime))}</div>
+        <div class="calendar-day-event-title">${escapeHtml(ev.title || '')}</div>
+        ${ev.location ? `<div class="calendar-day-event-loc">📍 ${escapeHtml(ev.location)}</div>` : ''}
+      </div>
+    `;
+  });
+  const now = new Date();
+  if (calendarIsToday(d)) {
+    const nowTop = (now.getHours() * 60 + now.getMinutes()) / 60 * hourHeight;
+    html += `<div class="calendar-week-now-line" style="top:${nowTop}px;"></div>`;
+  }
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function bindDayViewEvents() {
+  document.querySelectorAll('.calendar-day-event').forEach((el) => {
+    el.addEventListener('click', () => {
+      const eventId = el.getAttribute('data-event-id');
+      if (eventId) selectCalendarEvent(eventId);
+    });
+  });
+}
+
+// ---------- 月视图 ----------
+
+function renderMonthView() {
+  const monthStart = calendarStartOfMonth(calendarViewDate);
+  const monthEnd = calendarEndOfMonth(calendarViewDate);
+  const gridStart = calendarStartOfWeek(monthStart);
+  const gridEnd = calendarEndOfWeek(monthEnd);
+
+  let html = '<div class="calendar-month-view">';
+  html += '<div class="calendar-month-header">';
+  ['一', '二', '三', '四', '五', '六', '日'].forEach((w) => {
+    html += `<div class="calendar-month-header-cell">${w}</div>`;
+  });
+  html += '</div>';
+
+  html += '<div class="calendar-month-body">';
+  let d = new Date(gridStart);
+  while (d <= gridEnd) {
+    const isCurrentMonth = d.getMonth() === calendarViewDate.getMonth();
+    const isToday = calendarIsToday(d);
+    const dateStr = calendarDateStr(d);
+    const dayEvents = calendarEvents.filter((ev) => {
+      const st = calendarParseEventTime(ev.startTime);
+      return st && calendarIsSameDay(st, d);
+    });
+    const max = 3;
+    const visible = dayEvents.slice(0, max);
+    const moreCount = dayEvents.length - max;
+    html += `<div class="calendar-month-cell ${isCurrentMonth ? '' : 'is-other-month'} ${isToday ? 'is-today' : ''}" data-date="${dateStr}">`;
+    html += `<div class="calendar-month-cell-date">${d.getDate()}</div>`;
+    visible.forEach((ev) => {
+      const isCancelled = ev.status === 'cancelled';
+      const hasMeeting = !!ev.meeting;
+      html += `<div class="calendar-month-cell-event ${isCancelled ? 'is-cancelled' : ''} ${hasMeeting ? 'has-meeting' : ''}" data-event-id="${escapeHtml(ev.id)}" title="${escapeHtml(ev.title || '')}">${escapeHtml(calendarFormatTime(ev.startTime))} ${escapeHtml(ev.title || '')}</div>`;
+    });
+    if (moreCount > 0) {
+      html += `<div class="calendar-month-cell-more" data-date="${dateStr}">+${moreCount} 个日程</div>`;
+    }
+    html += '</div>';
+    d = calendarAddDays(d, 1);
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function bindMonthViewEvents() {
+  document.querySelectorAll('.calendar-month-cell-event').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const eventId = el.getAttribute('data-event-id');
+      if (eventId) selectCalendarEvent(eventId);
+    });
+  });
+  document.querySelectorAll('.calendar-month-cell').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.calendar-month-cell-event')) return;
+      const dateStr = el.getAttribute('data-date');
+      if (!dateStr) return;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      calendarSelectedDate = new Date(y, m - 1, d);
+      // 切换到日视图
+      calendarView = 'day';
+      calendarViewDate = new Date(calendarSelectedDate);
+      document.querySelectorAll('.calendar-view-tab').forEach((t) => t.classList.toggle('active', t.getAttribute('data-view') === 'day'));
+      loadCalendarView();
+    });
+  });
+  document.querySelectorAll('.calendar-month-cell-more').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dateStr = el.getAttribute('data-date');
+      if (!dateStr) return;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      calendarSelectedDate = new Date(y, m - 1, d);
+      calendarView = 'day';
+      calendarViewDate = new Date(calendarSelectedDate);
+      document.querySelectorAll('.calendar-view-tab').forEach((t) => t.classList.toggle('active', t.getAttribute('data-view') === 'day'));
+      loadCalendarView();
+    });
+  });
+}
+
+// ---------- 详情面板 ----------
 
 async function selectCalendarEvent(eventId) {
   calendarActiveEventId = eventId;
-  renderCalendarEventList();
-
-  const detailContainer = document.getElementById('calendarDetailContent');
-  if (detailContainer) {
-    detailContainer.innerHTML = '<div class="calendar-loading">加载中...</div>';
-    detailContainer.style.display = '';
+  // 重新加载以获取最新状态
+  let startDate, endDate;
+  if (calendarView === 'day') {
+    startDate = new Date(calendarViewDate);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(calendarViewDate);
+    endDate.setHours(23, 59, 59, 999);
+  } else {
+    startDate = calendarStartOfWeek(calendarViewDate);
+    endDate = calendarEndOfWeek(calendarViewDate);
   }
-  const emptyEl = document.getElementById('calendarDetailEmpty');
-  if (emptyEl) emptyEl.style.display = 'none';
-
+  await loadCalendarEvents(startDate, endDate);
+  // 重新拉取详情
   try {
     const result = await window.electronAPI.calendarGetEventDetail(eventId);
     if (result.success && result.data) {
       calendarActiveEventDetail = result.data;
-      renderCalendarEventDetail(calendarActiveEventDetail);
     } else {
-      if (detailContainer) {
-        detailContainer.innerHTML = `<div class="calendar-list-empty">${escapeHtml(result.message || '加载详情失败')}</div>`;
-      }
+      calendarActiveEventDetail = null;
     }
   } catch (err) {
-    console.error('[Calendar] 加载日程详情失败:', err);
-    if (detailContainer) {
-      detailContainer.innerHTML = `<div class="calendar-list-empty">${escapeHtml(err.message || '加载失败')}</div>`;
-    }
+    calendarActiveEventDetail = null;
   }
+  renderCalendarMini();
+  renderCalendarDayScheduleList();
+  renderCalendarMain();
+  renderCalendarDetailPanel();
 }
 
-function renderCalendarEventDetail(ev) {
-  const container = document.getElementById('calendarDetailContent');
-  if (!container) return;
+function renderCalendarDetailPanel() {
+  const panel = document.getElementById('calendarDetailPanel');
+  const content = document.getElementById('calendarDetailPanelContent');
+  const titleEl = panel ? panel.querySelector('.calendar-detail-panel-title') : null;
+  if (!panel || !content) return;
+
+  if (!calendarActiveEventDetail) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = '';
+  const ev = calendarActiveEventDetail;
+  if (titleEl) titleEl.textContent = ev.title || '日程详情';
 
   const isOrganizer = ev.organizerId === calendarCurrentUserId;
   const isCancelled = ev.status === 'cancelled';
+  const startDt = calendarParseEventTime(ev.startTime);
+  const endDt = calendarParseEventTime(ev.endTime);
+  const startDateLabel = startDt ? `${startDt.getFullYear()}年${startDt.getMonth() + 1}月${startDt.getDate()}日 ${calendarWeekdayLabel(startDt)}` : '-';
+  const timeRange = `${calendarFormatTime(ev.startTime)} - ${calendarFormatTime(ev.endTime)}`;
 
-  const meetingBlock = ev.meeting ? renderMeetingBlock(ev.meeting) : '';
-  const descriptionBlock = ev.description ? `
-    <div class="calendar-detail-row">
-      <div class="calendar-detail-label">描述</div>
-      <div class="calendar-detail-value">
-        <div class="calendar-description">${escapeHtml(ev.description)}</div>
-      </div>
-    </div>
-  ` : '';
-
-  const participantsSection = renderParticipantsSection(ev, isOrganizer);
-
-  container.innerHTML = `
-    <div class="calendar-detail-header">
-      <h2 class="calendar-detail-title">
-        ${escapeHtml(ev.title || '未命名日程')}
-        ${isCancelled ? '<span class="calendar-event-tag cancelled">已取消</span>' : ''}
-      </h2>
-      <div class="calendar-detail-actions">
-        ${isOrganizer && !isCancelled ? `
-          <button class="calendar-action-btn" id="calendarEditBtn">编辑</button>
-          <button class="calendar-action-btn danger" id="calendarCancelBtn">取消日程</button>
-        ` : ''}
-        ${ev.meeting && ev.meeting.joinUrl && !isCancelled ? `
-          <button class="calendar-action-btn" id="calendarCopyMeetingBtn">复制会议信息</button>
-        ` : ''}
-      </div>
-    </div>
-    <div class="calendar-detail-body">
-      <div class="calendar-detail-row">
-        <div class="calendar-detail-label">组织者</div>
-        <div class="calendar-detail-value">${escapeHtml(ev.organizerName || ev.organizerId || '-')}</div>
-      </div>
-      <div class="calendar-detail-row">
-        <div class="calendar-detail-label">开始时间</div>
-        <div class="calendar-detail-value">${escapeHtml(ev.startTime || '-')}</div>
-      </div>
-      <div class="calendar-detail-row">
-        <div class="calendar-detail-label">结束时间</div>
-        <div class="calendar-detail-value">${escapeHtml(ev.endTime || '-')}</div>
-      </div>
-      ${ev.location ? `
-      <div class="calendar-detail-row">
-        <div class="calendar-detail-label">地点</div>
-        <div class="calendar-detail-value">${escapeHtml(ev.location)}</div>
-      </div>
-      ` : ''}
-      ${descriptionBlock}
-      ${meetingBlock}
-      ${participantsSection}
-    </div>
-  `;
-
-  // 绑定按钮
-  const editBtn = document.getElementById('calendarEditBtn');
-  const cancelBtn = document.getElementById('calendarCancelBtn');
-  const copyBtn = document.getElementById('calendarCopyMeetingBtn');
-
-  if (editBtn) editBtn.addEventListener('click', () => openCalendarEditModal(ev));
-  if (cancelBtn) cancelBtn.addEventListener('click', () => cancelCalendarEvent(ev));
-  if (copyBtn) copyBtn.addEventListener('click', () => copyMeetingInfo(ev.meeting));
-
-  // 绑定参与者操作
-  bindParticipantsEvents(ev);
-
-  // 如果有参与者，查询空闲时间（默认组织者 + 1 个参与者）
-  if (ev.participants && ev.participants.length > 1 && ev.startTime && ev.endTime) {
-    const otherIds = ev.participants
-      .filter((p) => p.userId !== calendarCurrentUserId)
-      .map((p) => p.userId)
-      .slice(0, 5); // 最多查 5 人
-    if (otherIds.length > 0) {
-      loadFreeBusyForEvent(ev, [calendarCurrentUserId, ...otherIds]);
-    }
-  }
-}
-
-function renderMeetingBlock(meeting) {
-  if (!meeting) return '';
-  const isWemeet = meeting.meetingType === 'wemeet';
-  const code = meeting.meetingCode || meeting.meetingId || '';
-  return `
-    <div class="calendar-detail-row">
-      <div class="calendar-detail-label">会议</div>
-      <div class="calendar-detail-value">
-        <div class="calendar-meeting-card">
-          <div class="calendar-meeting-card-header">
-            <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-            ${isWemeet ? '腾讯会议' : '自定义会议'}
-            ${meeting.meetingSubject ? ` · ${escapeHtml(meeting.meetingSubject)}` : ''}
-          </div>
-          ${code ? `
-            <div class="calendar-meeting-card-row">
-              <div class="calendar-meeting-card-label">会议号</div>
-              <div class="calendar-meeting-card-value meeting-code" data-code="${escapeHtml(code)}">${escapeHtml(code)}</div>
-            </div>
-          ` : ''}
-          ${meeting.joinUrl ? `
-            <div class="calendar-meeting-card-row">
-              <div class="calendar-meeting-card-label">入会链接</div>
-              <div class="calendar-meeting-card-value">
-                <a href="${escapeHtml(meeting.joinUrl)}" target="_blank" class="calendar-meeting-card-link">打开会议链接</a>
-              </div>
-            </div>
-          ` : ''}
+  content.innerHTML = `
+    <div class="calendar-detail-color-bar"></div>
+    <h2 class="calendar-detail-panel-title-big">
+      ${escapeHtml(ev.title || '未命名日程')}
+      ${isCancelled ? '<span class="calendar-event-tag cancelled">已取消</span>' : ''}
+    </h2>
+    <div class="calendar-detail-meta">
+      <div class="calendar-detail-meta-row">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.59L11 13.41V6h2v6.59l3.7 3.7-1.5 1.3z"/></svg>
+        <div>
+          <div>${escapeHtml(startDateLabel)}</div>
+          <div style="color:#888;font-size:12px;margin-top:2px;">${escapeHtml(timeRange)}</div>
         </div>
       </div>
+      ${ev.location ? `
+      <div class="calendar-detail-meta-row">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+        <div>${escapeHtml(ev.location)}</div>
+      </div>
+      ` : ''}
+      <div class="calendar-detail-meta-row">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <div>组织者：${escapeHtml(ev.organizerName || ev.organizerId || '-')}</div>
+      </div>
     </div>
-  `;
-}
 
-function renderParticipantsSection(ev, isOrganizer) {
-  const participants = ev.participants || [];
-  const isCancelled = ev.status === 'cancelled';
+    <div class="calendar-detail-actions">
+      ${isOrganizer && !isCancelled ? `
+        <button class="calendar-action-btn" id="calendarPanelEditBtn">编辑</button>
+        <button class="calendar-action-btn danger" id="calendarPanelCancelBtn">取消日程</button>
+      ` : ''}
+      ${ev.meeting && ev.meeting.joinUrl && !isCancelled ? `
+        <button class="calendar-action-btn" id="calendarPanelJoinBtn">加入会议</button>
+        <button class="calendar-action-btn" id="calendarPanelCopyBtn">复制会议信息</button>
+      ` : ''}
+    </div>
 
-  return `
+    ${ev.description ? `
+      <div class="calendar-detail-section-title">日程描述</div>
+      <div class="calendar-detail-description">${escapeHtml(ev.description)}</div>
+    ` : ''}
+
+    ${ev.meeting ? renderMeetingCard(ev.meeting) : ''}
+
     <div class="calendar-participants-section">
       <div class="calendar-participants-title">
-        <span>参与者（${participants.length}）</span>
-        ${isOrganizer && !isCancelled ? `
-          <button class="calendar-add-participant-btn" id="calendarAddParticipantBtn">+ 添加</button>
-        ` : ''}
+        <span>参与者（${(ev.participants || []).length}）</span>
+        ${isOrganizer && !isCancelled ? '<button class="calendar-add-participant-btn" id="calendarPanelAddParticipantBtn">+ 添加</button>' : ''}
       </div>
-      <div class="calendar-participants-list" id="calendarParticipantsList">
-        ${participants.map((p) => {
+      <div class="calendar-participants-list">
+        ${(ev.participants || []).map((p) => {
           const initial = (p.username || '?').charAt(0).toUpperCase();
           const isSelf = p.userId === calendarCurrentUserId;
           const isOrganizerUser = p.userId === ev.organizerId;
-          const statusLabel = {
-            accepted: '已接受',
-            pending: '待回复',
-            declined: '已拒绝',
-            tentative: '待定',
-          }[p.status] || p.status;
+          const statusLabel = { accepted: '已接受', pending: '待回复', declined: '已拒绝', tentative: '待定' }[p.status] || p.status;
           const canRemove = isOrganizer && !isOrganizerUser && !isCancelled;
           return `
             <div class="calendar-participant-item" data-user-id="${escapeHtml(p.userId)}">
@@ -354,35 +782,33 @@ function renderParticipantsSection(ev, isOrganizer) {
           `;
         }).join('')}
       </div>
-      <div id="calendarFreeBusyContainer"></div>
+      <div id="calendarPanelFreeBusy"></div>
     </div>
   `;
-}
 
-function bindParticipantsEvents(ev) {
-  const isOrganizer = ev.organizerId === calendarCurrentUserId;
+  // 绑定按钮
+  const editBtn = document.getElementById('calendarPanelEditBtn');
+  const cancelBtn = document.getElementById('calendarPanelCancelBtn');
+  const joinBtn = document.getElementById('calendarPanelJoinBtn');
+  const copyBtn = document.getElementById('calendarPanelCopyBtn');
+  const addBtn = document.getElementById('calendarPanelAddParticipantBtn');
 
-  // 添加参与者
-  const addBtn = document.getElementById('calendarAddParticipantBtn');
-  if (addBtn) {
-    addBtn.addEventListener('click', () => openAddParticipantModal(ev));
-  }
+  if (editBtn) editBtn.addEventListener('click', () => openCalendarEditModal(ev));
+  if (cancelBtn) cancelBtn.addEventListener('click', () => cancelCalendarEvent(ev));
+  if (joinBtn) joinBtn.addEventListener('click', () => window.open(ev.meeting.joinUrl, '_blank'));
+  if (copyBtn) copyBtn.addEventListener('click', () => copyMeetingInfo(ev.meeting));
+  if (addBtn) addBtn.addEventListener('click', () => openAddParticipantModal(ev));
 
-  // 移除参与者
-  const list = document.getElementById('calendarParticipantsList');
-  if (list) {
-    list.addEventListener('click', async (e) => {
-      const removeBtn = e.target.closest('.calendar-participant-remove');
-      if (!removeBtn) return;
-      const userId = removeBtn.getAttribute('data-user-id');
-      const username = removeBtn.getAttribute('data-username');
+  // 参与者移除
+  content.querySelectorAll('.calendar-participant-remove').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const userId = btn.getAttribute('data-user-id');
+      const username = btn.getAttribute('data-username');
       if (!confirm(`确定移除 ${username || '该用户'}？`)) return;
-
       try {
         const result = await window.electronAPI.calendarRemoveParticipant(ev.id, userId);
         if (result.success) {
           await selectCalendarEvent(ev.id);
-          await loadCalendarEvents();
         } else {
           alert(result.message || '移除失败');
         }
@@ -390,24 +816,99 @@ function bindParticipantsEvents(ev) {
         alert('移除失败: ' + err.message);
       }
     });
-  }
+  });
 
   // 会议号点击复制
-  const detailContainer = document.getElementById('calendarDetailContent');
-  if (detailContainer) {
-    detailContainer.addEventListener('click', (e) => {
-      const codeEl = e.target.closest('.meeting-code');
-      if (codeEl) {
-        const code = codeEl.getAttribute('data-code');
-        if (code) {
-          navigator.clipboard.writeText(code).then(() => {
-            const original = codeEl.textContent;
-            codeEl.textContent = '已复制';
-            setTimeout(() => { codeEl.textContent = original; }, 1000);
-          }).catch(() => {});
-        }
+  content.querySelectorAll('.calendar-meeting-card-code').forEach((el) => {
+    el.addEventListener('click', () => {
+      const code = el.getAttribute('data-code');
+      if (code) {
+        navigator.clipboard.writeText(code).then(() => {
+          const original = el.textContent;
+          el.textContent = '已复制';
+          setTimeout(() => { el.textContent = original; }, 1000);
+        }).catch(() => {});
       }
     });
+  });
+
+  // 空闲时间
+  if (ev.participants && ev.participants.length > 1 && ev.startTime && ev.endTime) {
+    const otherIds = ev.participants
+      .filter((p) => p.userId !== calendarCurrentUserId)
+      .map((p) => p.userId)
+      .slice(0, 5);
+    if (otherIds.length > 0) {
+      loadFreeBusyForEvent(ev, [calendarCurrentUserId, ...otherIds]);
+    }
+  }
+}
+
+function renderMeetingCard(meeting) {
+  if (!meeting) return '';
+  const isWemeet = meeting.meetingType === 'wemeet';
+  const code = meeting.meetingCode || meeting.meetingId || '';
+  return `
+    <div class="calendar-detail-section-title" style="margin-top:16px;">关联会议</div>
+    <div class="calendar-meeting-card">
+      <div class="calendar-meeting-card-header">
+        <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+        ${isWemeet ? '腾讯会议' : '自定义会议'}${meeting.meetingSubject ? ' · ' + escapeHtml(meeting.meetingSubject) : ''}
+      </div>
+      ${code ? `
+        <div class="calendar-meeting-card-row">
+          <div class="calendar-meeting-card-label">会议号</div>
+          <div class="calendar-meeting-card-value">
+            <span class="calendar-meeting-card-code" data-code="${escapeHtml(code)}">${escapeHtml(code)}</span>
+          </div>
+        </div>
+      ` : ''}
+      ${meeting.joinUrl ? `
+        <a href="${escapeHtml(meeting.joinUrl)}" target="_blank" class="calendar-meeting-card-link">加入会议</a>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ---------- 空闲时间 ----------
+
+async function loadFreeBusyForEvent(ev, userIds) {
+  if (!ev.startTime || !ev.endTime || !userIds || userIds.length === 0) return;
+  const container = document.getElementById('calendarPanelFreeBusy');
+  if (!container) return;
+
+  container.innerHTML = '<div class="calendar-freebusy-bar"><div class="calendar-freebusy-title">参与者忙碌时段</div><div style="color:#999;">加载中...</div></div>';
+
+  try {
+    const result = await window.electronAPI.calendarGetFreeBusy({
+      userIds,
+      startTime: ev.startTime,
+      endTime: ev.endTime,
+    });
+    if (!result.success || !result.data) {
+      container.innerHTML = '';
+      return;
+    }
+    const slots = result.data;
+    if (slots.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = `
+      <div class="calendar-freebusy-bar">
+        <div class="calendar-freebusy-title">参与者忙碌时段</div>
+        <div class="calendar-freebusy-list">
+          ${slots.map((s) => {
+            const slotHtml = s.busySlots && s.busySlots.length > 0
+              ? s.busySlots.map((bs) => `<span class="calendar-freebusy-slot">${escapeHtml((bs.startTime || '').split(' ')[1] || bs.startTime)}-${escapeHtml((bs.endTime || '').split(' ')[1] || bs.endTime)} ${escapeHtml(bs.title || '')}</span>`).join(' ')
+              : '<span class="calendar-free-empty">空闲</span>';
+            return `<div class="calendar-freebusy-item">${escapeHtml(s.username || s.userId)}：${slotHtml}</div>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = '';
   }
 }
 
@@ -427,60 +928,7 @@ function copyMeetingInfo(meeting) {
   });
 }
 
-// ---------- 空闲时间查询 ----------
-
-async function loadFreeBusyForEvent(ev, userIds) {
-  if (!ev.startTime || !ev.endTime || !userIds || userIds.length === 0) return;
-  const container = document.getElementById('calendarFreeBusyContainer');
-  if (!container) return;
-
-  container.innerHTML = `<div class="calendar-freebusy-bar"><div class="calendar-freebusy-title">空闲时间</div><div style="color:#999;">加载中...</div></div>`;
-
-  try {
-    const result = await window.electronAPI.calendarGetFreeBusy({
-      userIds,
-      startTime: ev.startTime,
-      endTime: ev.endTime,
-    });
-    if (!result.success || !result.data) {
-      container.innerHTML = '';
-      return;
-    }
-
-    const slots = result.data;
-    if (slots.length === 0) {
-      container.innerHTML = '';
-      return;
-    }
-
-    container.innerHTML = `
-      <div class="calendar-freebusy-bar">
-        <div class="calendar-freebusy-title">参与者在此期间的忙碌时段</div>
-        <div class="calendar-freebusy-list">
-          ${slots.map((s) => {
-            const slotHtml = s.busySlots && s.busySlots.length > 0
-              ? s.busySlots.map((bs) => `<span class="calendar-freebusy-slot">${escapeHtml(bs.startTime.split(' ')[1] || bs.startTime)}-${escapeHtml(bs.endTime.split(' ')[1] || bs.endTime)} ${escapeHtml(bs.title || '')}</span>`).join(' ')
-              : '<span class="calendar-free-empty">空闲</span>';
-            return `<div class="calendar-freebusy-item">${escapeHtml(s.username || s.userId)}：${slotHtml}</div>`;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    console.warn('[Calendar] 空闲时间查询失败:', err.message);
-    container.innerHTML = '';
-  }
-}
-
 // ---------- 创建/编辑日程弹窗 ----------
-
-// 弹窗内状态
-let calendarFormState = {
-  participants: [], // [{ id, username, departmentName }]
-  meetingEnabled: false,
-  meetingType: 'custom', // 'wemeet' | 'custom'
-  participantSearchTimer: null,
-};
 
 function resetCalendarFormState() {
   calendarFormState = {
@@ -501,21 +949,19 @@ function openCalendarCreateModal() {
   titleEl.textContent = '新建日程';
   errorEl.textContent = '';
 
-  // 重置表单
   document.getElementById('calendarEventTitle').value = '';
   document.getElementById('calendarEventDescription').value = '';
 
-  // 默认时间：当前时间 +1 小时到 +2 小时
-  const now = new Date();
-  const startDefault = new Date(now.getTime() + 60 * 60 * 1000);
-  const endDefault = new Date(startDefault.getTime() + 60 * 60 * 1000);
-  const pad = (n) => String(n).padStart(2, '0');
-  const toLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // 默认时间：使用选中日期 +1 小时到 +2 小时
+  const base = new Date(calendarSelectedDate);
+  base.setHours(base.getHours() + 1, 0, 0, 0);
+  const startDefault = new Date(base);
+  const endDefault = new Date(base.getTime() + 60 * 60 * 1000);
+  const toLocal = (d) => `${d.getFullYear()}-${calendarPad(d.getMonth() + 1)}-${calendarPad(d.getDate())}T${calendarPad(d.getHours())}:${calendarPad(d.getMinutes())}`;
   document.getElementById('calendarEventStart').value = toLocal(startDefault);
   document.getElementById('calendarEventEnd').value = toLocal(endDefault);
   document.getElementById('calendarEventLocation').value = '';
 
-  // 会议区域
   document.getElementById('calendarEventMeetingEnabled').checked = false;
   document.getElementById('calendarMeetingSection').style.display = 'none';
   document.getElementById('calendarEventMeetingJoinUrl').value = '';
@@ -524,12 +970,10 @@ function openCalendarCreateModal() {
   document.getElementById('calendarEventMeetingId').value = '';
   document.getElementById('calendarMeetingType').value = 'custom';
 
-  // 参与者
   document.getElementById('calendarEventParticipantSearch').value = '';
   document.getElementById('calendarEventParticipantSearchResults').innerHTML = '<div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">输入关键词搜索用户</div>';
   renderFormSelectedParticipants();
 
-  // 标识当前为新建模式
   modal.setAttribute('data-mode', 'create');
   modal.removeAttribute('data-event-id');
   modal.classList.add('show');
@@ -548,10 +992,9 @@ function openCalendarEditModal(ev) {
   document.getElementById('calendarEventTitle').value = ev.title || '';
   document.getElementById('calendarEventDescription').value = ev.description || '';
   document.getElementById('calendarEventLocation').value = ev.location || '';
-  document.getElementById('calendarEventStart').value = toDateTimeLocalInput(ev.startTime);
-  document.getElementById('calendarEventEnd').value = toDateTimeLocalInput(ev.endTime);
+  document.getElementById('calendarEventStart').value = calendarToDateTimeLocal(ev.startTime);
+  document.getElementById('calendarEventEnd').value = calendarToDateTimeLocal(ev.endTime);
 
-  // 会议信息
   const hasMeeting = !!ev.meeting;
   document.getElementById('calendarEventMeetingEnabled').checked = hasMeeting;
   document.getElementById('calendarMeetingSection').style.display = hasMeeting ? '' : 'none';
@@ -563,12 +1006,8 @@ function openCalendarEditModal(ev) {
     document.getElementById('calendarEventMeetingId').value = ev.meeting.meetingId || '';
     calendarFormState.meetingEnabled = true;
     calendarFormState.meetingType = ev.meeting.meetingType || 'custom';
-  } else {
-    calendarFormState.meetingEnabled = false;
-    calendarFormState.meetingType = 'custom';
   }
 
-  // 参与者（排除组织者）
   calendarFormState.participants = (ev.participants || [])
     .filter((p) => p.userId !== ev.organizerId)
     .map((p) => ({ id: p.userId, username: p.username, departmentName: p.userId }));
@@ -580,12 +1019,6 @@ function openCalendarEditModal(ev) {
   modal.setAttribute('data-mode', 'edit');
   modal.setAttribute('data-event-id', ev.id);
   modal.classList.add('show');
-}
-
-function toDateTimeLocalInput(timeStr) {
-  if (!timeStr) return '';
-  // "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DDTHH:MM"
-  return timeStr.replace(' ', 'T').substring(0, 16);
 }
 
 function renderFormSelectedParticipants() {
@@ -612,13 +1045,11 @@ function renderFormSelectedParticipants() {
 async function searchUsersForCalendarForm(keyword) {
   const container = document.getElementById('calendarEventParticipantSearchResults');
   if (!container) return;
-
   if (!keyword.trim()) {
     container.innerHTML = '<div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">输入关键词搜索用户</div>';
     return;
   }
   container.innerHTML = '<div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">搜索中...</div>';
-
   try {
     const result = await window.electronAPI.searchUsers(keyword);
     if (result.success && result.data) {
@@ -650,7 +1081,7 @@ async function searchUsersForCalendarForm(keyword) {
 
 function collectMeetingFromForm() {
   const enabled = document.getElementById('calendarEventMeetingEnabled').checked;
-  if (!enabled) return null; // 显式清空会议
+  if (!enabled) return null;
   const meetingType = document.getElementById('calendarMeetingType').value;
   const joinUrl = document.getElementById('calendarEventMeetingJoinUrl').value.trim();
   if (!joinUrl) {
@@ -683,34 +1114,13 @@ async function submitCalendarEvent() {
   const endRaw = document.getElementById('calendarEventEnd').value;
   const location = document.getElementById('calendarEventLocation').value.trim();
 
-  if (!title) {
-    errorEl.textContent = '请输入日程标题';
-    return;
-  }
-  if (title.length > 200) {
-    errorEl.textContent = '标题不能超过 200 字符';
-    return;
-  }
-  if (description.length > 2000) {
-    errorEl.textContent = '描述不能超过 2000 字符';
-    return;
-  }
-  if (!startRaw) {
-    errorEl.textContent = '请选择开始时间';
-    return;
-  }
-  if (!endRaw) {
-    errorEl.textContent = '请选择结束时间';
-    return;
-  }
-  if (new Date(startRaw) >= new Date(endRaw)) {
-    errorEl.textContent = '结束时间必须晚于开始时间';
-    return;
-  }
-  if (location.length > 200) {
-    errorEl.textContent = '地点不能超过 200 字符';
-    return;
-  }
+  if (!title) { errorEl.textContent = '请输入日程标题'; return; }
+  if (title.length > 200) { errorEl.textContent = '标题不能超过 200 字符'; return; }
+  if (description.length > 2000) { errorEl.textContent = '描述不能超过 2000 字符'; return; }
+  if (!startRaw) { errorEl.textContent = '请选择开始时间'; return; }
+  if (!endRaw) { errorEl.textContent = '请选择结束时间'; return; }
+  if (new Date(startRaw) >= new Date(endRaw)) { errorEl.textContent = '结束时间必须晚于开始时间'; return; }
+  if (location.length > 200) { errorEl.textContent = '地点不能超过 200 字符'; return; }
 
   let meeting;
   try {
@@ -722,7 +1132,6 @@ async function submitCalendarEvent() {
 
   const startTime = startRaw.replace('T', ' ') + ':00';
   const endTime = endRaw.replace('T', ' ') + ':00';
-
   const params = {
     title,
     description: description || undefined,
@@ -742,15 +1151,13 @@ async function submitCalendarEvent() {
     let result;
     if (mode === 'edit') {
       const eventId = modal.getAttribute('data-event-id');
-      // 编辑时只传变化的字段；meeting 为 null 时表示清除
       const updateParams = {};
       updateParams.title = title;
-      if (description) updateParams.description = description; else updateParams.description = '';
+      updateParams.description = description || '';
       updateParams.startTime = startTime;
       updateParams.endTime = endTime;
-      if (location) updateParams.location = location; else updateParams.location = '';
+      updateParams.location = location || '';
       if (meeting !== undefined) updateParams.meeting = meeting;
-
       result = await window.electronAPI.calendarUpdateEvent(eventId, updateParams);
     } else {
       result = await window.electronAPI.calendarCreateEvent(params);
@@ -763,8 +1170,9 @@ async function submitCalendarEvent() {
         await selectCalendarEvent(modal.getAttribute('data-event-id'));
       } else if (newId) {
         await selectCalendarEvent(newId);
+      } else {
+        await loadCalendarView();
       }
-      await loadCalendarEvents();
     } else {
       errorEl.textContent = result.message || '保存失败';
     }
@@ -780,12 +1188,10 @@ async function submitCalendarEvent() {
 
 async function cancelCalendarEvent(ev) {
   if (!confirm(`确定取消日程「${ev.title}」？取消后数据保留。`)) return;
-
   try {
     const result = await window.electronAPI.calendarCancelEvent(ev.id);
     if (result.success) {
       await selectCalendarEvent(ev.id);
-      await loadCalendarEvents();
     } else {
       alert(result.message || '取消失败');
     }
@@ -801,9 +1207,7 @@ async function openAddParticipantModal(ev) {
   const errorEl = document.getElementById('calendarAddParticipantError');
   const searchInput = document.getElementById('calendarAddParticipantSearchInput');
   const resultsEl = document.getElementById('calendarAddParticipantSearchResults');
-
   if (!modal) return;
-
   errorEl.textContent = '';
   searchInput.value = '';
   resultsEl.innerHTML = '<div style="padding:12px;text-align:center;color:#bbb;font-size:12px;">输入关键词搜索用户</div>';
@@ -816,21 +1220,17 @@ async function searchUsersForAddParticipant(keyword) {
   const modal = document.getElementById('calendarAddParticipantModal');
   const eventId = modal.getAttribute('data-event-id');
   const resultsEl = document.getElementById('calendarAddParticipantSearchResults');
-
   if (!keyword.trim()) {
     resultsEl.innerHTML = '<div style="padding:12px;text-align:center;color:#bbb;font-size:12px;">输入关键词搜索用户</div>';
     return;
   }
   resultsEl.innerHTML = '<div style="padding:12px;text-align:center;color:#bbb;font-size:12px;">搜索中...</div>';
-
   try {
-    // 先取最新参与者列表用于排除
     const detailRes = await window.electronAPI.calendarGetEventDetail(eventId);
     const existingIds = new Set();
     if (detailRes.success && detailRes.data && detailRes.data.participants) {
       detailRes.data.participants.forEach((p) => existingIds.add(p.userId));
     }
-
     const result = await window.electronAPI.searchUsers(keyword);
     if (result.success && result.data) {
       const users = result.data.filter((u) => !existingIds.has(u.id));
@@ -864,13 +1264,11 @@ async function handleAddParticipantClick(userId, username) {
   const eventId = modal.getAttribute('data-event-id');
   const errorEl = document.getElementById('calendarAddParticipantError');
   errorEl.textContent = '';
-
   try {
     const result = await window.electronAPI.calendarAddParticipant(eventId, userId);
     if (result.success) {
       modal.classList.remove('show');
       await selectCalendarEvent(eventId);
-      await loadCalendarEvents();
     } else {
       errorEl.textContent = result.message || '添加失败';
     }
@@ -879,82 +1277,25 @@ async function handleAddParticipantClick(userId, username) {
   }
 }
 
-// ---------- 工具函数 ----------
+// ---------- 弹窗事件绑定 ----------
 
-function escapeHtml(text) {
-  if (text == null) return '';
-  const div = document.createElement('div');
-  div.textContent = String(text);
-  return div.innerHTML;
-}
-
-// ---------- 事件绑定 ----------
-
-function bindCalendarEvents() {
-  // 创建日程按钮
-  const createBtn = document.getElementById('calendarCreateBtn');
-  if (createBtn) {
-    createBtn.addEventListener('click', openCalendarCreateModal);
-  }
-
-  // 日期范围筛选
-  const startDateInput = document.getElementById('calendarStartDate');
-  const endDateInput = document.getElementById('calendarEndDate');
-  if (startDateInput) {
-    startDateInput.addEventListener('change', (e) => {
-      calendarStartDate = e.target.value || calendarTodayStr();
-      loadCalendarEvents();
-    });
-  }
-  if (endDateInput) {
-    endDateInput.addEventListener('change', (e) => {
-      calendarEndDate = e.target.value || calendarAddDaysStr(calendarStartDate, 30);
-      loadCalendarEvents();
-    });
-  }
-
-  // 状态筛选
-  const statusSelect = document.getElementById('calendarStatusFilter');
-  if (statusSelect) {
-    statusSelect.addEventListener('change', (e) => {
-      calendarStatusFilter = e.target.value;
-      loadCalendarEvents();
-    });
-  }
-
-  // 列表点击
-  const eventList = document.getElementById('calendarEventList');
-  if (eventList) {
-    eventList.addEventListener('click', (e) => {
-      const item = e.target.closest('.calendar-event-item');
-      if (!item) return;
-      const eventId = item.getAttribute('data-event-id');
-      if (eventId) selectCalendarEvent(eventId);
-    });
-  }
-
-  // ---- 创建/编辑弹窗 ----
+function bindEventModalEvents() {
   const eventModal = document.getElementById('calendarEventModal');
   const cancelEventModalBtn = document.getElementById('calendarEventCancel');
   const submitEventBtn = document.getElementById('calendarEventSubmit');
 
   if (cancelEventModalBtn) {
-    cancelEventModalBtn.addEventListener('click', () => {
-      eventModal.classList.remove('show');
-    });
+    cancelEventModalBtn.addEventListener('click', () => eventModal.classList.remove('show'));
   }
   if (eventModal) {
     eventModal.addEventListener('click', (e) => {
-      if (e.target.id === 'calendarEventModal') {
-        eventModal.classList.remove('show');
-      }
+      if (e.target.id === 'calendarEventModal') eventModal.classList.remove('show');
     });
   }
   if (submitEventBtn) {
     submitEventBtn.addEventListener('click', submitCalendarEvent);
   }
 
-  // 会议开关
   const meetingToggle = document.getElementById('calendarEventMeetingEnabled');
   const meetingSection = document.getElementById('calendarMeetingSection');
   if (meetingToggle && meetingSection) {
@@ -970,7 +1311,6 @@ function bindCalendarEvents() {
     });
   }
 
-  // 参与者搜索
   const participantSearch = document.getElementById('calendarEventParticipantSearch');
   if (participantSearch) {
     participantSearch.addEventListener('input', (e) => {
@@ -982,7 +1322,6 @@ function bindCalendarEvents() {
     });
   }
 
-  // 参与者搜索结果点击
   const participantResults = document.getElementById('calendarEventParticipantSearchResults');
   if (participantResults) {
     participantResults.addEventListener('click', (e) => {
@@ -998,12 +1337,10 @@ function bindCalendarEvents() {
         calendarFormState.participants.push({ id: userId, username, departmentName: dept });
       }
       renderFormSelectedParticipants();
-      // 重新渲染搜索结果
       searchUsersForCalendarForm(document.getElementById('calendarEventParticipantSearch').value.trim());
     });
   }
 
-  // 已选参与者移除
   const formSelected = document.getElementById('calendarFormSelectedParticipants');
   if (formSelected) {
     formSelected.addEventListener('click', (e) => {
@@ -1017,23 +1354,20 @@ function bindCalendarEvents() {
       if (keyword) searchUsersForCalendarForm(keyword);
     });
   }
+}
 
-  // ---- 添加参与者弹窗 ----
+function bindAddParticipantModalEvents() {
   const addParticipantModal = document.getElementById('calendarAddParticipantModal');
   const addParticipantClose = document.getElementById('calendarAddParticipantClose');
   const addParticipantSearch = document.getElementById('calendarAddParticipantSearchInput');
   const addParticipantResults = document.getElementById('calendarAddParticipantSearchResults');
 
   if (addParticipantClose) {
-    addParticipantClose.addEventListener('click', () => {
-      addParticipantModal.classList.remove('show');
-    });
+    addParticipantClose.addEventListener('click', () => addParticipantModal.classList.remove('show'));
   }
   if (addParticipantModal) {
     addParticipantModal.addEventListener('click', (e) => {
-      if (e.target.id === 'calendarAddParticipantModal') {
-        addParticipantModal.classList.remove('show');
-      }
+      if (e.target.id === 'calendarAddParticipantModal') addParticipantModal.classList.remove('show');
     });
   }
   if (addParticipantSearch) {
@@ -1065,9 +1399,9 @@ function bindCalendarEvents() {
   }
 }
 
-// ========== 暴露给全局供 tab 切换调用 ==========
+// ========== 暴露给全局 ==========
 
 window.CalendarModule = {
   init: initCalendar,
-  refresh: loadCalendarEvents,
+  refresh: loadCalendarView,
 };
