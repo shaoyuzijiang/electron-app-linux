@@ -35,6 +35,46 @@ function encryptRequest(publicKeyPem, payload) {
 }
 
 /**
+ * 敏感字段集合（不区分大小小写）
+ * 日志打印时命中的字段值统一替换为 ******，避免泄露密码、令牌、证件号等
+ */
+const SENSITIVE_KEYS = new Set([
+  // 凭据 / 令牌
+  'password', 'pwd', 'passwd', 'oldpassword', 'newpassword',
+  'token', 'accesstoken', 'refreshtoken', 'idtoken', 'authtoken', 'x-token',
+  'authorization', 'cookie', 'set-cookie',
+  'sessionid', 'session', 'csrf', 'xsrf',
+  'ssourl', 'sso_url', 'sso-url', 'ssotoken', 'ssoticket', 'sso',
+  // 密钥
+  'privatekey', 'secretkey', 'secret', 'apikey', 'api-key',
+  // 个人信息
+  'phone', 'mobile', 'tel', 'idcard', 'idcardnumber', 'id-number', 'id_number',
+  'email', 'mail',
+  'realname', 'idname',
+]);
+
+const MASK = '******';
+
+/**
+ * 递归将对象/数组中敏感字段的值替换为 ******，
+ * 非敏感字段递归处理；非对象直接原样返回（不改变原始数据）
+ */
+function maskSensitive(value) {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(maskSensitive);
+  if (typeof value !== 'object') return value;
+  const result = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (SENSITIVE_KEYS.has(String(k).toLowerCase())) {
+      result[k] = MASK;
+    } else {
+      result[k] = maskSensitive(v);
+    }
+  }
+  return result;
+}
+
+/**
  * 统一请求封装，包含错误处理
  */
 async function request(url, options = {}) {
@@ -47,9 +87,10 @@ async function request(url, options = {}) {
       if (bodyObj.ciphertext) {
         console.log(`[API] >>> Body (encrypted): nonce=${bodyObj.nonce}, timestamp=${bodyObj.timestamp}`);
       } else {
-        console.log(`[API] >>> Body:`, options.body);
+        console.log(`[API] >>> Body:`, JSON.stringify(maskSensitive(bodyObj), null, 2));
       }
     } catch {
+      // 非 JSON 原文按字符串原样打印（如表单提交等场景）
       console.log(`[API] >>> Body:`, options.body);
     }
   }
@@ -82,8 +123,8 @@ async function request(url, options = {}) {
 
   const json = await res.json();
   console.log(`[API] <<< ${method} ${url} HTTP ${res.status}`);
-  console.log(`[API] <<< Headers:`, JSON.stringify(Object.fromEntries(res.headers.entries()), null, 2));
-  console.log(`[API] <<< Body:`, JSON.stringify(json, null, 2));
+  console.log(`[API] <<< Headers:`, JSON.stringify(maskSensitive(Object.fromEntries(res.headers.entries())), null, 2));
+  console.log(`[API] <<< Body:`, JSON.stringify(maskSensitive(json), null, 2));
   if (json.code !== 0) {
     throw new Error(json.message || '请求失败');
   }
