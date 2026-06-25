@@ -184,7 +184,13 @@ function register(ipcMain, deps) {
     try {
       const accessToken = await getValidAccessToken();
       const result = await api.createMeeting(accessToken, meetingData);
-      return { success: true, data: result };
+      // 后端返回 { meeting_number, meeting_info_list: [...] }，解包为单条会议信息
+      const meetingInfo =
+        (result && Array.isArray(result.meeting_info_list) && result.meeting_info_list[0]) ||
+        (result && result.meeting_info) ||
+        result ||
+        null;
+      return { success: true, data: meetingInfo };
     } catch (err) {
       if (err.message === '未登录') {
         return { success: false, message: '未登录，请重新登录' };

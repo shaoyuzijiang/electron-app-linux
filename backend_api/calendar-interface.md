@@ -544,3 +544,89 @@ curl "http://localhost:3000/api/calendar/freebusy?userIds=user_001,user_002&star
 | 400 | endTime is required | 缺少 endTime |
 | 400 | End time must be after start time | 结束时间须晚于开始时间 |
 | 400 | Too many users (max 20) | 查询用户数超过限制 |
+
+## 五、实时推送（WebSocket）
+
+日程的创建、修改、取消、参与者变更都会通过 WebSocket（`/ws/chat`，与 IM 共用）即时推送给组织者和所有参与者，使在线客户端无需轮询即可同步最新状态。
+
+**推送触发场景：**
+
+| 场景 | action | 触发接口 / 事件 |
+|------|--------|-----------------|
+| 创建日程 | `event_create` | `POST /api/calendar/events` / Webhook `meeting.created` |
+| 修改日程 | `event_update` | `PUT /api/calendar/events/:id` / Webhook `meeting.updated` |
+| 取消日程 | `event_cancel` | `DELETE /api/calendar/events/:id` / Webhook `meeting.canceled` |
+| 添加参与者 | `event_update` | `POST /api/calendar/events/:id/participants` |
+| 删除参与者 | `event_update` | `DELETE /api/calendar/events/:id/participants/:userId` |
+
+> **关于 Webhook 触发场景的补充说明**（v1.1+）：
+> 腾讯会议 `meeting.created` 事件 payload 中**不携带** `hosts` / `invitees` 列表，因此本服务在收到该事件后会主动调用腾讯会议"查询会议详情"接口（`GET /v1/meetings/{meetingId}`）拉取 `hosts` / `current_hosts` / `current_co_hosts` / `participants` 字段来补全参与者列表，确保被邀请用户能收到 `event_create` 推送。该接口调用失败时不会阻塞日程创建（按"只有 organizer"的最小集写入，后续可通过 `meeting.updated` 事件重新同步）。该补全逻辑由 `wemeetService.queryMeetingUsers(meetingId, organizerId)` 封装。
+
+**Webhook 接收时序**（v1.1+）：
+
+腾讯会议 webhook 一般有 **5 秒超时**，超时会被重发甚至标记失败。本服务采用"**校验通过立即 200、业务异步处理**"模式：
+
+```
+收到 POST /api/wemeet/webhook
+  │
+  ├─ 解密 body.data（如有）                ← 失败 → 401（不重发业务）
+  ├─ SHA1 签名校验                        ← 失败 → 401
+  │
+  ├─ ctx.body = "successfully received callback"   ← 校验一过就立即 200
+  ├─ setImmediate(() => handleWebhookEvent(...))  ← 业务挪到下一 tick
+  │
+  └─ koa 立即 flush 响应
+       （腾讯会议在 ~ms 级别收到 200）
+```
+
+| 阶段 | 行为 | 超时风险 |
+|------|------|----------|
+| 校验（解密+签名） | 同步，必须在响应前完成 | 无（纯 CPU） |
+| 响应 200 | `ctx.body = "successfully received callback"` 后立即返回 | 无 |
+| 业务处理（日程读写、WS 推送、`queryMeetingById` 补全） | `setImmediate` 异步执行，不阻塞响应 | 业务再慢也不影响 webhook 响应 |
+
+**业务失败处理**：
+- 单条 `meetingInfo` 处理失败 → 仅写日志，不影响其他条
+- 整体 handler 抛错 → 由 `setImmediate` 回调的 `.catch` 兜底记日志
+- 校验失败（解密/签名错）→ 仍返回 401，由腾讯会议自动重试
+- **业务执行失败不会触发腾讯会议重试**（因为已返回 200），如需补单请人工介入
+
+
+
+```json
+{
+  "action": "event_create",
+  "data": {
+    "id": "uuid-xxx",
+    "title": "项目周会",
+    "description": "",
+    "organizerId": "user_001",
+    "organizerName": "张三",
+    "startTime": "2025-06-25 14:00:00",
+    "endTime": "2025-06-25 15:00:00",
+    "location": "会议室A",
+    "status": "active",
+    "meeting": {
+      "meetingType": "wemeet",
+      "meetingId": "15750965903409460315",
+      "meetingCode": "445999969",
+      "joinUrl": "https://meeting.tencent.com/dm/r/XXXXXXX",
+      "meetingSubject": "项目周会"
+    },
+    "participants": [
+      { "userId": "user_001", "username": "张三", "status": "accepted" },
+      { "userId": "user_002", "username": "李四", "status": "pending" }
+    ],
+    "createdAt": "2025-06-25T14:00:00.000Z",
+    "updatedAt": "2025-06-25T14:00:00.000Z"
+  }
+}
+```
+
+**接收端处理建议：**
+
+- `event_create`：将新日程插入本地列表（按 startTime 排序），无需重新拉取。
+- `event_update`：替换本地对应 ID 的日程（注意：可能是参与者列表变化，未变化字段原样保留即可）。
+- `event_cancel`：从本地列表移除该日程（`status='cancelled'`）。
+- 离线用户：下次打开客户端时通过 `GET /api/calendar/events` 拉取最新列表补齐。
+- 仅组织者 / 参与者会收到推送，其他用户即使订阅了同一账号也不会收到。
