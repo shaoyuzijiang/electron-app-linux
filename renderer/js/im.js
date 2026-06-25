@@ -38,7 +38,7 @@ async function initIM() {
   }
 
   bindIMEvents();
-  await loadConversations();
+  await loadConversations(true); // 首次进入强制刷新，确保拿到最新数据
   connectIMWebSocket();
 }
 
@@ -169,8 +169,8 @@ function handleWSMessage(msg) {
       break;
 
     case 'added_to_conversation':
-      // 被加入新会话，刷新会话列表
-      loadConversations();
+      // 被加入新会话，强制刷新会话列表（本地肯定没有这个新会话）
+      refreshConversationsFromServer();
       break;
 
     case 'removed_from_conversation':
@@ -179,7 +179,7 @@ function handleWSMessage(msg) {
         imActiveConversationId = null;
         renderChatEmpty();
       }
-      loadConversations();
+      refreshConversationsFromServer();
       break;
 
     case 'message_update': {
@@ -237,27 +237,52 @@ function wsSend(data) {
 
 // ---------- 会话列表 ----------
 
-async function loadConversations() {
+// 会话列表刷新节流：30 秒内不重复请求服务器
+const CONV_REFRESH_INTERVAL = 30 * 1000;
+let lastConvLoadAt = 0;
+
+/**
+ * 加载会话列表（本地优先 + 节流）
+ * @param {boolean} force - 强制刷新，跳过节流
+ */
+async function loadConversations(force = false) {
+  // 1) 总是先读本地缓存，快速渲染
   try {
-    // 先读取本地缓存，快速渲染
     const cachedConvs = await window.IMCache.getCachedConversations();
     if (cachedConvs && cachedConvs.length > 0) {
       imConversations = cachedConvs;
       renderConversationList();
       updateTotalUnreadBadge();
     }
+  } catch (cacheErr) {
+    console.warn('[IM] 读取本地会话缓存失败:', cacheErr);
+  }
 
-    // 再从服务器拉取最新数据
+  // 2) 30 秒内非强制刷新 → 直接返回，不再请求服务器
+  if (!force && Date.now() - lastConvLoadAt < CONV_REFRESH_INTERVAL) {
+    return;
+  }
+
+  // 3) 否则问服务器
+  await refreshConversationsFromServer();
+}
+
+/**
+ * 主动刷新会话列表（强制问服务器 + 写本地 + 重渲染）
+ * 用于：被加入/移出会话、发送消息后等需要服务器权威数据的场景
+ */
+async function refreshConversationsFromServer() {
+  lastConvLoadAt = Date.now();
+  try {
     const result = await window.electronAPI.imGetConversations();
     if (result.success && result.data) {
       imConversations = result.data;
       renderConversationList();
       updateTotalUnreadBadge();
-      // 缓存到 IndexedDB
       await window.IMCache.cacheConversations(result.data);
     }
   } catch (err) {
-    console.error('[IM] 获取会话列表失败:', err);
+    console.error('[IM] 刷新会话列表失败:', err);
     // 服务器拉取失败时，尝试用本地缓存兜底
     if (imConversations.length === 0) {
       try {
@@ -838,6 +863,10 @@ async function sendMessage() {
   if (imTypingSent) {
     imTypingSent = false;
   }
+
+  // 发送消息后主动刷一次会话列表（拿服务器权威的未读数/最后一条消息时间等元信息）
+  // 节流保护：30s 内多次发消息只发一次请求
+  refreshConversationsFromServer();
 }
 
 // ---------- 输入中状态 ----------
@@ -1218,8 +1247,8 @@ async function createNewChat() {
     const result = await window.electronAPI.imCreateConversation(newChatState.type, name, memberIds);
     if (result.success && result.data) {
       document.getElementById('imNewChatModal').classList.remove('show');
-      // 刷新会话列表并选中新会话
-      await loadConversations();
+      // 创建新会话后强制刷新（本地肯定没有这个新会话）
+      await loadConversations(true);
       await selectConversation(result.data.id);
     } else {
       errorEl.textContent = result.message || '创建失败';
@@ -1602,7 +1631,8 @@ function bindIMEvents() {
       const result = await window.electronAPI.imRemoveMember(convId, userId);
       if (result.success) {
         showMembersModal(convId); // 刷新成员列表
-        await loadConversations();
+        // 成员变动后强制刷新（成员元数据变化，本地缓存已失效）
+        await loadConversations(true);
       } else {
         alert(result.message || '操作失败');
       }
