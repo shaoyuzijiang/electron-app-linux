@@ -227,8 +227,12 @@ function bindCalendarEvents() {
 
 // ---------- 加载视图数据 ----------
 
-async function loadCalendarView() {
-  // 计算当前视图的数据时间范围
+/**
+ * 计算当前视图下"必须加载"的日程时间范围。
+ * 默认按视图（day/week/month）取窗口；并把 calendarSelectedDate 兜底纳入，
+ * 避免用户在 mini 日历点击非当前视图范围内的日期时，左侧"当日日程"列表拿不到数据。
+ */
+function getCalendarLoadRange() {
   let startDate, endDate;
   if (calendarView === 'day') {
     const d = new Date(calendarViewDate);
@@ -246,8 +250,20 @@ async function loadCalendarView() {
     startDate = calendarStartOfWeek(monthStart);
     endDate = calendarEndOfWeek(monthEnd);
   }
+  if (calendarSelectedDate) {
+    const selStart = new Date(calendarSelectedDate);
+    selStart.setHours(0, 0, 0, 0);
+    const selEnd = new Date(calendarSelectedDate);
+    selEnd.setHours(23, 59, 59, 999);
+    if (selStart < startDate) startDate = selStart;
+    if (selEnd > endDate) endDate = selEnd;
+  }
+  return { startDate, endDate };
+}
 
+async function loadCalendarView() {
   // 加载日程
+  const { startDate, endDate } = getCalendarLoadRange();
   await loadCalendarEvents(startDate, endDate);
 
   // 渲染所有视图组件
@@ -663,17 +679,8 @@ function bindMonthViewEvents() {
 
 async function selectCalendarEvent(eventId) {
   calendarActiveEventId = eventId;
-  // 重新加载以获取最新状态
-  let startDate, endDate;
-  if (calendarView === 'day') {
-    startDate = new Date(calendarViewDate);
-    startDate.setHours(0, 0, 0, 0);
-    endDate = new Date(calendarViewDate);
-    endDate.setHours(23, 59, 59, 999);
-  } else {
-    startDate = calendarStartOfWeek(calendarViewDate);
-    endDate = calendarEndOfWeek(calendarViewDate);
-  }
+  // 重新加载以获取最新状态（复用视图范围 + 选中日期兜底）
+  const { startDate, endDate } = getCalendarLoadRange();
   await loadCalendarEvents(startDate, endDate);
   // 重新拉取详情
   try {
@@ -795,7 +802,25 @@ function renderCalendarDetailPanel() {
 
   if (editBtn) editBtn.addEventListener('click', () => openCalendarEditModal(ev));
   if (cancelBtn) cancelBtn.addEventListener('click', () => cancelCalendarEvent(ev));
-  if (joinBtn) joinBtn.addEventListener('click', () => window.open(ev.meeting.joinUrl, '_blank'));
+  if (joinBtn) joinBtn.addEventListener('click', async () => {
+    const meetingCode = ev.meeting && ev.meeting.meetingCode;
+    if (!meetingCode) {
+      alert('会议号为空，无法加入');
+      return;
+    }
+    const originalText = joinBtn.textContent;
+    joinBtn.disabled = true;
+    joinBtn.textContent = '加入中...';
+    try {
+      const result = await window.electronAPI.joinMeeting(meetingCode, '', '');
+      if (!result.success) alert(result.message || '加入会议失败');
+    } catch (err) {
+      alert('加入会议失败: ' + err.message);
+    } finally {
+      joinBtn.disabled = false;
+      joinBtn.textContent = originalText;
+    }
+  });
   if (copyBtn) copyBtn.addEventListener('click', () => copyMeetingInfo(ev.meeting));
   if (addBtn) addBtn.addEventListener('click', () => openAddParticipantModal(ev));
 
