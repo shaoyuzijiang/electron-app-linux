@@ -81,7 +81,9 @@ async function request(url, options = {}) {
   }
 
   const json = await res.json();
-  console.log(`[API] <<< ${method} ${url} HTTP ${res.status}`, JSON.stringify(json, null, 2));
+  console.log(`[API] <<< ${method} ${url} HTTP ${res.status}`);
+  console.log(`[API] <<< Headers:`, JSON.stringify(Object.fromEntries(res.headers.entries()), null, 2));
+  console.log(`[API] <<< Body:`, JSON.stringify(json, null, 2));
   if (json.code !== 0) {
     throw new Error(json.message || '请求失败');
   }
