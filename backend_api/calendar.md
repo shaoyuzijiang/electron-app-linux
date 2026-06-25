@@ -88,10 +88,12 @@
 
 ### 4.2 在线会议信息
 
-日程创建和修改时支持传入会议信息，分两种模式：
+日程创建时支持通过 `createMeeting` 布尔标识控制是否同步创建腾讯会议：
 
-1. **腾讯会议模式**（`meeting_type: "wemeet"`）：传入腾讯会议的 `meetingId`、`meetingCode`、`join_url` 等信息。客户端可先调用 `/api/wemeet/meetings` 创建腾讯会议，再将返回的会议信息关联到日程。
-2. **自定义模式**（`meeting_type: "custom"`）：传入自定义的会议链接（如 Zoom、飞书会议等），仅需 `join_url` 和 `meeting_subject`。
+1. **同步创建腾讯会议**（`createMeeting: true`）：服务端以当前用户为创建者，调用腾讯会议 REST API（`POST /v1/meetings`）创建预约会议（`type=0`），使用日程标题作为会议主题、日程时间作为会议时间、参与者作为 invitees。创建成功后将返回的 `meetingId`、`meetingCode`、`joinUrl` 等信息自动关联到日程。如果腾讯会议 API 调用失败，整个日程创建请求失败。
+2. **不创建会议**（`createMeeting: false` 或不传）：创建普通日程，不关联在线会议信息。
+
+> 会议信息创建后，后续由腾讯会议 Webhook 自动同步更新（meeting.updated / meeting.canceled 事件）。修改日程接口不再支持直接变更会议信息。
 
 ### 4.3 空闲时间查询
 

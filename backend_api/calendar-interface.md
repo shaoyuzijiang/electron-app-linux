@@ -117,13 +117,7 @@ POST /api/calendar/events
   "endTime": "2025-06-24 15:00:00",
   "location": "会议室A",
   "participantIds": ["user_002", "user_003"],
-  "meeting": {
-    "meetingType": "wemeet",
-    "meetingId": "123456789",
-    "meetingCode": "123-456-789",
-    "joinUrl": "https://meeting.tencent.com/dm/r/XXXXXXX",
-    "meetingSubject": "项目周会"
-  }
+  "createMeeting": true
 }
 ```
 
@@ -137,12 +131,9 @@ POST /api/calendar/events
 | `endTime` | string | ✅ | 结束时间，须晚于 startTime |
 | `location` | string | - | 地点，最多 200 字符 |
 | `participantIds` | string[] | - | 参与者用户ID列表（组织者自动加入，无需传入） |
-| `meeting` | object | - | 在线会议信息，不传则为无会议日程 |
-| `meeting.meetingType` | string | ✅ (meeting存在时) | `"wemeet"` \| `"custom"` |
-| `meeting.meetingId` | string | - | 腾讯会议ID（wemeet 类型） |
-| `meeting.meetingCode` | string | - | 会议号 |
-| `meeting.joinUrl` | string | ✅ (meeting存在时) | 入会链接 |
-| `meeting.meetingSubject` | string | - | 会议主题 |
+| `createMeeting` | boolean | - | 是否同步创建腾讯会议，`true` 时服务端调用腾讯会议 REST API 创建会议并将会议信息关联到日程，默认 `false` |
+
+> **`createMeeting` 说明**：当设为 `true` 时，服务端会以当前用户为创建者，调用腾讯会议 `POST /v1/meetings` 接口创建预约会议（`type=0`），使用 `title` 作为会议主题，`startTime`/`endTime` 转换为 Unix 时间戳传入，`participantIds` 中的有效用户作为 invitees。创建成功后会议信息（meetingId、meetingCode、joinUrl 等）自动写入日程。如果腾讯会议 API 调用失败，整个日程创建请求将返回错误。
 
 **响应：**
 
@@ -187,6 +178,8 @@ POST /api/calendar/events
 | 400 | End time must be after start time | 结束时间须晚于开始时间 |
 | 400 | Title must be 1-200 characters | 标题长度不符 |
 | 404 | User xxx not found | 参与者用户不存在 |
+| 500 | WeMeet API credentials not configured | 未配置腾讯会议 API 凭证（createMeeting=true 时） |
+| 500 | Failed to create meeting: xxx | 腾讯会议创建失败（createMeeting=true 时） |
 
 ---
 
@@ -280,7 +273,9 @@ PUT /api/calendar/events/:id
 
 **需要认证**
 
-仅组织者可修改。支持修改标题、描述、时间、地点和会议信息。
+仅组织者可修改。支持修改标题、描述、时间、地点。
+
+> 会议信息由创建日程时的 `createMeeting` 标识决定，不支持通过修改接口直接变更。会议信息的后续更新由腾讯会议 Webhook 自动同步。
 
 **请求体（所有字段可选，仅传需要修改的字段）：**
 
@@ -290,16 +285,9 @@ PUT /api/calendar/events/:id
   "description": "更新后的议程",
   "startTime": "2025-06-24 15:00:00",
   "endTime": "2025-06-24 16:00:00",
-  "location": "会议室B",
-  "meeting": {
-    "meetingType": "custom",
-    "joinUrl": "https://zoom.us/j/123456789",
-    "meetingSubject": "项目周会"
-  }
+  "location": "会议室B"
 }
 ```
-
-> 传入 `meeting: null` 可清除会议信息。
 
 **响应：** 返回更新后的完整日程对象（同 4.1 响应格式）。
 

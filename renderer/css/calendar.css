@@ -1187,6 +1187,19 @@
   color: #1e6fff;
 }
 
+.calendar-action-btn.primary {
+  background: #1e6fff;
+  border-color: #1e6fff;
+  color: #fff;
+  font-weight: 500;
+}
+
+.calendar-action-btn.primary:hover {
+  background: #155ad4;
+  border-color: #155ad4;
+  color: #fff;
+}
+
 .calendar-action-btn.danger:hover {
   border-color: #ff4d4f;
   color: #ff4d4f;

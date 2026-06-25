@@ -752,10 +752,10 @@ function renderCalendarDetailPanel() {
         <button class="calendar-action-btn" id="calendarPanelEditBtn">编辑</button>
         <button class="calendar-action-btn danger" id="calendarPanelCancelBtn">取消日程</button>
       ` : ''}
-      ${ev.meeting && ev.meeting.joinUrl && !isCancelled ? `
-        <button class="calendar-action-btn" id="calendarPanelJoinBtn">加入会议</button>
-        <button class="calendar-action-btn" id="calendarPanelCopyBtn">复制会议信息</button>
-      ` : ''}
+      ${ev.meeting && (ev.meeting.meetingCode || ev.meeting.joinUrl) && !isCancelled ? `
+        <button class="calendar-action-btn primary" id="calendarPanelJoinBtn">加入会议</button>` : ''}
+      ${ev.meeting && (ev.meeting.meetingSubject || ev.meeting.meetingCode || ev.meeting.joinUrl) && !isCancelled ? `
+        <button class="calendar-action-btn" id="calendarPanelCopyBtn">复制参会链接</button>` : ''}
     </div>
 
     ${ev.description ? `
@@ -942,8 +942,7 @@ function copyMeetingInfo(meeting) {
   const lines = [];
   if (meeting.meetingSubject) lines.push(`会议主题：${meeting.meetingSubject}`);
   if (meeting.meetingCode) lines.push(`会议号：${meeting.meetingCode}`);
-  if (meeting.meetingId) lines.push(`会议 ID：${meeting.meetingId}`);
-  if (meeting.joinUrl) lines.push(`入会链接：${meeting.joinUrl}`);
+  if (meeting.joinUrl) lines.push(`参会链接：${meeting.joinUrl}`);
   const text = lines.join('\n');
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
@@ -961,7 +960,6 @@ function resetCalendarFormState() {
     meetingEnabled: false,
     meetingType: 'wemeet',
     participantSearchTimer: null,
-    existingMeeting: null,
   };
 }
 
@@ -988,9 +986,27 @@ function openCalendarCreateModal() {
   document.getElementById('calendarEventEnd').value = toLocal(endDefault);
   document.getElementById('calendarEventLocation').value = '';
 
-  document.getElementById('calendarEventMeetingEnabled').checked = false;
-  document.getElementById('calendarMeetingSection').style.display = 'none';
-  document.getElementById('calendarEventMeetingSubject').value = '';
+  // 创建模式：启用会议相关 UI
+  const meetingToggle = document.getElementById('calendarEventMeetingEnabled');
+  const meetingSection = document.getElementById('calendarMeetingSection');
+  const meetingSubjectInput = document.getElementById('calendarEventMeetingSubject');
+  if (meetingToggle) {
+    meetingToggle.checked = false;
+    meetingToggle.disabled = false;
+  }
+  if (meetingSection) {
+    meetingSection.style.display = 'none';
+  }
+  if (meetingSubjectInput) {
+    meetingSubjectInput.value = '';
+    meetingSubjectInput.disabled = false;
+  }
+
+  // 显示参与者搜索 UI
+  const participantSearchContainer = document.getElementById('calendarEventParticipantSearch');
+  if (participantSearchContainer && participantSearchContainer.parentElement) {
+    participantSearchContainer.parentElement.style.display = '';
+  }
 
   document.getElementById('calendarEventParticipantSearch').value = '';
   document.getElementById('calendarEventParticipantSearchResults').innerHTML = '<div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">输入关键词搜索用户</div>';
@@ -1017,32 +1033,32 @@ function openCalendarEditModal(ev) {
   document.getElementById('calendarEventStart').value = calendarToDateTimeLocal(ev.startTime);
   document.getElementById('calendarEventEnd').value = calendarToDateTimeLocal(ev.endTime);
 
+  // 编辑模式：会议信息由创建时的 createMeeting 决定，不支持通过修改接口变更
+  // 隐藏会议相关 UI（或显示为只读提示）
   const hasMeeting = !!ev.meeting;
-  document.getElementById('calendarEventMeetingEnabled').checked = hasMeeting;
-  document.getElementById('calendarMeetingSection').style.display = hasMeeting ? '' : 'none';
+  const meetingToggle = document.getElementById('calendarEventMeetingEnabled');
+  const meetingSection = document.getElementById('calendarMeetingSection');
+  if (meetingToggle) {
+    meetingToggle.checked = false;
+    meetingToggle.disabled = true; // 禁用编辑
+  }
+  if (meetingSection) {
+    meetingSection.style.display = 'none';
+  }
   if (hasMeeting) {
-    document.getElementById('calendarEventMeetingSubject').value = ev.meeting.meetingSubject || '';
-    calendarFormState.meetingEnabled = true;
-    calendarFormState.meetingType = ev.meeting.meetingType || 'wemeet';
-    // 记录已有关联会议信息，提交时若用户未修改会议开关可原样回传
-    calendarFormState.existingMeeting = {
-      meetingType: ev.meeting.meetingType || 'wemeet',
-      meetingId: ev.meeting.meetingId || '',
-      meetingCode: ev.meeting.meetingCode || '',
-      joinUrl: ev.meeting.joinUrl || '',
-      meetingSubject: ev.meeting.meetingSubject || '',
-    };
-  } else {
-    calendarFormState.existingMeeting = null;
+    // 如果已有关联会议，显示只读提示
+    const meetingHint = document.getElementById('calendarEventMeetingSubject');
+    if (meetingHint) {
+      meetingHint.value = ev.meeting.meetingSubject ? `${ev.meeting.meetingSubject}（已有腾讯会议关联）` : '';
+      meetingHint.disabled = true;
+    }
   }
 
-  calendarFormState.participants = (ev.participants || [])
-    .filter((p) => p.userId !== ev.organizerId)
-    .map((p) => ({ id: p.userId, username: p.username, departmentName: p.userId }));
+  // 编辑模式不支持修改参与者列表，隐藏参与者相关 UI
+  calendarFormState.participants = [];
   renderFormSelectedParticipants();
 
-  document.getElementById('calendarEventParticipantSearch').value = '';
-  document.getElementById('calendarEventParticipantSearchResults').innerHTML = '<div style="padding:8px;text-align:center;color:#bbb;font-size:11px;">输入关键词搜索用户</div>';
+  document.getElementById('calendarEventParticipantSearch').parentElement.style.display = 'none';
 
   modal.setAttribute('data-mode', 'edit');
   modal.setAttribute('data-event-id', ev.id);
@@ -1107,17 +1123,6 @@ async function searchUsersForCalendarForm(keyword) {
   }
 }
 
-function collectMeetingFromForm() {
-  const enabled = document.getElementById('calendarEventMeetingEnabled').checked;
-  if (!enabled) return null;
-  // 当前仅支持创建腾讯会议
-  const meetingSubject = document.getElementById('calendarEventMeetingSubject').value.trim();
-  return {
-    meetingType: 'wemeet',
-    meetingSubject,
-  };
-}
-
 async function submitCalendarEvent() {
   const modal = document.getElementById('calendarEventModal');
   const errorEl = document.getElementById('calendarEventError');
@@ -1137,13 +1142,8 @@ async function submitCalendarEvent() {
   if (new Date(startRaw) >= new Date(endRaw)) { errorEl.textContent = '结束时间必须晚于开始时间'; return; }
   if (location.length > 200) { errorEl.textContent = '地点不能超过 200 字符'; return; }
 
-  let meetingFormValue;
-  try {
-    meetingFormValue = collectMeetingFromForm();
-  } catch (err) {
-    errorEl.textContent = err.message;
-    return;
-  }
+  // 检查是否勾选"创建腾讯会议"
+  const createMeeting = document.getElementById('calendarEventMeetingEnabled').checked;
 
   const startTime = startRaw.replace('T', ' ') + ':00';
   const endTime = endRaw.replace('T', ' ') + ':00';
@@ -1153,68 +1153,10 @@ async function submitCalendarEvent() {
   submitBtn.textContent = '保存中...';
 
   try {
-    // 构造会议对象：
-    // - 创建模式 + 勾选"创建腾讯会议"：先调用创建会议接口，再用返回信息创建日程
-    // - 编辑模式：若原来已有关联会议且未取消勾选，则原样回传；若取消勾选则传 null
-    let meetingForEvent = undefined;
-    if (mode === 'create') {
-      if (meetingFormValue) {
-        submitBtn.textContent = '创建腾讯会议中...';
-        const createdMeeting = await createWemeetMeetingForCalendar({
-          subject: meetingFormValue.meetingSubject || title,
-          startTime,
-          endTime,
-          participants: calendarFormState.participants,
-        });
-        if (!createdMeeting) {
-          // createWemeetMeetingForCalendar 已设置错误信息
-          return;
-        }
-        meetingForEvent = createdMeeting;
-      }
-    } else if (mode === 'edit') {
-      if (meetingFormValue) {
-        // 用户在编辑时仍勾选"创建腾讯会议"
-        if (calendarFormState.existingMeeting) {
-          // 原本已有关联会议：保留原 meeting 信息（不做重新创建，保持历史数据稳定）
-          meetingForEvent = { ...calendarFormState.existingMeeting };
-          if (meetingFormValue.meetingSubject) {
-            meetingForEvent.meetingSubject = meetingFormValue.meetingSubject;
-          }
-        } else {
-          // 原本无关联会议，本次新增：创建新会议
-          submitBtn.textContent = '创建腾讯会议中...';
-          const createdMeeting = await createWemeetMeetingForCalendar({
-            subject: meetingFormValue.meetingSubject || title,
-            startTime,
-            endTime,
-            participants: calendarFormState.participants,
-          });
-          if (!createdMeeting) {
-            return;
-          }
-          meetingForEvent = createdMeeting;
-        }
-      } else {
-        // 用户取消勾选"创建腾讯会议"
-        if (calendarFormState.existingMeeting) {
-          meetingForEvent = null; // 显式清除会议信息
-        }
-      }
-    }
-
-    const params = {
-      title,
-      description: description || undefined,
-      startTime,
-      endTime,
-      location: location || undefined,
-      participantIds: calendarFormState.participants.map((u) => u.id),
-    };
-    if (meetingForEvent !== undefined) params.meeting = meetingForEvent;
-
     let result;
     if (mode === 'edit') {
+      // 编辑模式：仅支持修改 title/description/startTime/location
+      // 会议信息由创建时的 createMeeting 决定，不支持通过修改接口变更
       const eventId = modal.getAttribute('data-event-id');
       const updateParams = {
         title,
@@ -1223,9 +1165,18 @@ async function submitCalendarEvent() {
         endTime,
         location: location || '',
       };
-      if (meetingForEvent !== undefined) updateParams.meeting = meetingForEvent;
       result = await window.electronAPI.calendarUpdateEvent(eventId, updateParams);
     } else {
+      // 创建模式：使用 createMeeting 布尔值，服务端负责创建腾讯会议
+      const params = {
+        title,
+        description: description || undefined,
+        startTime,
+        endTime,
+        location: location || undefined,
+        participantIds: calendarFormState.participants.map((u) => u.id),
+        createMeeting: createMeeting || undefined,
+      };
       result = await window.electronAPI.calendarCreateEvent(params);
     }
 
@@ -1248,67 +1199,6 @@ async function submitCalendarEvent() {
     submitBtn.disabled = false;
     submitBtn.textContent = '保存';
   }
-}
-
-/**
- * 调用后端腾讯会议创建接口，并把返回信息组装为日程所需的 meeting 对象
- * @param {{ subject: string, startTime: string, endTime: string, participants: Array<{id: string, username?: string}> }} args
- * @returns {Promise<object|null>} 成功返回 meeting 对象；失败时返回 null 并在弹窗显示错误
- */
-async function createWemeetMeetingForCalendar({ subject, startTime, endTime, participants }) {
-  const errorEl = document.getElementById('calendarEventError');
-  try {
-    const startTs = calendarTimeStrToUnixSeconds(startTime);
-    const endTs = calendarTimeStrToUnixSeconds(endTime);
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (startTs <= nowSec) {
-      errorEl.textContent = '创建腾讯会议需要开始时间晚于当前时间';
-      return null;
-    }
-    if (endTs <= startTs) {
-      errorEl.textContent = '会议结束时间必须晚于开始时间';
-      return null;
-    }
-    const invitees = (participants || [])
-      .filter((u) => u && u.id)
-      .map((u) => ({ userid: u.username || u.id }));
-    const meetingData = {
-      subject,
-      type: 0, // 0-预约会议
-      start_time: String(startTs),
-      end_time: String(endTs),
-      instanceid: 2, // 2-Mac（与会议列表保持一致）
-      invitees: invitees.length > 0 ? invitees : undefined,
-    };
-    const result = await window.electronAPI.createMeeting(meetingData);
-    if (!result || !result.success) {
-      errorEl.textContent = (result && result.message) || '创建腾讯会议失败';
-      return null;
-    }
-    const info = result.data || {};
-    return {
-      meetingType: 'wemeet',
-      meetingId: info.meeting_id || info.meetingId || '',
-      meetingCode: info.meeting_code || info.meetingCode || '',
-      joinUrl: info.join_url || info.joinUrl || '',
-      meetingSubject: info.subject || subject,
-    };
-  } catch (err) {
-    errorEl.textContent = err.message || '创建腾讯会议失败';
-    return null;
-  }
-}
-
-/**
- * "YYYY-MM-DD HH:MM:SS" 转 Unix 秒级时间戳
- */
-function calendarTimeStrToUnixSeconds(timeStr) {
-  if (!timeStr) return 0;
-  // 兼容 "YYYY-MM-DDTHH:MM" 与 "YYYY-MM-DD HH:MM:SS"
-  const normalized = timeStr.replace('T', ' ');
-  const dt = new Date(normalized.length === 16 ? normalized + ':00' : normalized);
-  if (isNaN(dt.getTime())) return 0;
-  return Math.floor(dt.getTime() / 1000);
 }
 
 // ---------- 取消日程 ----------
