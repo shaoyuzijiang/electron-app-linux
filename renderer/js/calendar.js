@@ -132,6 +132,96 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ---------- 本地缓存 ----------
+// 策略：按用户隔离，缓存"全量已知日程"（仅 active）。切换视图/日期时先用缓存命中范围秒显，
+// 再请求网络拿到该范围最新数据，覆盖缓存中该范围的旧数据后写回。
+const CALENDAR_CACHE_PREFIX = 'calendar_events_';
+const CALENDAR_CACHE_VERSION_KEY = 'calendar_cache_version';
+const CALENDAR_CACHE_VERSION = 1; // 缓存结构版本，变更时自动失效
+
+function calendarCacheKey() {
+  return `${CALENDAR_CACHE_PREFIX}${calendarCurrentUserId || 'default'}`;
+}
+
+// 检查缓存版本，不匹配则清空所有日程缓存
+function checkCalendarCacheVersion() {
+  try {
+    const v = localStorage.getItem(CALENDAR_CACHE_VERSION_KEY);
+    if (v !== String(CALENDAR_CACHE_VERSION)) {
+      clearCalendarCache();
+      localStorage.setItem(CALENDAR_CACHE_VERSION_KEY, String(CALENDAR_CACHE_VERSION));
+    }
+  } catch (e) {
+    console.warn('[Calendar] 缓存版本检查失败:', e);
+  }
+}
+
+function loadCalendarCacheAll() {
+  try {
+    const raw = localStorage.getItem(calendarCacheKey());
+    const arr = raw ? JSON.parse(raw) : null;
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    console.warn('[Calendar] 缓存读取失败:', e);
+    return [];
+  }
+}
+
+function saveCalendarCacheAll(events) {
+  try {
+    localStorage.setItem(calendarCacheKey(), JSON.stringify(events || []));
+  } catch (e) {
+    console.warn('[Calendar] 缓存写入失败:', e);
+  }
+}
+
+function clearCalendarCache() {
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith(CALENDAR_CACHE_PREFIX) || k === CALENDAR_CACHE_VERSION_KEY)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn('[Calendar] 缓存清理失败:', e);
+  }
+}
+
+// 从缓存中取出 startTime 落在 [startDate, endDate] 范围内的日程
+function getCachedEventsInRange(startDate, endDate) {
+  const all = loadCalendarCacheAll();
+  if (!all.length) return null;
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+  const hit = all.filter((ev) => {
+    const st = calendarParseEventTime(ev.startTime);
+    if (!st) return false;
+    const ms = st.getTime();
+    return ms >= startMs && ms <= endMs;
+  });
+  return hit;
+}
+
+// 用某范围的最新数据覆盖缓存中该范围的旧数据，并按 id 去重后写回
+function updateCalendarCacheRange(startDate, endDate, freshEvents) {
+  const all = loadCalendarCacheAll();
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+  const freshIds = new Set((freshEvents || []).map((ev) => ev.id));
+  // 保留：不在本次范围内 且 id 未被本次结果覆盖 的旧事件
+  const kept = all.filter((ev) => {
+    if (freshIds.has(ev.id)) return false;
+    const st = calendarParseEventTime(ev.startTime);
+    if (!st) return true;
+    const ms = st.getTime();
+    return !(ms >= startMs && ms <= endMs);
+  });
+  saveCalendarCacheAll(kept.concat(freshEvents || []));
+}
+
 // ---------- 初始化 ----------
 
 async function initCalendar() {
@@ -147,6 +237,9 @@ async function initCalendar() {
   } catch (err) {
     console.error('[Calendar] 获取用户信息失败:', err);
   }
+
+  // 用户信息就绪后再校验缓存版本（缓存键依赖 userId）
+  checkCalendarCacheVersion();
 
   bindCalendarEvents();
   await loadCalendarView();
@@ -261,16 +354,27 @@ function getCalendarLoadRange() {
   return { startDate, endDate };
 }
 
-async function loadCalendarView() {
-  // 加载日程
-  const { startDate, endDate } = getCalendarLoadRange();
-  await loadCalendarEvents(startDate, endDate);
-
-  // 渲染所有视图组件
+// 渲染所有视图组件
+function renderCalendarAll() {
   renderCalendarMini();
   renderCalendarMain();
   renderCalendarDayScheduleList();
   renderCalendarDetailPanel();
+}
+
+async function loadCalendarView() {
+  const { startDate, endDate } = getCalendarLoadRange();
+
+  // 阶段一：先用本地缓存命中范围内的数据秒显（离线/弱网也能立即看到上次的日程）
+  const cached = getCachedEventsInRange(startDate, endDate);
+  if (cached && cached.length) {
+    calendarEvents = cached;
+    renderCalendarAll();
+  }
+
+  // 阶段二：请求网络拿到最新数据并覆盖缓存，再重渲染
+  await loadCalendarEvents(startDate, endDate);
+  renderCalendarAll();
 }
 
 async function loadCalendarEvents(startDate, endDate) {
@@ -285,12 +389,16 @@ async function loadCalendarEvents(startDate, endDate) {
     });
     if (result.success && result.data) {
       calendarEvents = result.data;
+      // 网络成功：用最新数据覆盖缓存中该范围的旧数据
+      updateCalendarCacheRange(startDate, endDate, result.data);
     } else {
       calendarEvents = [];
     }
   } catch (err) {
     console.error('[Calendar] 加载日程失败:', err);
-    calendarEvents = [];
+    // 网络失败：退回使用缓存中该范围的数据，保证离线可用
+    const fallback = getCachedEventsInRange(startDate, endDate);
+    calendarEvents = (fallback && fallback.length) ? fallback : [];
   }
 
   // 额外查询当前已选中日程的状态（包括已取消的）
