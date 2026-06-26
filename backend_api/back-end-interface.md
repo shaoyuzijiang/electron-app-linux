@@ -37,6 +37,7 @@
 | PUT | `/api/admin/departments/:id` | Admin Token | 修改部门 |
 | DELETE | `/api/admin/departments/:id` | Admin Token | 删除部门 |
 | GET | `/api/admin/departments/:id/users` | Admin Token | 获取部门下的用户 |
+| GET | `/api/admin/login-history` | Admin Token | 查询登录历史 |
 
 ### 选人组件接口
 
@@ -214,15 +215,28 @@ curl http://localhost:3000/api/auth/id-token \
 
 ### 4. 用户登录
 
-请求体需经 RSA + AES 混合加密，受速率限制保护（默认 5 次/分钟）。连续失败 5 次后账户锁定 15 分钟。
+请求体需经 RSA + AES 混合加密，受速率限制保护（默认 5 次/分钟）。连续失败 5 次后账户锁定 15 分钟。登录成功后自动记录登录历史（IP、客户端版本、客户端类型）。
 
 **加密前的原始请求体**
 
 ```json
 {
   "email": "zhangsan@example.com",
-  "password": "<your-password>"
+  "password": "<your-password>",
+  "clientVersion": "2.1.0",
+  "clientType": "android"
 }
+```
+
+**请求参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `email` | string | ✅ | 邮箱地址 |
+| `password` | string | ✅ | 密码 |
+| `clientVersion` | string | - | 客户端版本号（如 `"2.1.0"`），可选；也支持通过 Header `X-Client-Version` 传入 |
+| `clientType` | string | - | 客户端类型（如 `web`、`android`、`ios`、`desktop`），可选；也支持通过 Header `X-Client-Type` 传入 |
+| `clientOs` | string | - | 操作系统版本（如 `iOS 17.5`、`Android 14`、`Windows 11`），可选；也支持通过 Header `X-Client-OS` 传入 |
 ```
 
 **加密后的请求体**
@@ -562,7 +576,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 
 ### 10. 管理员登录
 
-无需认证，请求体不走加密通道（仅限 HTTPS 使用）。受速率限制保护。连续失败 5 次后账户锁定 15 分钟。仅 `admin` 或 `superadmin` 角色可登录。
+无需认证，请求体不走加密通道（仅限 HTTPS 使用）。受速率限制保护。连续失败 5 次后账户锁定 15 分钟。仅 `admin` 或 `superadmin` 角色可登录。登录成功后自动记录登录历史（IP、客户端版本、客户端类型）。
 
 **请求**
 
@@ -570,7 +584,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 # 邮箱登录
 curl -X POST http://localhost:3000/api/admin/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@example.com", "password": "your-password"}'
+  -d '{"email": "admin@example.com", "password": "your-password", "clientVersion": "1.0.0", "clientType": "web"}'
 
 # 用户ID登录
 curl -X POST http://localhost:3000/api/admin/login \
@@ -586,6 +600,9 @@ curl -X POST http://localhost:3000/api/admin/login \
 |------|------|------|------|
 | `email` | string | ✅ | 邮箱地址或用户ID |
 | `password` | string | ✅ | 密码 |
+| `clientVersion` | string | - | 客户端版本号，可选；也支持 Header `X-Client-Version` |
+| `clientType` | string | - | 客户端类型，可选；也支持 Header `X-Client-Type` |
+| `clientOs` | string | - | 操作系统版本，可选；也支持 Header `X-Client-OS` |
 
 **成功响应** `200`
 
@@ -925,6 +942,73 @@ curl http://localhost:3000/api/admin/departments/tech/users \
   ]
 }
 ```
+
+---
+### 14. 查询登录历史
+
+需要管理员 Bearer Token 认证。查询用户的登录历史记录（含 IP、客户端版本、客户端类型），支持分页和按用户ID筛选。
+
+**请求**
+
+```bash
+# 查询全部登录历史
+curl "http://localhost:3000/api/admin/login-history?page=1&pageSize=20" \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# 按用户ID筛选
+curl "http://localhost:3000/api/admin/login-history?userId=zhangsan@example.com&page=1&pageSize=20" \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**查询参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `userId` | string | - | 按用户ID筛选，不传则返回全部 |
+| `page` | integer | - | 页码，从 1 开始，默认 1 |
+| `pageSize` | integer | - | 每页数量，默认 50 |
+
+**成功响应** `200`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "list": [
+      {
+        "id": 1,
+        "user_id": "zhangsan@example.com",
+        "username": "张三",
+        "ip": "192.168.1.100",
+        "client_version": "2.1.0",
+        "client_type": "android",
+        "client_os": "Android 14",
+        "success": 1,
+        "login_at": "2026-06-26 16:30:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**响应字段**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | integer | 记录ID |
+| `user_id` | string | 登录用户ID |
+| `username` | string | 用户名 |
+| `ip` | string | 客户端IP地址 |
+| `client_version` | string | 客户端版本号 |
+| `client_type` | string | 客户端类型（web/android/ios/desktop等） |
+| `client_os` | string | 操作系统版本（如 `iOS 17.5`、`Android 14`） |
+| `success` | integer | 登录结果，1=成功，0=失败 |
+| `login_at` | string | 登录时间 |
+
+> **说明**：登录历史在每次登录成功时自动记录。`client_version` 和 `client_type` 来自客户端请求体或 `X-Client-Version` / `X-Client-Type` Header，`ip` 由服务端从反向代理头（`X-Forwarded-For`）自动获取。可按用户ID筛选查看特定用户的登录记录。
 
 ---
 

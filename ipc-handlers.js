@@ -29,6 +29,42 @@ function getCachePath(serverPath) {
   return fs.existsSync(cachePath) ? cachePath : null;
 }
 
+// 根据运行平台生成客户端类型，用于登录历史上报
+function getClientType() {
+  switch (process.platform) {
+    case 'darwin':
+      return 'mac';
+    case 'win32':
+      return 'win';
+    case 'linux':
+      return 'linux';
+    default:
+      return 'desktop';
+  }
+}
+
+// 生成操作系统版本信息，用于登录历史上报（如 "macOS 14.5"、"Windows 10.0.22631"）
+function getClientOs() {
+  let version = '';
+  try {
+    version = typeof process.getSystemVersion === 'function'
+      ? process.getSystemVersion()
+      : require('os').release();
+  } catch {
+    version = require('os').release();
+  }
+  switch (process.platform) {
+    case 'darwin':
+      return `macOS ${version}`;
+    case 'win32':
+      return `Windows ${version}`;
+    case 'linux':
+      return `Linux ${version}`;
+    default:
+      return `${process.platform} ${version}`;
+  }
+}
+
 /**
  * 注册所有 IPC 通信接口
  * @param {Object} ipcMain - Electron ipcMain
@@ -89,7 +125,11 @@ function register(ipcMain, deps) {
 
   ipcMain.handle('login', async (_event, { email, password }) => {
     try {
-      const tokenData = await api.login(email, password);
+      const tokenData = await api.login(email, password, {
+        clientVersion: app.getVersion(),
+        clientType: getClientType(),
+        clientOs: getClientOs(),
+      });
       tokenStore.saveTokens(tokenData);
 
       const profile = await api.getProfile(tokenData.accessToken);
