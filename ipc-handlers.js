@@ -43,6 +43,22 @@ function getClientType() {
   }
 }
 
+// 获取物理 CPU 架构（区分 Rosetta / Windows ARM 模拟运行）
+// process.arch 反映进程架构：x64 应用在 Apple Silicon 上经 Rosetta 运行时会返回 x64，
+// 此时通过 runningUnderARM64Translation 判定物理架构实际为 arm64。
+function getPhysicalArch() {
+  let arch = process.arch;
+  try {
+    const translated =
+      (typeof process.runningUnderARM64Translation === 'boolean' && process.runningUnderARM64Translation) ||
+      (typeof app.runningUnderARM64Translation === 'boolean' && app.runningUnderARM64Translation);
+    if (translated) arch = 'arm64';
+  } catch {
+    // 忽略：API 不可用时回退到进程架构
+  }
+  return arch;
+}
+
 // 生成操作系统版本信息，用于登录历史上报（如 "macOS 14.5"、"Windows 10.0.22631"）
 function getClientOs() {
   let version = '';
@@ -53,15 +69,16 @@ function getClientOs() {
   } catch {
     version = require('os').release();
   }
+  const arch = getPhysicalArch(); // 物理 CPU 架构，如 arm64、x64
   switch (process.platform) {
     case 'darwin':
-      return `macOS ${version}`;
+      return `macOS ${version} (${arch})`;
     case 'win32':
-      return `Windows ${version}`;
+      return `Windows ${version} (${arch})`;
     case 'linux':
-      return `Linux ${version}`;
+      return `Linux ${version} (${arch})`;
     default:
-      return `${process.platform} ${version}`;
+      return `${process.platform} ${version} (${arch})`;
   }
 }
 
