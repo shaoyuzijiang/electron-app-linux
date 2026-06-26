@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const api = require('./backend_api/api');
 const tokenStore = require('./utils/token-store');
@@ -147,14 +147,65 @@ function createWindow() {
   });
 
   mainWindow.on('restore', () => {
-    if (wemeetSdkModule.isSdkLoggedIn()) {
-      meetingPolling.scheduleMeetingListRefresh();
-    }
+    handleSystemResume();
   });
 
   // 注册 SDK 回调
   if (wemeetSdk) {
     wemeetSdk.AddJsCallback(handleSDKCallback);
+  }
+}
+
+/**
+ * 系统休眠/锁屏恢复后的统一处理
+ * 检测离线状态，如有保存的 refresh token 则自动重试登录
+ */
+async function handleSystemResume() {
+  const tokens = tokenStore.getTokens();
+  if (!tokens) {
+    console.log('[系统恢复] 无已保存的凭据，跳过重连');
+    return;
+  }
+
+  // 如果 SDK 已在线且 token 未过期，仅刷新会议列表
+  if (wemeetSdkModule.isSdkLoggedIn() && !tokenStore.isAccessTokenExpired()) {
+    console.log('[系统恢复] 在线状态正常，刷新会议列表');
+    meetingPolling.scheduleMeetingListRefresh();
+    return;
+  }
+
+  console.log('[系统恢复] 检测到离线状态，尝试重试登录...');
+  try {
+    const accessToken = await wemeetSdkModule.getValidAccessToken();
+    const profile = await api.getProfile(accessToken);
+    console.log('[系统恢复] Token 刷新成功，用户:', profile.email);
+
+    // 尝试重新登录 SDK
+    const sdkLoginSuccess = await wemeetSdkModule.ensureSDKLoggedIn();
+    if (sdkLoginSuccess) {
+      console.log('[系统恢复] SDK 重连成功');
+      meetingPolling.startMeetingListPolling();
+      meetingPolling.scheduleMeetingListRefresh();
+
+      // 通知渲染进程刷新用户信息
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('system-resume-success', profile);
+      }
+    } else {
+      console.warn('[系统恢复] SDK 重连失败');
+    }
+  } catch (err) {
+    console.error('[系统恢复] 重试登录失败:', err.message);
+    // refresh token 也失效了，清除凭据并通知渲染进程
+    tokenStore.clearTokens();
+    tokenStore.clearMeetingTokens();
+    sdkEvents.emit('auth-expired');
+
+    const win = getMainWindow();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('system-resume-failed', { message: err.message });
+    }
   }
 }
 
@@ -195,6 +246,13 @@ app.whenReady().then(() => {
     closeUserPickerWindow: userPicker.closeUserPickerWindow,
     getUserPickerWindow: userPicker.getUserPickerWindow,
   });
+});
+
+// 系统从休眠/锁屏恢复时，自动检测并重试登录
+powerMonitor.on('resume', () => {
+  console.log('[系统唤醒] 检测到系统从休眠/锁屏状态恢复');
+  // 延迟执行，等待网络连接恢复
+  setTimeout(() => handleSystemResume(), 3000);
 });
 
 app.on('window-all-closed', () => {

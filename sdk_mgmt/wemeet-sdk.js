@@ -129,12 +129,12 @@ async function getValidAccessToken() {
       tokenStore.saveTokens(newTokenData);
       return newTokenData.accessToken;
     } catch (err) {
-      // Refresh token 失效（被撤销或过期），清除凭据并通知 UI 重新登录
+      // Refresh token 失效（被撤销或过期），清除凭据并跳转登录页
       console.error('刷新令牌失败:', err.message);
       tokenStore.clearTokens();
       tokenStore.clearMeetingTokens();
 
-      // 通知主进程停止轮询并跳转登录页
+      // 通知主进程停止轮询，并跳转到登录页
       sdkEvents.emit('auth-expired');
 
       const mainWindow = _getMainWindow ? _getMainWindow() : null;

@@ -56,6 +56,10 @@ async function connectIMWebSocket() {
     if (!tokenResult.success) {
       console.error('[IM] 获取 token 失败:', tokenResult.message);
       updateWSStatus('disconnected');
+      if (tokenResult.message?.includes('过期') || tokenResult.message?.includes('重新登录')) {
+        console.warn('[IM] Token 已失效（refresh token 过期），停止重连，将跳转登录页');
+        return; // 主进程已负责跳转 login.html，此处不重连
+      }
       scheduleReconnect();
       return;
     }
