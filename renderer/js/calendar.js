@@ -5,7 +5,7 @@ let calendarCurrentUserId = null;
 let calendarCurrentUsername = null;
 
 // 视图状态
-let calendarView = 'week'; // 'day' | 'week' | 'month'
+let calendarView = 'month'; // 'day' | 'week' | 'month'
 let calendarViewDate = new Date(); // 当前视图聚焦的日期
 let calendarSelectedDate = new Date(); // 用户选中的日期（用于左侧列表）
 let calendarActiveEventId = null;
