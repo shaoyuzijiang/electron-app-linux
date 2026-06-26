@@ -201,11 +201,14 @@ function renderMeetings(meetings) {
         const startTime = formatMeetingTime(m.start_time || m.meeting_start_time);
         const endTime = formatMeetingTime(m.end_time || m.meeting_end_time);
         const meetingCode = m.meeting_code || m.meeting_id || '-';
+        const meetingId = m.meeting_id || '';
+        const joinRole = m.join_meeting_role || '';
+        const isCreator = joinRole === 'creator';
         const status = m.status || '';
         const isRecurring = m.meeting_type === 1;
         const statusLabel = status === 'MEETING_STATE_STARTED' ? '进行中' : '';
         return `
-          <div class="meeting-item" data-meeting-code="${meetingCode}">
+          <div class="meeting-item" data-meeting-id="${meetingId}" data-meeting-code="${meetingCode}" data-join-role="${joinRole}">
             <div class="meeting-title">${subject}</div>
             <div class="meeting-meta">
               <span>${startTime}-${endTime}</span>
@@ -213,6 +216,7 @@ function renderMeetings(meetings) {
               <span class="meeting-code-copy" data-code="${meetingCode}" title="点击复制会议号">${meetingCode}</span>
               ${isRecurring ? '<span class="meeting-tag">· 周期</span>' : ''}
               ${statusLabel ? `<span class="meeting-tag meeting-status-active">· ${statusLabel}</span>` : ''}
+              ${isCreator ? `<button class="meeting-edit-btn" data-id="${meetingId}" data-subject="${subject}" data-start="${m.start_time || m.meeting_start_time || ''}" data-end="${m.end_time || m.meeting_end_time || ''}" data-password="${m.password || ''}">修改</button><button class="meeting-cancel-btn" data-id="${meetingId}" data-subject="${subject}">取消</button>` : ''}
               <button class="meeting-join-btn" data-code="${meetingCode}">入会</button>
             </div>
           </div>
@@ -258,6 +262,64 @@ document.getElementById('meetingList').addEventListener('click', async (e) => {
   } finally {
     joinBtn.disabled = false;
     joinBtn.textContent = '入会';
+  }
+});
+
+// 修改按钮点击（事件委托）
+let currentEditMeetingId = null;
+document.getElementById('meetingList').addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.meeting-edit-btn');
+  if (!editBtn) return;
+  e.stopPropagation();
+
+  currentEditMeetingId = editBtn.getAttribute('data-id');
+  const subject = editBtn.getAttribute('data-subject') || '';
+  const startTs = editBtn.getAttribute('data-start') || '';
+  const endTs = editBtn.getAttribute('data-end') || '';
+  const password = editBtn.getAttribute('data-password') || '';
+
+  // 将秒级时间戳转换为 datetime-local 格式
+  const tsToLocal = (ts) => {
+    if (!ts) return '';
+    const d = new Date(Number(ts) * 1000);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  document.getElementById('editMeetingSubject').value = subject;
+  document.getElementById('editMeetingStartTime').value = tsToLocal(startTs);
+  document.getElementById('editMeetingEndTime').value = tsToLocal(endTs);
+  document.getElementById('editMeetingPassword').value = password;
+  document.getElementById('editMeetingError').textContent = '';
+
+  document.getElementById('editMeetingModal').classList.add('show');
+});
+
+// 取消按钮点击（事件委托）
+document.getElementById('meetingList').addEventListener('click', async (e) => {
+  const cancelBtn = e.target.closest('.meeting-cancel-btn');
+  if (!cancelBtn) return;
+  e.stopPropagation();
+
+  const meetingId = cancelBtn.getAttribute('data-id');
+  const subject = cancelBtn.getAttribute('data-subject') || '该会议';
+
+  if (!confirm(`确定要取消「${subject}」吗？取消后不可恢复。`)) return;
+
+  cancelBtn.disabled = true;
+  cancelBtn.textContent = '取消中...';
+  try {
+    const result = await window.electronAPI.cancelMeeting(meetingId);
+    if (result.success) {
+      loadMeetingList();
+    } else {
+      alert(result.message || '取消会议失败');
+    }
+  } catch (err) {
+    alert('取消会议失败: ' + err.message);
+  } finally {
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = '取消';
   }
 });
 
@@ -648,6 +710,83 @@ function showScheduleResult(data) {
     scheduleModal.classList.remove('show');
   });
 }
+
+// ========== 修改会议弹窗 ==========
+
+const editModal = document.getElementById('editMeetingModal');
+
+document.getElementById('cancelEditMeeting').addEventListener('click', () => {
+  editModal.classList.remove('show');
+});
+
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) {
+    editModal.classList.remove('show');
+  }
+});
+
+document.getElementById('submitEditMeeting').addEventListener('click', async () => {
+  const subject = document.getElementById('editMeetingSubject').value.trim();
+  const startTimeRaw = document.getElementById('editMeetingStartTime').value;
+  const endTimeRaw = document.getElementById('editMeetingEndTime').value;
+  const password = document.getElementById('editMeetingPassword').value.trim();
+  const muteEnableType = parseInt(document.getElementById('editMeetingMuteBeforeJoin').value, 10);
+  const errorEl = document.getElementById('editMeetingError');
+
+  errorEl.textContent = '';
+
+  if (!subject) {
+    errorEl.textContent = '请输入会议主题';
+    return;
+  }
+  if (!startTimeRaw) {
+    errorEl.textContent = '请选择开始时间';
+    return;
+  }
+  if (!endTimeRaw) {
+    errorEl.textContent = '请选择结束时间';
+    return;
+  }
+  if (new Date(startTimeRaw) >= new Date(endTimeRaw)) {
+    errorEl.textContent = '结束时间必须晚于开始时间';
+    return;
+  }
+  if (password && !/^\d{4,6}$/.test(password)) {
+    errorEl.textContent = '会议密码需为 4-6 位数字';
+    return;
+  }
+
+  const updates = {
+    subject,
+    start_time: toUnixTimestamp(startTimeRaw),
+    end_time: toUnixTimestamp(endTimeRaw),
+    settings: {
+      mute_enable_type_join: muteEnableType,
+    },
+  };
+  if (password) {
+    updates.password = password;
+  }
+
+  const submitBtn = document.getElementById('submitEditMeeting');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '保存中...';
+
+  try {
+    const result = await window.electronAPI.updateMeeting(currentEditMeetingId, updates);
+    if (result.success) {
+      editModal.classList.remove('show');
+      loadMeetingList();
+    } else {
+      errorEl.textContent = result.message || '修改会议失败';
+    }
+  } catch (err) {
+    errorEl.textContent = '网络错误，请稍后重试';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = '保存修改';
+  }
+});
 
 // ========== 监听主进程推送的会议列表更新 ==========
 window.electronAPI.onMeetingListUpdate((result) => {

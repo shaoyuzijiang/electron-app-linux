@@ -105,7 +105,58 @@ async function getMeetingList(accessToken, options = {}) {
   });
 }
 
+/**
+ * 修改会议
+ * 仅会议创建者可修改。
+ * @param {string} accessToken
+ * @param {string} meetingId - 会议 ID（meeting_id，非 meeting_code）
+ * @param {object} updates - 要修改的字段（至少一项）
+ * @param {string} [updates.subject] - 会议主题
+ * @param {string} [updates.start_time] - 开始时间（秒级时间戳字符串）
+ * @param {string} [updates.end_time] - 结束时间（秒级时间戳字符串）
+ * @param {number} [updates.instanceid] - 终端设备类型
+ * @param {string} [updates.password] - 会议密码
+ * @param {object} [updates.settings] - 会议设置
+ * @param {string} [updates.time_zone] - 时区
+ * @param {string} [updates.location] - 会议地点
+ * @returns {{ meeting_number: number, meeting_info_list: MeetingInfo[] }}
+ */
+async function updateMeeting(accessToken, meetingId, updates) {
+  return await request(`${BASE_URL}/api/wemeet/meetings/${meetingId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * 取消会议
+ * 仅会议创建者可取消。
+ * @param {string} accessToken
+ * @param {string} meetingId - 会议 ID（meeting_id，非 meeting_code）
+ * @param {object} [options] - 可选参数
+ * @param {number} [options.reason_code=1] - 取消原因代码
+ * @param {string} [options.reason_detail] - 详细取消原因描述
+ * @returns {object}
+ */
+async function cancelMeeting(accessToken, meetingId, options = {}) {
+  const body = { ...options };
+  return await request(`${BASE_URL}/api/wemeet/meetings/${meetingId}/cancel`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 module.exports = {
   createMeeting,
   getMeetingList,
+  updateMeeting,
+  cancelMeeting,
 };

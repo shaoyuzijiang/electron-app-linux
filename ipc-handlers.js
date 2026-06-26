@@ -212,6 +212,32 @@ function register(ipcMain, deps) {
     }
   });
 
+  ipcMain.handle('update-meeting', async (_event, { meetingId, updates }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const result = await api.updateMeeting(accessToken, meetingId, updates);
+      return { success: true, data: result };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
+  ipcMain.handle('cancel-meeting', async (_event, { meetingId, reason }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const result = await api.cancelMeeting(accessToken, meetingId, reason || {});
+      return { success: true, data: result };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
+  });
+
   // ========== Token 相关 ==========
 
   ipcMain.handle('get-sdk-token', () => {

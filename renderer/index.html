@@ -458,6 +458,48 @@
     </div>
   </div>
 
+  <!-- 修改会议弹窗 -->
+  <div class="modal-overlay schedule-modal" id="editMeetingModal">
+    <div class="modal-card">
+      <h2>修改会议</h2>
+      <p class="modal-desc">修改会议信息后提交更新</p>
+      <div class="schedule-form">
+        <div class="form-row">
+          <label>会议主题<span class="required">*</span></label>
+          <input type="text" id="editMeetingSubject" placeholder="请输入会议主题" maxlength="100" />
+        </div>
+        <div class="time-row">
+          <div class="form-row">
+            <label>开始时间<span class="required">*</span></label>
+            <input type="datetime-local" id="editMeetingStartTime" />
+          </div>
+          <div class="form-row">
+            <label>结束时间<span class="required">*</span></label>
+            <input type="datetime-local" id="editMeetingEndTime" />
+          </div>
+        </div>
+        <div class="form-row">
+          <label>会议密码</label>
+          <input type="text" id="editMeetingPassword" placeholder="留空则无密码" maxlength="6" />
+          <div class="form-hint">4-6 位数字，留空表示不修改</div>
+        </div>
+        <div class="form-row">
+          <label>入会静音</label>
+          <select id="editMeetingMuteBeforeJoin">
+            <option value="2" selected>超6人自动开启</option>
+            <option value="1">开启</option>
+            <option value="0">关闭</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancelEditMeeting">取消</button>
+        <button class="btn-submit" id="submitEditMeeting">保存修改</button>
+      </div>
+      <div class="modal-error" id="editMeetingError"></div>
+    </div>
+  </div>
+
   <script src="js/renderer-logger.js"></script>
   <script src="js/contacts.js"></script>
   <script src="js/im-cache.js"></script>

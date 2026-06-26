@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', { url }),
   createMeeting: (meetingData) => ipcRenderer.invoke('create-meeting', meetingData),
   getMeetingList: (options) => ipcRenderer.invoke('get-meeting-list', options),
+  updateMeeting: (meetingId, updates) => ipcRenderer.invoke('update-meeting', { meetingId, updates }),
+  cancelMeeting: (meetingId, reason) => ipcRenderer.invoke('cancel-meeting', { meetingId, reason }),
   getSdkToken: () => ipcRenderer.invoke('get-sdk-token'),
   getIdToken: () => ipcRenderer.invoke('get-id-token'),
   fetchIdToken: () => ipcRenderer.invoke('fetch-id-token'),

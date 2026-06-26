@@ -2,7 +2,7 @@
 
 > 本文档供大模型或开发者生成客户端代码使用，包含完整的请求/响应格式、数据模型和示例。
 >
-> 相关文档：[calendar.md](./calendar.md)（日程设计方案与架构约束）| [interface.md](./interface.md)（认证/用户/会议 API 接口文档）
+> 相关文档：[calendar.md](./calendar.md)（日程设计方案与架构约束）| [meeting-interface.md](./meeting-interface.md)（腾讯会议 API，与日程联动）| [interface.md](./interface.md)（认证/用户 API 接口文档）
 
 ---
 
@@ -275,7 +275,7 @@ PUT /api/calendar/events/:id
 
 仅组织者可修改。支持修改标题、描述、时间、地点。
 
-> 会议信息由创建日程时的 `createMeeting` 标识决定，不支持通过修改接口直接变更。会议信息的后续更新由腾讯会议 Webhook 自动同步。
+> **会议信息同步**：若日程关联了腾讯会议（`meetingType=wemeet`），修改 `title` / `startTime` / `endTime` 时会先调用腾讯会议修改接口（`PUT /v1/meetings/{meetingId}`）同步会议信息，API 成功后再更新本地日程；若腾讯会议 API 调用失败，整笔修改请求失败（与创建日程行为一致）。仅修改 `description` / `location` 不触发会议同步。
 
 **请求体（所有字段可选，仅传需要修改的字段）：**
 
@@ -299,6 +299,7 @@ PUT /api/calendar/events/:id
 | 403 | Only organizer can update event | 仅组织者可修改 |
 | 400 | End time must be after start time | 结束时间须晚于开始时间 |
 | 400 | Cannot update a cancelled event | 已取消的日程不可修改 |
+| 500 | Failed to update meeting: xxx | 腾讯会议修改失败（仅关联腾讯会议且 title/时间变更时） |
 
 ---
 
@@ -311,6 +312,8 @@ DELETE /api/calendar/events/:id
 **需要认证**
 
 仅组织者可取消。取消为软删除（status 改为 `cancelled`），数据保留。
+
+> **会议信息同步**：若日程关联了腾讯会议（`meetingType=wemeet`），取消日程时会先调用腾讯会议取消接口（`POST /v1/meetings/{meetingId}/cancel`）。对于"会议已取消 / 已结束 / 不存在"等幂等场景予以容忍并继续取消本地日程；其余错误则整笔请求失败。
 
 **请求示例：**
 
@@ -337,6 +340,7 @@ curl -X DELETE http://localhost:3000/api/calendar/events/a1b2c3d4-e5f6-7890-abcd
 | 404 | Event not found | 日程不存在 |
 | 403 | Only organizer can cancel event | 仅组织者可取消 |
 | 400 | Event already cancelled | 日程已取消 |
+| 500 | Failed to cancel meeting: xxx | 腾讯会议取消失败（仅关联腾讯会议时，幂等场景除外） |
 
 ---
 

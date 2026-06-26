@@ -359,6 +359,56 @@ body {
   display: inline-block;
 }
 
+/* 会议操作按钮：修改 / 取消（仅创建者可见） */
+.meeting-edit-btn,
+.meeting-cancel-btn {
+  display: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.meeting-edit-btn {
+  margin-left: auto;
+  color: #1e6fff;
+  border: 1px solid #1e6fff;
+}
+
+.meeting-edit-btn:hover {
+  background: #1e6fff;
+  color: #fff;
+}
+
+.meeting-cancel-btn {
+  margin-left: 6px;
+  color: #ff4d4f;
+  border: 1px solid #ff4d4f;
+}
+
+.meeting-item:has(.meeting-edit-btn) .meeting-join-btn {
+  margin-left: 6px;
+}
+
+.meeting-cancel-btn:hover {
+  background: #ff4d4f;
+  color: #fff;
+}
+
+.meeting-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.meeting-item:hover .meeting-edit-btn,
+.meeting-item:hover .meeting-cancel-btn {
+  display: inline-block;
+}
+
 /* 头像下拉菜单 */
 .avatar-menu {
   position: absolute;

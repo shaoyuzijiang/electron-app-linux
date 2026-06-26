@@ -2,7 +2,7 @@
 
 > 本文档供大模型或开发者生成客户端代码使用，包含完整的请求/响应格式、数据模型、WebSocket 协议和示例。
 >
-> 相关文档：[im.md](./im.md)（IM 设计方案与架构约束）| [interface.md](./interface.md)（认证/用户/会议 API 接口文档）
+> 相关文档：[im.md](./im.md)（IM 设计方案与架构约束）| [meeting-interface.md](./meeting-interface.md)（腾讯会议 API）| [interface.md](./interface.md)（认证/用户 API 接口文档）
 
 ---
 
