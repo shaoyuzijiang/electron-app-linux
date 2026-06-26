@@ -831,6 +831,8 @@ function showScheduleResult(data) {
 
   document.getElementById('closeScheduleResult').addEventListener('click', () => {
     closeMeetingFormModal();
+    // 关闭弹窗后刷新会议列表（不显示加载动画，静默更新）
+    loadMeetingList(false, true);
   });
 }
 
