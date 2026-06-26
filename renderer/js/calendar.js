@@ -523,6 +523,17 @@ function renderCalendarDayScheduleList() {
 
 // ---------- 主区域 ----------
 
+// 日/周视图默认滚动到的起始小时（8点），避免每次都从 0 点开始显示
+const CALENDAR_DEFAULT_START_HOUR = 8;
+
+// 将日/周视图的时间网格默认滚动到 8 点位置
+function scrollCalendarToDefaultHour(body) {
+  const grid = body.querySelector('.calendar-week-grid, .calendar-day-grid');
+  if (!grid) return;
+  const hourHeight = 48; // 与渲染时保持一致
+  grid.scrollTop = CALENDAR_DEFAULT_START_HOUR * hourHeight;
+}
+
 function renderCalendarMain() {
   const body = document.getElementById('calendarMainBody');
   const titleEl = document.getElementById('calendarMainTitle');
@@ -532,12 +543,14 @@ function renderCalendarMain() {
     if (titleEl) titleEl.textContent = `${calendarViewDate.getMonth() + 1}月${calendarViewDate.getDate()}日 ${'日一二三四五六'[calendarViewDate.getDay()]}`;
     body.innerHTML = renderDayView();
     bindDayViewEvents();
+    scrollCalendarToDefaultHour(body);
   } else if (calendarView === 'week') {
     const start = calendarStartOfWeek(calendarViewDate);
     const end = calendarEndOfWeek(calendarViewDate);
     if (titleEl) titleEl.textContent = `${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
     body.innerHTML = renderWeekView(start);
     bindWeekViewEvents();
+    scrollCalendarToDefaultHour(body);
   } else {
     if (titleEl) titleEl.textContent = `${calendarViewDate.getFullYear()}年${calendarViewDate.getMonth() + 1}月`;
     body.innerHTML = renderMonthView();
