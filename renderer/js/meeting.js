@@ -268,33 +268,21 @@ document.getElementById('meetingList').addEventListener('click', async (e) => {
 });
 
 // 修改按钮点击（事件委托）
-let currentEditMeetingId = null;
 document.getElementById('meetingList').addEventListener('click', (e) => {
   const editBtn = e.target.closest('.meeting-edit-btn');
   if (!editBtn) return;
   e.stopPropagation();
 
-  currentEditMeetingId = editBtn.getAttribute('data-id');
-  const subject = editBtn.getAttribute('data-subject') || '';
-  const startTs = editBtn.getAttribute('data-start') || '';
-  const endTs = editBtn.getAttribute('data-end') || '';
-  const password = editBtn.getAttribute('data-password') || '';
-
-  // 将秒级时间戳转换为 datetime-local 格式
-  const tsToLocal = (ts) => {
-    if (!ts) return '';
-    const d = new Date(Number(ts) * 1000);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
-  document.getElementById('editMeetingSubject').value = subject;
-  document.getElementById('editMeetingStartTime').value = tsToLocal(startTs);
-  document.getElementById('editMeetingEndTime').value = tsToLocal(endTs);
-  document.getElementById('editMeetingPassword').value = password;
-  document.getElementById('editMeetingError').textContent = '';
-
-  document.getElementById('editMeetingModal').classList.add('show');
+  openMeetingFormModal({
+    mode: 'edit',
+    meeting: {
+      meetingId: editBtn.getAttribute('data-id') || '',
+      subject: editBtn.getAttribute('data-subject') || '',
+      startTime: editBtn.getAttribute('data-start') || '',
+      endTime: editBtn.getAttribute('data-end') || '',
+      password: editBtn.getAttribute('data-password') || '',
+    },
+  });
 });
 
 // 取消按钮点击（事件委托）
@@ -353,28 +341,6 @@ document.getElementById('btnQuick').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('btnSchedule').addEventListener('click', async () => {
-  const scheduleModal = document.getElementById('scheduleMeetingModal');
-  const formContainer = document.getElementById('scheduleFormContainer');
-  const resultContainer = document.getElementById('scheduleResultContainer');
-  formContainer.style.display = '';
-  resultContainer.style.display = 'none';
-  document.getElementById('scheduleMeetingError').textContent = '';
-
-  const now = new Date();
-  const startDefault = new Date(now.getTime() + 60 * 60 * 1000);
-  const endDefault = new Date(startDefault.getTime() + 60 * 60 * 1000);
-  const pad = (n) => String(n).padStart(2, '0');
-  const toLocalISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-
-  document.getElementById('meetingSubject').value = '';
-  document.getElementById('meetingStartTime').value = toLocalISO(startDefault);
-  document.getElementById('meetingEndTime').value = toLocalISO(endDefault);
-  document.getElementById('meetingPassword').value = '';
-  document.getElementById('meetingMuteBeforeJoin').value = '2';
-
-  scheduleModal.classList.add('show');
-});
 
 document.getElementById('btnScreen').addEventListener('click', async () => {
   try {
@@ -508,22 +474,99 @@ submitBtn.addEventListener('click', async () => {
   }
 });
 
-// ========== 预定会议弹窗 ==========
+// ========== 会议表单弹窗（创建 / 修改共用） ==========
 
-const scheduleModal = document.getElementById('scheduleMeetingModal');
-const scheduleFormContainer = document.getElementById('scheduleFormContainer');
-const scheduleResultContainer = document.getElementById('scheduleResultContainer');
-const scheduleError = document.getElementById('scheduleMeetingError');
+const meetingFormModal = document.getElementById('meetingFormModal');
+const meetingFormContainer = document.getElementById('meetingFormContainer');
+const meetingFormResultContainer = document.getElementById('meetingFormResultContainer');
+const meetingFormTitle = document.getElementById('meetingFormTitle');
+const meetingFormDesc = document.getElementById('meetingFormDesc');
+const meetingFormSubject = document.getElementById('meetingFormSubject');
+const meetingFormStartTime = document.getElementById('meetingFormStartTime');
+const meetingFormEndTime = document.getElementById('meetingFormEndTime');
+const meetingFormPassword = document.getElementById('meetingFormPassword');
+const meetingFormPasswordHint = document.getElementById('meetingFormPasswordHint');
+const meetingFormMuteBeforeJoin = document.getElementById('meetingFormMuteBeforeJoin');
+const meetingFormError = document.getElementById('meetingFormError');
+const submitMeetingFormBtn = document.getElementById('submitMeetingForm');
+const meetingFormState = {
+  mode: 'create',
+  meetingId: null,
+};
 
-document.getElementById('cancelScheduleMeeting').addEventListener('click', () => {
-  scheduleModal.classList.remove('show');
-});
+function padTimeNumber(n) {
+  return String(n).padStart(2, '0');
+}
 
-scheduleModal.addEventListener('click', (e) => {
-  if (e.target === scheduleModal) {
-    scheduleModal.classList.remove('show');
+function toLocalDatetimeValue(date) {
+  return `${date.getFullYear()}-${padTimeNumber(date.getMonth() + 1)}-${padTimeNumber(date.getDate())}T${padTimeNumber(date.getHours())}:${padTimeNumber(date.getMinutes())}`;
+}
+
+function timestampToLocalDatetime(timestamp) {
+  if (!timestamp) return '';
+  return toLocalDatetimeValue(new Date(Number(timestamp) * 1000));
+}
+
+function closeMeetingFormModal() {
+  meetingFormModal.classList.remove('show');
+}
+
+function syncMeetingEndTimeWithStart() {
+  const startRaw = meetingFormStartTime.value;
+  const endRaw = meetingFormEndTime.value;
+  if (!startRaw) return;
+
+  const startDt = new Date(startRaw);
+  const endDt = endRaw ? new Date(endRaw) : null;
+  if (!endDt || endDt <= startDt) {
+    const newEnd = new Date(startDt.getTime() + 60 * 60 * 1000);
+    meetingFormEndTime.value = toLocalDatetimeValue(newEnd);
   }
-});
+}
+
+function resetMeetingFormView() {
+  meetingFormContainer.style.display = '';
+  meetingFormResultContainer.style.display = 'none';
+  meetingFormError.textContent = '';
+}
+
+function openMeetingFormModal({ mode = 'create', meeting = null } = {}) {
+  meetingFormState.mode = mode;
+  meetingFormState.meetingId = mode === 'edit' ? (meeting?.meetingId || null) : null;
+  resetMeetingFormView();
+
+  if (mode === 'edit') {
+    meetingFormTitle.textContent = '修改会议';
+    meetingFormDesc.textContent = '修改会议信息后提交更新';
+    submitMeetingFormBtn.textContent = '保存修改';
+    meetingFormPassword.placeholder = '留空则不修改';
+    meetingFormPasswordHint.textContent = '4-6 位数字，留空表示不修改';
+
+    meetingFormSubject.value = meeting?.subject || '';
+    meetingFormStartTime.value = timestampToLocalDatetime(meeting?.startTime || '');
+    meetingFormEndTime.value = timestampToLocalDatetime(meeting?.endTime || '');
+    meetingFormPassword.value = meeting?.password || '';
+    meetingFormMuteBeforeJoin.value = String(meeting?.muteEnableType ?? 2);
+  } else {
+    meetingFormTitle.textContent = '预定会议';
+    meetingFormDesc.textContent = '填写会议信息后提交创建';
+    submitMeetingFormBtn.textContent = '预定会议';
+    meetingFormPassword.placeholder = '留空则无密码';
+    meetingFormPasswordHint.textContent = '4-6 位数字';
+
+    const now = new Date();
+    const startDefault = new Date(now.getTime() + 60 * 60 * 1000);
+    const endDefault = new Date(startDefault.getTime() + 60 * 60 * 1000);
+
+    meetingFormSubject.value = '';
+    meetingFormStartTime.value = toLocalDatetimeValue(startDefault);
+    meetingFormEndTime.value = toLocalDatetimeValue(endDefault);
+    meetingFormPassword.value = '';
+    meetingFormMuteBeforeJoin.value = '2';
+  }
+
+  meetingFormModal.classList.add('show');
+}
 
 /**
  * 将 datetime-local 输入值转换为秒级时间戳字符串
@@ -532,67 +575,141 @@ function toUnixTimestamp(datetimeLocalValue) {
   return String(Math.floor(new Date(datetimeLocalValue).getTime() / 1000));
 }
 
-document.getElementById('submitScheduleMeeting').addEventListener('click', async () => {
-  const subject = document.getElementById('meetingSubject').value.trim();
-  const startTimeRaw = document.getElementById('meetingStartTime').value;
-  const endTimeRaw = document.getElementById('meetingEndTime').value;
-  const password = document.getElementById('meetingPassword').value.trim();
-  const muteEnableType = parseInt(document.getElementById('meetingMuteBeforeJoin').value, 10);
+function getMeetingFormValues() {
+  const subject = meetingFormSubject.value.trim();
+  const startTimeRaw = meetingFormStartTime.value;
+  const endTimeRaw = meetingFormEndTime.value;
+  const password = meetingFormPassword.value.trim();
+  const muteEnableType = parseInt(meetingFormMuteBeforeJoin.value, 10);
 
-  scheduleError.textContent = '';
+  meetingFormError.textContent = '';
 
   if (!subject) {
-    scheduleError.textContent = '请输入会议主题';
-    return;
+    meetingFormError.textContent = '请输入会议主题';
+    return null;
   }
   if (!startTimeRaw) {
-    scheduleError.textContent = '请选择开始时间';
-    return;
+    meetingFormError.textContent = '请选择开始时间';
+    return null;
   }
   if (!endTimeRaw) {
-    scheduleError.textContent = '请选择结束时间';
-    return;
+    meetingFormError.textContent = '请选择结束时间';
+    return null;
   }
   if (new Date(startTimeRaw) >= new Date(endTimeRaw)) {
-    scheduleError.textContent = '结束时间必须晚于开始时间';
-    return;
+    meetingFormError.textContent = '结束时间必须晚于开始时间';
+    return null;
   }
   if (password && !/^\d{4,6}$/.test(password)) {
-    scheduleError.textContent = '会议密码需为 4-6 位数字';
-    return;
+    meetingFormError.textContent = '会议密码需为 4-6 位数字';
+    return null;
   }
 
-  const meetingData = {
+  return {
     subject,
-    type: 0,
-    start_time: toUnixTimestamp(startTimeRaw),
-    end_time: toUnixTimestamp(endTimeRaw),
-    instanceid: 1,
-    settings: {
-      mute_enable_type_join: muteEnableType,
-    },
+    startTimeRaw,
+    endTimeRaw,
+    password,
+    muteEnableType,
   };
-  if (password) {
-    meetingData.password = password;
-  }
+}
 
-  const scheduleSubmitBtn = document.getElementById('submitScheduleMeeting');
-  scheduleSubmitBtn.disabled = true;
-  scheduleSubmitBtn.textContent = '创建中...';
+document.getElementById('cancelMeetingForm').addEventListener('click', () => {
+  closeMeetingFormModal();
+});
+
+meetingFormModal.addEventListener('click', (e) => {
+  if (e.target === meetingFormModal) {
+    closeMeetingFormModal();
+  }
+});
+
+meetingFormStartTime.addEventListener('change', syncMeetingEndTimeWithStart);
+
+document.getElementById('btnSchedule').addEventListener('click', () => {
+  openMeetingFormModal({ mode: 'create' });
+});
+
+submitMeetingFormBtn.addEventListener('click', async () => {
+  const formValues = getMeetingFormValues();
+  if (!formValues) return;
+
+  const {
+    subject,
+    startTimeRaw,
+    endTimeRaw,
+    password,
+    muteEnableType,
+  } = formValues;
+
+  const isEditMode = meetingFormState.mode === 'edit';
+  submitMeetingFormBtn.disabled = true;
+  submitMeetingFormBtn.textContent = isEditMode ? '保存中...' : '创建中...';
 
   try {
-    const result = await window.electronAPI.createMeeting(meetingData);
-    if (result.success) {
-      showScheduleResult(result.data);
-      loadMeetingList();
+    if (isEditMode) {
+      const updates = {
+        subject,
+        start_time: toUnixTimestamp(startTimeRaw),
+        end_time: toUnixTimestamp(endTimeRaw),
+        settings: {
+          mute_enable_type_join: muteEnableType,
+        },
+      };
+      if (password) {
+        updates.password = password;
+      }
+
+      const result = await window.electronAPI.updateMeeting(meetingFormState.meetingId, updates);
+      if (result.success) {
+        meetingListData = meetingListData.map((meeting) => {
+          if (meeting.meeting_id !== meetingFormState.meetingId) return meeting;
+          return {
+            ...meeting,
+            subject,
+            start_time: updates.start_time,
+            end_time: updates.end_time,
+            password: password || meeting.password,
+            settings: {
+              ...(meeting.settings || {}),
+              mute_enable_type_join: muteEnableType,
+            },
+          };
+        });
+        renderMeetings(meetingListData);
+        closeMeetingFormModal();
+        loadMeetingList(false, true);
+      } else {
+        meetingFormError.textContent = result.message || '修改会议失败';
+      }
     } else {
-      scheduleError.textContent = result.message || '创建会议失败';
+      const meetingData = {
+        subject,
+        type: 0,
+        start_time: toUnixTimestamp(startTimeRaw),
+        end_time: toUnixTimestamp(endTimeRaw),
+        instanceid: 1,
+        settings: {
+          mute_enable_type_join: muteEnableType,
+        },
+      };
+      if (password) {
+        meetingData.password = password;
+      }
+
+      const result = await window.electronAPI.createMeeting(meetingData);
+      if (result.success) {
+        showScheduleResult(result.data);
+        loadMeetingList(false, true);
+      } else {
+        meetingFormError.textContent = result.message || '创建会议失败';
+      }
     }
   } catch (err) {
-    scheduleError.textContent = '网络错误，请稍后重试';
+    meetingFormError.textContent = '网络错误，请稍后重试';
   } finally {
-    scheduleSubmitBtn.disabled = false;
-    scheduleSubmitBtn.textContent = '预定会议';
+    submitMeetingFormBtn.disabled = false;
+    submitMeetingFormBtn.textContent = isEditMode ? '保存修改' : '预定会议';
   }
 });
 
@@ -614,9 +731,9 @@ function showScheduleResult(data) {
   const meetingCode = info.meeting_code || info.meeting_id || '-';
   const meetingPassword = info.password || '无';
 
-  scheduleFormContainer.style.display = 'none';
-  scheduleResultContainer.style.display = '';
-  scheduleResultContainer.innerHTML = `
+  meetingFormContainer.style.display = 'none';
+  meetingFormResultContainer.style.display = '';
+  meetingFormResultContainer.innerHTML = `
     <div class="meeting-result">
       <div class="result-icon">
         <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -676,7 +793,7 @@ function showScheduleResult(data) {
   }
 
   // 复制单个可点击字段
-  scheduleResultContainer.querySelectorAll('.copyable').forEach((el) => {
+  meetingFormResultContainer.querySelectorAll('.copyable').forEach((el) => {
     el.addEventListener('click', () => {
       const text = el.getAttribute('data-copy');
       if (text) {
@@ -713,86 +830,9 @@ function showScheduleResult(data) {
   }
 
   document.getElementById('closeScheduleResult').addEventListener('click', () => {
-    scheduleModal.classList.remove('show');
+    closeMeetingFormModal();
   });
 }
-
-// ========== 修改会议弹窗 ==========
-
-const editModal = document.getElementById('editMeetingModal');
-
-document.getElementById('cancelEditMeeting').addEventListener('click', () => {
-  editModal.classList.remove('show');
-});
-
-editModal.addEventListener('click', (e) => {
-  if (e.target === editModal) {
-    editModal.classList.remove('show');
-  }
-});
-
-document.getElementById('submitEditMeeting').addEventListener('click', async () => {
-  const subject = document.getElementById('editMeetingSubject').value.trim();
-  const startTimeRaw = document.getElementById('editMeetingStartTime').value;
-  const endTimeRaw = document.getElementById('editMeetingEndTime').value;
-  const password = document.getElementById('editMeetingPassword').value.trim();
-  const muteEnableType = parseInt(document.getElementById('editMeetingMuteBeforeJoin').value, 10);
-  const errorEl = document.getElementById('editMeetingError');
-
-  errorEl.textContent = '';
-
-  if (!subject) {
-    errorEl.textContent = '请输入会议主题';
-    return;
-  }
-  if (!startTimeRaw) {
-    errorEl.textContent = '请选择开始时间';
-    return;
-  }
-  if (!endTimeRaw) {
-    errorEl.textContent = '请选择结束时间';
-    return;
-  }
-  if (new Date(startTimeRaw) >= new Date(endTimeRaw)) {
-    errorEl.textContent = '结束时间必须晚于开始时间';
-    return;
-  }
-  if (password && !/^\d{4,6}$/.test(password)) {
-    errorEl.textContent = '会议密码需为 4-6 位数字';
-    return;
-  }
-
-  const updates = {
-    subject,
-    start_time: toUnixTimestamp(startTimeRaw),
-    end_time: toUnixTimestamp(endTimeRaw),
-    settings: {
-      mute_enable_type_join: muteEnableType,
-    },
-  };
-  if (password) {
-    updates.password = password;
-  }
-
-  const submitBtn = document.getElementById('submitEditMeeting');
-  submitBtn.disabled = true;
-  submitBtn.textContent = '保存中...';
-
-  try {
-    const result = await window.electronAPI.updateMeeting(currentEditMeetingId, updates);
-    if (result.success) {
-      editModal.classList.remove('show');
-      loadMeetingList();
-    } else {
-      errorEl.textContent = result.message || '修改会议失败';
-    }
-  } catch (err) {
-    errorEl.textContent = '网络错误，请稍后重试';
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = '保存修改';
-  }
-});
 
 // ========== 监听主进程推送的会议列表更新 ==========
 window.electronAPI.onMeetingListUpdate((result) => {
