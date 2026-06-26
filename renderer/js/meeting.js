@@ -86,16 +86,18 @@ let meetingListNextCursory = 0;
 let meetingListRemaining = 0;
 let meetingListLoading = false;
 
-async function loadMeetingList(loadMore = false) {
+async function loadMeetingList(loadMore = false, silent = false) {
   if (meetingListLoading) return;
   meetingListLoading = true;
   const container = document.getElementById('meetingList');
 
   if (!loadMore) {
-    meetingListData = [];
     meetingListNextPos = 0;
     meetingListNextCursory = 0;
-    container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+    if (!silent) {
+      meetingListData = [];
+      container.innerHTML = `<div class="meeting-loading"><div class="spinner-small"></div><span>加载中...</span></div>`;
+    }
   } else {
     const loader = document.getElementById('meetingLoader');
     if (loader) loader.innerHTML = `<div class="spinner-small"></div><span>加载更多...</span>`;
@@ -311,7 +313,11 @@ document.getElementById('meetingList').addEventListener('click', async (e) => {
   try {
     const result = await window.electronAPI.cancelMeeting(meetingId);
     if (result.success) {
-      loadMeetingList();
+      // 立即从本地列表中移除，即时更新 UI，无需等待列表刷新
+      meetingListData = meetingListData.filter((m) => m.meeting_id !== meetingId);
+      renderMeetings(meetingListData);
+      // 后台静默刷新，与服务端同步（不显示加载动画）
+      loadMeetingList(false, true);
     } else {
       alert(result.message || '取消会议失败');
     }
