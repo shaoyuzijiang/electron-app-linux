@@ -104,6 +104,9 @@ function getClientOs() {
  * @param {Function} deps.openUserPickerWindow - 打开选人窗口
  * @param {Function} deps.closeUserPickerWindow - 关闭选人窗口
  * @param {Function} deps.getUserPickerWindow - 获取选人窗口引用
+ * @param {Function} deps.handleScheme - 处理腾讯会议 scheme 唤起 URL
+ * @param {Function} deps.getPendingSchemeUrl - 获取当前挂起的 scheme URL
+ * @param {Function} deps.consumePendingSchemeUrl - 取出并清除挂起的 scheme URL
  */
 function register(ipcMain, deps) {
   const {
@@ -125,6 +128,9 @@ function register(ipcMain, deps) {
     openUserPickerWindow,
     closeUserPickerWindow,
     getUserPickerWindow,
+    handleScheme,
+    getPendingSchemeUrl,
+    consumePendingSchemeUrl,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -1286,6 +1292,30 @@ function register(ipcMain, deps) {
       if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
       return { success: false, message: err.message };
     }
+  });
+  // ========== URL Scheme 唤起接口 ==========
+
+  // 查询当前挂起的 scheme URL（用于渲染进程在登录页展示提示）
+  ipcMain.handle('get-pending-scheme-url', () => {
+    return { success: true, url: getPendingSchemeUrl ? getPendingSchemeUrl() : null };
+  });
+
+  // 取出并清除挂起的 scheme URL（标记渲染进程已处理）
+  ipcMain.handle('consume-pending-scheme-url', () => {
+    return { success: true, url: consumePendingSchemeUrl ? consumePendingSchemeUrl() : null };
+  });
+
+  // 主动调用 SDK 处理 scheme URL（在 SDK 已登录后由渲染进程触发）
+  ipcMain.handle('handle-scheme', async (_event, { url } = {}) => {
+    const target = url || (getPendingSchemeUrl ? getPendingSchemeUrl() : null);
+    if (!target) {
+      return { success: false, message: '无可处理的 scheme URL' };
+    }
+    if (consumePendingSchemeUrl) consumePendingSchemeUrl();
+    if (!handleScheme) {
+      return { success: false, message: 'handleScheme 未注入' };
+    }
+    return await handleScheme(target);
   });
 }
 

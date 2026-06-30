@@ -173,4 +173,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('calendar-get-participants', { eventId }),
   calendarGetFreeBusy: (params) =>
     ipcRenderer.invoke('calendar-get-freebusy', params),
+
+  // ========== URL Scheme 唤起接口 ==========
+  // 查询当前挂起的 scheme URL（用于登录页展示"会议邀请待加入"提示）
+  getPendingSchemeUrl: () => ipcRenderer.invoke('get-pending-scheme-url'),
+  // 取出并清除挂起的 scheme URL
+  consumePendingSchemeUrl: () => ipcRenderer.invoke('consume-pending-scheme-url'),
+  // 主动触发 SDK 处理 scheme URL（传入 url 可覆盖默认的 pending URL）
+  handleScheme: (url) => ipcRenderer.invoke('handle-scheme', { url }),
 });

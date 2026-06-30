@@ -51,6 +51,13 @@
     "asarUnpack": [
       "output/mac/**/*"
     ],
+    "protocols": [
+      {
+        "name": "TencentMeetingSDK Scheme",
+        "schemes": ["wemeetsdk"],
+        "role": "Viewer"
+      }
+    ],
     "extraResources": [
       {
         "from": "app.png",

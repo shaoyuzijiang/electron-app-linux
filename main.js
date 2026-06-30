@@ -10,9 +10,12 @@ const meetingPolling = require('./backend_api/meeting-polling');
 const userPicker = require('./sdk_mgmt/user-picker');
 const ipcHandlers = require('./ipc-handlers');
 
-const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback } = wemeetSdkModule;
+const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback, SCHEME_NAME } = wemeetSdkModule;
 
 let mainWindow;
+
+// 挂起的 scheme URL：冷启动唤起或 SDK 尚未登录时暂存，待 OnLogin 成功后处理
+let pendingSchemeUrl = null;
 
 function getMainWindow() {
   return mainWindow;
@@ -44,6 +47,16 @@ sdkEvents.on('callback', ({ func, success, raw }) => {
     meetingPolling.startMeetingListPolling();
     meetingPolling.scheduleMeetingListRefresh();
     wemeetSdkModule.enableInviteCallbacks();
+
+    // 冷启动通过 scheme 唤起时，SDK 登录成功后处理挂起的 URL
+    if (pendingSchemeUrl) {
+      const url = pendingSchemeUrl;
+      pendingSchemeUrl = null;
+      console.log('[Scheme] SDK 登录成功，开始处理挂起的 scheme URL');
+      wemeetSdkModule.handleScheme(url).catch((err) => {
+        console.error('[Scheme] 处理挂起 URL 失败:', err.message);
+      });
+    }
   } else if (func === 'OnLogout') {
     meetingPolling.stopMeetingListPolling();
   } else if (func === 'OnInviteUsers') {
@@ -209,6 +222,129 @@ async function handleSystemResume() {
   }
 }
 
+// ===== URL Scheme 唤起处理 =====
+
+// 注册 wemeetsdk:// 协议（开发模式生效；打包后由 electron-builder protocols 配置注册）
+app.setAsDefaultProtocolClient(SCHEME_NAME);
+
+/**
+ * 从 argv 中提取 wemeetsdk:// scheme URL
+ * Windows 下通过 scheme 唤起应用时，URL 作为命令行参数传入
+ * @param {string[]} argv
+ * @returns {string|null}
+ */
+function getSchemeUrlFromArgv(argv) {
+  const prefix = `${SCHEME_NAME}://`;
+  if (!Array.isArray(argv)) return null;
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    if (typeof arg === 'string' && arg.startsWith(prefix)) {
+      return arg;
+    }
+  }
+  return null;
+}
+
+/**
+ * 处理 scheme 唤起 URL 的统一入口
+ * - SDK 已登录：直接调用 SDK HandleSchema 入会
+ * - SDK 未登录：暂存 URL，待 OnLogin 成功回调中再处理
+ *
+ * 同时尝试把主窗口提到前台，避免在后台被唤起。
+ *
+ * @param {string} url - 完整的 wemeetsdk:// URL
+ */
+async function handleSchemeUrl(url) {
+  console.log('[Scheme] 收到 scheme URL:', url);
+  if (!url || !url.startsWith(`${SCHEME_NAME}://`)) {
+    console.warn('[Scheme] URL 与协议不匹配，已忽略:', url);
+    return;
+  }
+
+  // 把主窗口提到前台
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    } catch (err) {
+      console.warn('[Scheme] 提升窗口前台失败:', err.message);
+    }
+  }
+
+  // SDK 已登录：直接处理
+  if (wemeetSdkModule.isSdkLoggedIn()) {
+    pendingSchemeUrl = null;
+    await wemeetSdkModule.handleScheme(url);
+    return;
+  }
+
+  // SDK 未登录：暂存 URL，等待 OnLogin 成功后再处理
+  // 注意：用户可能未登录账号，此时需要显示登录页让用户手动登录，
+  // OnLogin 回调中会自动处理暂存的 URL
+  pendingSchemeUrl = url;
+  console.log('[Scheme] SDK 未登录，URL 已暂存，待登录成功后处理');
+
+  // 若已有有效 token，触发自动登录（ensureSDKLoggedIn 会刷新 token 并登录 SDK）
+  if (!tokenStore.isAccessTokenExpired()) {
+    const tokens = tokenStore.getTokens();
+    if (tokens) {
+      console.log('[Scheme] 检测到有效 token，触发 SDK 自动登录');
+      wemeetSdkModule.ensureSDKLoggedIn().then((ok) => {
+        if (ok) {
+          console.log('[Scheme] 自动登录成功，挂起的 URL 将在 OnLogin 回调中处理');
+        } else {
+          console.warn('[Scheme] 自动登录失败，等待用户手动登录');
+        }
+      }).catch((err) => {
+        console.error('[Scheme] 自动登录异常:', err.message);
+      });
+    }
+  }
+}
+
+// macOS：scheme 唤起（冷启动时此事件可能在 app.whenReady 之前触发）
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  console.log('[Scheme] open-url 事件:', url);
+  if (!app.isReady()) {
+    // 应用未就绪：先暂存 URL，待 whenReady 后处理
+    pendingSchemeUrl = url;
+    return;
+  }
+  handleSchemeUrl(url).catch((err) => {
+    console.error('[Scheme] open-url 处理失败:', err.message);
+  });
+});
+
+// Windows：单实例锁，确保只有一个应用实例运行
+// 第二个实例启动时（通常通过 scheme 唤起），将 URL 转发给主实例
+const gotSingleLock = app.requestSingleInstanceLock();
+if (!gotSingleLock) {
+  // 已有实例在运行，当前实例直接退出（URL 会通过 second-instance 转发到主实例）
+  console.log('[Scheme] 已有实例运行，当前实例退出');
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    console.log('[Scheme] second-instance 事件，命令行:', commandLine);
+    const url = getSchemeUrlFromArgv(commandLine);
+    if (url) {
+      handleSchemeUrl(url).catch((err) => {
+        console.error('[Scheme] second-instance 处理失败:', err.message);
+      });
+    } else {
+      // 非 scheme 唤起，仅把窗口提到前台
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          if (!mainWindow.isVisible()) mainWindow.show();
+          mainWindow.focus();
+        } catch {}
+      }
+    }
+  });
+}
+
 app.whenReady().then(() => {
   logger.install();
   createWindow();
@@ -245,7 +381,29 @@ app.whenReady().then(() => {
     openUserPickerWindow: userPicker.openUserPickerWindow,
     closeUserPickerWindow: userPicker.closeUserPickerWindow,
     getUserPickerWindow: userPicker.getUserPickerWindow,
+    handleScheme: wemeetSdkModule.handleScheme,
+    getPendingSchemeUrl: () => pendingSchemeUrl,
+    consumePendingSchemeUrl: () => {
+      const url = pendingSchemeUrl;
+      pendingSchemeUrl = null;
+      return url;
+    },
   });
+
+  // 冷启动：检查 Windows 通过命令行参数传入的 scheme URL
+  const coldStartUrl = getSchemeUrlFromArgv(process.argv);
+  if (coldStartUrl) {
+    console.log('[Scheme] 检测到冷启动 scheme URL:', coldStartUrl);
+    pendingSchemeUrl = coldStartUrl;
+  }
+
+  // 处理 macOS 在 whenReady 之前已通过 open-url 暂存的 URL
+  if (pendingSchemeUrl) {
+    console.log('[Scheme] 应用就绪，尝试处理 pending scheme URL');
+    handleSchemeUrl(pendingSchemeUrl).catch((err) => {
+      console.error('[Scheme] 处理失败:', err.message);
+    });
+  }
 });
 
 // 系统从休眠/锁屏恢复时，自动检测并重试登录

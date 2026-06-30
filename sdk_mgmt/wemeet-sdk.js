@@ -16,6 +16,9 @@ const appIconPath = app.isPackaged
   ? path.join(process.resourcesPath, 'app.png')
   : path.join(__dirname, '..', 'app.png');
 
+// URL Scheme 名称，用于唤起客户端
+const SCHEME_NAME = 'wemeetsdk';
+
 // 加载腾讯会议 SDK
 let wemeetSdk = null;
 let sdkInitialized = false;
@@ -425,6 +428,68 @@ function enableInviteCallbacks() {
 }
 
 /**
+ * 处理腾讯会议 scheme 唤起 URL
+ *
+ * 客户端被 wemeetsdk:// 链接唤起后，将 scheme 之后的部分
+ * （例如 page/inmeeting?meeting_code=xxx&launch_id=yyy）
+ * 透传给 SDK 的 HandleSchema 接口，由 SDK 自行解析并入会。
+ *
+ * 调用前会确保 SDK 已初始化并登录，登录失败时返回 false。
+ *
+ * @param {string} url - 完整的 scheme URL，如 wemeetsdk://page/inmeeting?...
+ * @returns {Promise<{success: boolean, message?: string}>>}
+ */
+async function handleScheme(url) {
+  if (!wemeetSdk) {
+    console.warn('[Scheme] SDK 未加载，无法处理 scheme URL');
+    return { success: false, message: 'SDK 未加载' };
+  }
+
+  if (!sdkInitialized) {
+    const ok = await ensureSDKInitialized();
+    if (!ok) {
+      console.error('[Scheme] SDK 初始化失败，无法处理 scheme URL');
+      return { success: false, message: 'SDK 初始化失败' };
+    }
+  }
+
+  if (!sdkLoggedIn) {
+    const ok = await ensureSDKLoggedIn();
+    if (!ok) {
+      console.error('[Scheme] SDK 未登录，无法处理 scheme URL');
+      return { success: false, message: 'SDK 未登录' };
+    }
+  }
+
+  // 提取 scheme 之后的内容
+  const prefix = `${SCHEME_NAME}://`;
+  let schemaPath = url || '';
+  if (schemaPath.startsWith(prefix)) {
+    schemaPath = schemaPath.slice(prefix.length);
+  } else {
+    // 兼容传入不含 scheme 前缀的情况
+    const idx = schemaPath.indexOf('://');
+    if (idx >= 0) {
+      schemaPath = schemaPath.slice(idx + 3);
+    }
+  }
+
+  if (!schemaPath) {
+    console.warn('[Scheme] scheme 路径为空，URL:', url);
+    return { success: false, message: 'scheme 路径为空' };
+  }
+
+  try {
+    console.log('[Scheme] 调用 SDK HandleSchema:', schemaPath);
+    wemeetSdk.HandleSchema(schemaPath);
+    return { success: true };
+  } catch (err) {
+    console.error('[Scheme] HandleSchema 调用异常:', err.message);
+    return { success: false, message: err.message };
+  }
+}
+
+/**
  * 等待 SDK 登录完成（供渲染进程调用）
  */
 function waitSdkLogin() {
@@ -475,6 +540,7 @@ function uninitSDK() {
 module.exports = {
   wemeetSdk,
   appIconPath,
+  SCHEME_NAME,
   sdkEvents,
   initCallbackHandler,
   handleSDKCallback,
@@ -484,6 +550,7 @@ module.exports = {
   sdkLogin,
   getValidAccessToken,
   enableInviteCallbacks,
+  handleScheme,
   waitSdkLogin,
   isSdkInitialized,
   isSdkLoggedIn,

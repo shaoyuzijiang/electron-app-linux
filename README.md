@@ -1,6 +1,6 @@
 # 腾讯会议 SDK Demo
 
-基于 Electron + 腾讯会议 SDK 的桌面会议应用示例，支持加入会议、快速会议、预定会议、共享屏幕、IM 即时通讯等功能。
+基于 Electron + 腾讯会议 SDK 的桌面会议应用示例，支持加入会议、快速会议、预定会议、共享屏幕、IM 即时通讯、URL Scheme 唤起入会等功能。
 
 ## 功能特性
 
@@ -20,6 +20,17 @@
 - SDK 设置、上传日志、历史会议、会议详情、录音笔、AI 小助手
 - 字幕开关与设置、会中布局切换、会中窗口操作（置顶/最小化/最大化/关闭）
 - 响铃邀请（开启/关闭、接受/拒绝）
+
+### URL Scheme 唤起
+
+- 注册 `wemeetsdk://` 协议，支持通过会议链接唤起应用自动入会
+- 跨平台唤起：macOS `open-url` 事件 / Windows 单实例锁 + `second-instance` 事件
+- 冷启动流程：从 `process.argv` 或 `open-url` 获取 scheme URL
+- 先登录后入会：SDK 未登录时暂存 URL，待 `OnLogin` 成功回调后自动处理；若已有有效 token 则触发自动登录
+- 已登录状态：直接调用 SDK `HandleSchema` 入会
+- 窗口自动前置：唤起时主窗口自动恢复并聚焦
+- 打包自动注册：electron-builder `protocols` 配置在 macOS 写入 `Info.plist CFBundleURLTypes`，Windows NSIS 写入注册表协议关联
+- 渲染进程 IPC：`getPendingSchemeUrl` / `consumePendingSchemeUrl` / `handleScheme` 接口，可用于登录页展示"待加入会议"提示
 
 ### 通讯录
 
@@ -106,7 +117,7 @@ macOS 启动前会自动将 SDK Framework 拷贝到 Electron.app 中。Windows �
 ## 项目结构
 
 ```
-├── main.js                # Electron 主进程（入口 + 模块组装）
+├── main.js                # Electron 主进程（入口 + 模块组装 + URL Scheme 唤起处理）
 ├── ipc-handlers.js        # IPC 通信接口注册
 ├── binding.gyp            # node-gyp 原生模块编译配置
 ├── entitlements.mac.plist # macOS 权限声明
@@ -260,6 +271,15 @@ npm run build:native:win-x64 && npm run dist:win:x64
 
 ## 注意事项
 
+### URL Scheme 唤起
+
+- 开发模式：`app.setAsDefaultProtocolClient('wemeetsdk')` 会尝试注册协议，但系统可能需要手动确认
+- 打包后：electron-builder 的 `protocols` 配置会自动写入 macOS `Info.plist` 和 Windows 注册表，无需手动注册
+- 唤起 URL 格式：`wemeetsdk://page/inmeeting?meeting_code=xxx&launch_id=yyy&...`，`://` 之后的部分会透传给 SDK 的 `HandleSchema` 接口
+- 冷启动流程：应用未运行时被唤起 → 检测到 scheme URL → 暂存 → 自动登录（若有 token）或显示登录页 → SDK 登录成功后自动处理暂存的 URL
+- 已运行时唤起：macOS 触发 `open-url` 事件；Windows 启动第二个实例触发 `second-instance` 事件，URL 转发给主实例处理
+- 企业品牌配置：需在腾讯会议管理后台 → 企业管理 → 企业品牌 → SDK品牌 中配置 App scheme 为 `wemeetsdk`（与客户端注册的协议名一致）
+
 ### macOS
 
 - 未签名/未公证的 `.dmg` 在其他 Mac 上打开时会被 Gatekeeper 拦截，需右键 → 打开，或执行 `xattr -cr <app路径>` 去除隔离属性
@@ -395,6 +415,7 @@ Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用�
 | API | 说明 |
 |-----|------|
 | `AddUsersWithParam(jsonParam)` | 添加用户（邀请入会） |
+| `HandleSchema(schemaPath)` | 处理 scheme 唤起 URL，由 SDK 解析并入会 |
 | `EnableCustomOrgInfo(enable)` | 开启自定义组织信息 |
 | `SetCustomOrgInfo(jsonParam)` | 设置自定义组织信息 |
 | `Login(ssoUrl)` | SSO URL 登录（非 JSON 方式） |
