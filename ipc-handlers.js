@@ -107,6 +107,15 @@ function getClientOs() {
  * @param {Function} deps.handleScheme - 处理腾讯会议 scheme 唤起 URL
  * @param {Function} deps.getPendingSchemeUrl - 获取当前挂起的 scheme URL
  * @param {Function} deps.consumePendingSchemeUrl - 取出并清除挂起的 scheme URL
+ * @param {Function} deps.createWebview - 创建嵌入网页视图
+ * @param {Function} deps.resizeWebview - 调整嵌入视图位置/大小
+ * @param {Function} deps.closeWebview - 关闭并销毁嵌入视图
+ * @param {Function} deps.hideWebview - 隐藏嵌入视图
+ * @param {Function} deps.showWebview - 显示嵌入视图
+ * @param {Function} deps.getWebviewInfo - 获取当前 webview 信息
+ * @param {Function} deps.webviewGoBack - 嵌入网页后退
+ * @param {Function} deps.webviewGoForward - 嵌入网页前进
+ * @param {Function} deps.webviewReload - 嵌入网页刷新
  */
 function register(ipcMain, deps) {
   const {
@@ -131,6 +140,15 @@ function register(ipcMain, deps) {
     handleScheme,
     getPendingSchemeUrl,
     consumePendingSchemeUrl,
+    createWebview,
+    resizeWebview,
+    closeWebview,
+    hideWebview,
+    showWebview,
+    getWebviewInfo,
+    webviewGoBack,
+    webviewGoForward,
+    webviewReload,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -1316,6 +1334,55 @@ function register(ipcMain, deps) {
       return { success: false, message: 'handleScheme 未注入' };
     }
     return await handleScheme(target);
+  });
+
+  // ========== Webview 嵌入网页接口 ==========
+
+  ipcMain.handle('webview-create', async (_event, { url, bounds }) => {
+    if (!createWebview) {
+      return { success: false, message: 'webview 模块未注入' };
+    }
+    return createWebview(url, bounds);
+  });
+
+  ipcMain.handle('webview-resize', async (_event, { bounds }) => {
+    if (resizeWebview) resizeWebview(bounds);
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-close', async () => {
+    if (closeWebview) return closeWebview();
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-hide', async () => {
+    if (hideWebview) return hideWebview();
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-show', async () => {
+    if (showWebview) return showWebview();
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-get-info', async () => {
+    if (getWebviewInfo) return getWebviewInfo();
+    return { success: false, message: 'webview 模块未注入' };
+  });
+
+  ipcMain.handle('webview-go-back', async () => {
+    if (webviewGoBack) return webviewGoBack();
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-go-forward', async () => {
+    if (webviewGoForward) return webviewGoForward();
+    return { success: true };
+  });
+
+  ipcMain.handle('webview-reload', async () => {
+    if (webviewReload) return webviewReload();
+    return { success: true };
   });
 }
 

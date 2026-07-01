@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 开发模式标志：主进程通过 additionalArguments 传入 --is-dev=1/0
+// 原因：process.defaultApp 在 preload 上下文不可靠（npm scripts 启动、打包后行为不一致）
+const isDev = process.argv.includes('--is-dev=1');
+
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 运行环境标志
+  isDev,
   // 原有接口
   login: (email, password) => ipcRenderer.invoke('login', { email, password }),
   loginSuccess: () => ipcRenderer.send('login-success'),
@@ -181,4 +187,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   consumePendingSchemeUrl: () => ipcRenderer.invoke('consume-pending-scheme-url'),
   // 主动触发 SDK 处理 scheme URL（传入 url 可覆盖默认的 pending URL）
   handleScheme: (url) => ipcRenderer.invoke('handle-scheme', { url }),
+
+  // ========== Webview 嵌入网页接口 ==========
+  webviewCreate: (url, bounds) =>
+    ipcRenderer.invoke('webview-create', { url, bounds }),
+  webviewResize: (bounds) =>
+    ipcRenderer.invoke('webview-resize', { bounds }),
+  webviewClose: () => ipcRenderer.invoke('webview-close'),
+  webviewHide: () => ipcRenderer.invoke('webview-hide'),
+  webviewShow: () => ipcRenderer.invoke('webview-show'),
+  webviewGetInfo: () => ipcRenderer.invoke('webview-get-info'),
+  webviewGoBack: () => ipcRenderer.invoke('webview-go-back'),
+  webviewGoForward: () => ipcRenderer.invoke('webview-go-forward'),
+  webviewReload: () => ipcRenderer.invoke('webview-reload'),
 });

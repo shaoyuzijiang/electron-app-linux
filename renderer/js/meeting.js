@@ -1,12 +1,11 @@
-// SDK 加载状态管理
-const sdkLoadingEl = document.getElementById('sdkLoading');
-const leftPanelEl = document.getElementById('leftPanel');
-const rightContentEl = document.getElementById('rightContent');
+// 会议模块
+// 注：sdkLoadingEl / leftPanelEl / rightContentEl / meetingContentEls / currentTab
+//     由 nav.js 在全局作用域声明，本文件直接引用
 
 function showMeetingContent() {
   sdkLoadingEl.style.display = 'none';
   // 仅在当前是会议页签时才显示会议面板，避免影响通讯录页面
-  if (currentTab === 'meeting') {
+  if (window.NavModule.getCurrentTab() === 'meeting') {
     leftPanelEl.style.display = '';
     rightContentEl.style.display = '';
   }
@@ -14,7 +13,7 @@ function showMeetingContent() {
 
 function showSdkError(msg) {
   // 仅在会议页签下显示 SDK 错误覆盖层，避免遮盖通讯录页面
-  if (currentTab === 'meeting') {
+  if (window.NavModule.getCurrentTab() === 'meeting') {
     leftPanelEl.style.display = 'none';
     rightContentEl.style.display = 'none';
     sdkLoadingEl.style.display = '';
@@ -63,19 +62,6 @@ async function checkSdkStatus() {
     }
   } catch (err) {
     showSdkError('会议功能加载失败，请重试');
-  }
-}
-
-// 用户信息
-async function loadProfile() {
-  try {
-    const result = await window.electronAPI.getProfile();
-    if (result.success) {
-      const { username } = result.profile;
-      document.getElementById('userAvatarNav').textContent = username.charAt(0).toUpperCase();
-    }
-  } catch (err) {
-    console.error('获取用户信息失败:', err);
   }
 }
 
@@ -848,61 +834,6 @@ window.electronAPI.onMeetingListUpdate((result) => {
   }
 });
 
-// ========== 页签切换 ==========
-
-let currentTab = 'im';
-const navItems = document.querySelectorAll('.nav-item[data-tab]');
-const meetingContentEls = () => [leftPanelEl, rightContentEl];
-const contactsPageEl = document.getElementById('contactsPage');
-const imPageEl = document.getElementById('imPage');
-const calendarPageEl = document.getElementById('calendarPage');
-
-function switchTab(tab) {
-  if (tab === currentTab) return;
-  currentTab = tab;
-
-  navItems.forEach((item) => {
-    item.classList.toggle('active', item.getAttribute('data-tab') === tab);
-  });
-
-  // 隐藏所有页面
-  meetingContentEls().forEach((el) => { el.style.display = 'none'; });
-  sdkLoadingEl.style.display = 'none';
-  contactsPageEl.style.display = 'none';
-  if (imPageEl) imPageEl.style.display = 'none';
-  if (calendarPageEl) calendarPageEl.style.display = 'none';
-
-  if (tab === 'meeting') {
-    meetingContentEls().forEach((el) => { el.style.display = ''; });
-  } else if (tab === 'contacts') {
-    contactsPageEl.style.display = '';
-    initContacts();
-  } else if (tab === 'im') {
-    if (imPageEl) imPageEl.style.display = '';
-    if (window.IMModule) window.IMModule.init();
-  } else if (tab === 'calendar') {
-    if (calendarPageEl) calendarPageEl.style.display = '';
-    if (window.CalendarModule) window.CalendarModule.init();
-  }
-}
-
-navItems.forEach((item) => {
-  item.addEventListener('click', () => {
-    const tab = item.getAttribute('data-tab');
-    switchTab(tab);
-  });
-});
-
-// ========== 初始化 ==========
-loadProfile();
+// ========== 会议模块初始化 ==========
 loadMeetingList();
-
-// 默认显示 IM 页签
-meetingContentEls().forEach((el) => { el.style.display = 'none'; });
-sdkLoadingEl.style.display = 'none';
-contactsPageEl.style.display = 'none';
-if (imPageEl) imPageEl.style.display = '';
-if (calendarPageEl) calendarPageEl.style.display = 'none';
-if (window.IMModule) window.IMModule.init();
-
 checkSdkStatus();

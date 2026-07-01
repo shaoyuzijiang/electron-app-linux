@@ -8,6 +8,7 @@ const logger = require('./utils/logger');
 const wemeetSdkModule = require('./sdk_mgmt/wemeet-sdk');
 const meetingPolling = require('./backend_api/meeting-polling');
 const userPicker = require('./sdk_mgmt/user-picker');
+const webviewManager = require('./utils/webview-manager');
 const ipcHandlers = require('./ipc-handlers');
 
 const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback, SCHEME_NAME } = wemeetSdkModule;
@@ -98,12 +99,17 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'bootstrap', 'preload.js'),
       contextIsolation: true,
+      // 通过 additionalArguments 把 isDev 标志传给 preload，避免 process.defaultApp 不可靠的问题
+      additionalArguments: [`--is-dev=${!app.isPackaged ? '1' : '0'}`],
       nodeIntegration: false,
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
   mainWindow.setMenu(null);
+
+  // 初始化 webview 管理模块
+  webviewManager.init(mainWindow);
 
   // 检查是否已有有效 token，自动登录
   if (!tokenStore.isAccessTokenExpired()) {
@@ -155,6 +161,7 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => {
+    webviewManager.closeWebview();
     mainWindow = null;
     meetingPolling.stopMeetingListPolling();
   });
@@ -388,6 +395,16 @@ app.whenReady().then(() => {
       pendingSchemeUrl = null;
       return url;
     },
+    // Webview 嵌入网页
+    createWebview: webviewManager.createWebview,
+    resizeWebview: webviewManager.resizeWebview,
+    closeWebview: webviewManager.closeWebview,
+    hideWebview: webviewManager.hideWebview,
+    showWebview: webviewManager.showWebview,
+    getWebviewInfo: webviewManager.getWebviewInfo,
+    webviewGoBack: webviewManager.goBack,
+    webviewGoForward: webviewManager.goForward,
+    webviewReload: webviewManager.reload,
   });
 
   // 冷启动：检查 Windows 通过命令行参数传入的 scheme URL
