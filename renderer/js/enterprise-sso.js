@@ -10,7 +10,6 @@
 // 受众白名单（与后端一致）：
 //   - web-user-center:chat           => /user-center/chat           (requireAdmin=false)
 //   - web-user-center:organization   => /user-center/organization-management  (requireAdmin=false)
-//   - web-user-center:role           => /user-center/role-management          (requireAdmin=true)
 //
 // 「企业管理」菜单仅对 admin/superadmin 可见；首次点击默认打开「组织架构」。
 //
@@ -25,8 +24,7 @@
   // 受众白名单（前端冗余一份，仅用于本地判断；服务端仍会二次校验）
   const AUDIENCES = {
     CHAT: { id: 'web-user-center:chat', target: '/user-center/chat', requireAdmin: false, title: '即时通讯' },
-    ORG:  { id: 'web-user-center:organization', target: '/user-center/organization-management', requireAdmin: false, title: '组织架构管理' },
-    ROLE: { id: 'web-user-center:role', target: '/user-center/role-management', requireAdmin: true,  title: '角色管理' },
+    ORG:  { id: 'web-user-center:organization', target: '/user-center', requireAdmin: false, title: '企业管理' },
   };
 
   // SSO 失败 reason 文案（与服务端 sso-interface.md §2 对齐）

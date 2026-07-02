@@ -37,7 +37,7 @@
 - 基于一次性 SSO Ticket 的免登跳转：APP 用 Access Token 申请 Ticket（`POST /api/auth/sso/ticket`），WebView 打开 `https://host/sso/redirect?ticket=xxx`，服务端 302 + `Set-Cookie` 落到目标页，Access Token 全程不出现在 URL/Referer/access log
 - 受众白名单（与后端 `config.sso.audiences` 对齐）：
   - `web-user-center:chat` → `/user-center/chat`（即时通讯，无需管理员）
-  - `web-user-center:organization` → `/user-center/organization-management`（组织架构，无需管理员）
+  - `web-user-center:organization` → `/user-center/organization-management`（组织架构，无需管理员；注：后端 /sso/redirect 302 落地时跳到 /user-center）
   - `web-user-center:role` → `/user-center/role-management`（角色管理，**仅管理员**）
 - 角色控制：仅 `role === 'admin' || 'superadmin'` 在头像菜单中看到"企业管理"入口；前端预校验 + 后端 `requireAdmin` 二次校验（颁发时与兑换时各一次）
 - 头像菜单：点击用户头像展开下拉，点击"企业管理"后默认打开"组织架构"
