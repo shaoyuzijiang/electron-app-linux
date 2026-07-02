@@ -221,4 +221,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ========== Web SSO 免登接口 ==========
   ssoRequestTicket: (audience, target, nonce) =>
     ipcRenderer.invoke('sso-request-ticket', { audience, target, nonce }),
+
+  // ========== 账号历史（多账号记住密码）接口 ==========
+  accounts: {
+    list: () => ipcRenderer.invoke('accounts-list'),
+    getPassword: (email) => ipcRenderer.invoke('accounts-get-password', { email }),
+    save: (email, password, profile) =>
+      ipcRenderer.invoke('accounts-save', { email, password, profile }),
+    remove: (email) => ipcRenderer.invoke('accounts-remove', { email }),
+    clear: () => ipcRenderer.invoke('accounts-clear'),
+  },
 });

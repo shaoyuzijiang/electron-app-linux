@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const api = require('./backend_api/api');
 const tokenStore = require('./utils/token-store');
+const accountStore = require('./utils/account-store');
 const logger = require('./utils/logger');
 
 // 本地缓存目录
@@ -170,6 +171,45 @@ function register(ipcMain, deps) {
 
   ipcMain.handle('open-external', async (_event, { url }) => {
     await shell.openExternal(url);
+  });
+
+  // ========== 账号历史（多账号记住密码） ==========
+
+  // 获取已保存的账号列表（仅元信息，不含密码）
+  ipcMain.handle('accounts-list', () => {
+    return { success: true, data: accountStore.listAccounts() };
+  });
+
+  // 根据邮箱取出解密后的密码（前端选中历史账号后回填密码框使用）
+  ipcMain.handle('accounts-get-password', (_event, { email } = {}) => {
+    if (!email || typeof email !== 'string') {
+      return { success: false, message: 'email 必填' };
+    }
+    return { success: true, password: accountStore.getPassword(email) };
+  });
+
+  // 保存或更新账号（登录成功时若勾选"记住密码"则调用）
+  ipcMain.handle('accounts-save', (_event, { email, password, profile } = {}) => {
+    if (!email || !password) {
+      return { success: false, message: 'email 和 password 必填' };
+    }
+    const ok = accountStore.saveAccount({ email, password, profile });
+    return { success: ok, message: ok ? null : '账号保存失败' };
+  });
+
+  // 删除单个账号
+  ipcMain.handle('accounts-remove', (_event, { email } = {}) => {
+    if (!email) {
+      return { success: false, message: 'email 必填' };
+    }
+    const ok = accountStore.removeAccount(email);
+    return { success: ok };
+  });
+
+  // 清空所有账号
+  ipcMain.handle('accounts-clear', () => {
+    accountStore.clearAccounts();
+    return { success: true };
   });
 
   // ========== 认证相关 ==========

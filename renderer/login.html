@@ -143,6 +143,187 @@
       user-select: none;
     }
 
+    /* ========== 多账号下拉选择 ========== */
+    .email-wrapper {
+      position: relative;
+    }
+
+    .email-input-row {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .email-input-row input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .email-toggle {
+      flex-shrink: 0;
+      padding: 0 12px;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .email-toggle:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+    }
+
+    .email-toggle.active {
+      background: #eef2ff;
+      border-color: #667eea;
+    }
+
+    .email-toggle[hidden] {
+      display: none;
+    }
+
+    .email-toggle svg {
+      width: 16px;
+      height: 16px;
+      color: #6b7280;
+      transition: transform 0.2s;
+    }
+
+    .email-toggle.active svg {
+      transform: rotate(180deg);
+      color: #667eea;
+    }
+
+    .accounts-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+    }
+
+    .accounts-dropdown.show {
+      display: block;
+    }
+
+    .account-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+    }
+
+    .account-item:hover {
+      background: #f3f4f6;
+    }
+
+    .account-item + .account-item {
+      border-top: 1px solid #f3f4f6;
+    }
+
+    .account-avatar {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      overflow: hidden;
+    }
+
+    .account-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .account-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .account-email {
+      font-size: 14px;
+      color: #1a1a2e;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .account-name {
+      font-size: 12px;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .account-delete {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, color 0.12s;
+    }
+
+    .account-delete:hover {
+      background: #fee2e2;
+      color: #ef4444;
+    }
+
+    .account-delete svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .account-clear-all {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      background: #f9fafb;
+      color: #6b7280;
+      font-size: 12px;
+      cursor: pointer;
+      border-top: 1px solid #e5e7eb;
+      transition: background 0.12s, color 0.12s;
+      font-family: inherit;
+    }
+
+    .account-clear-all:hover {
+      background: #f3f4f6;
+      color: #ef4444;
+    }
+
     /* ========== 注册页（内嵌 webview） ========== */
     .register-page {
       position: fixed;
@@ -240,7 +421,17 @@
     <form id="loginForm">
       <div class="form-group">
         <label for="email">邮箱</label>
-        <input type="email" id="email" placeholder="请输入邮箱地址" autocomplete="off" />
+        <div class="email-wrapper">
+          <div class="email-input-row">
+            <input type="email" id="email" placeholder="请输入邮箱地址" autocomplete="off" />
+            <button type="button" class="email-toggle" id="emailToggle" hidden aria-label="选择已保存账号">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          <div class="accounts-dropdown" id="accountsDropdown"></div>
+        </div>
       </div>
       <div class="form-group">
         <label for="password">密码</label>
@@ -275,15 +466,183 @@
     const rememberCb = document.getElementById('rememberPassword');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
+    const emailToggle = document.getElementById('emailToggle');
+    const accountsDropdown = document.getElementById('accountsDropdown');
 
-    // 读取记住的邮箱密码
-    const savedEmail = localStorage.getItem('remembered_email');
-    const savedPassword = localStorage.getItem('remembered_password');
-    if (savedEmail) {
-      emailInput.value = savedEmail;
-      passwordInput.value = savedPassword || '';
-      rememberCb.checked = true;
+    // 内存中的已保存账号列表（不含密码）
+    let savedAccounts = [];
+    let dropdownOpen = false;
+
+    /**
+     * 邮箱首字母（用于头像占位符）
+     */
+    function getEmailInitial(email) {
+      if (!email) return '?';
+      return email.charAt(0).toUpperCase();
     }
+
+    /**
+     * 渲染账号下拉列表
+     */
+    function renderAccountsDropdown() {
+      accountsDropdown.innerHTML = '';
+      if (!savedAccounts || savedAccounts.length === 0) {
+        emailToggle.hidden = true;
+        return;
+      }
+      emailToggle.hidden = false;
+
+      savedAccounts.forEach((account) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'account-item';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'account-avatar';
+        if (account.profileAvatar) {
+          const img = document.createElement('img');
+          img.src = account.profileAvatar;
+          img.alt = '';
+          img.onerror = () => {
+            img.remove();
+            avatar.textContent = getEmailInitial(account.email);
+          };
+          avatar.appendChild(img);
+        } else {
+          avatar.textContent = getEmailInitial(account.email);
+        }
+
+        const info = document.createElement('div');
+        info.className = 'account-info';
+        const emailDiv = document.createElement('div');
+        emailDiv.className = 'account-email';
+        emailDiv.textContent = account.email;
+        info.appendChild(emailDiv);
+        if (account.profileName) {
+          const nameDiv = document.createElement('div');
+          nameDiv.className = 'account-name';
+          nameDiv.textContent = account.profileName;
+          info.appendChild(nameDiv);
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'account-delete';
+        deleteBtn.title = '删除该账号';
+        deleteBtn.setAttribute('aria-label', `删除账号 ${account.email}`);
+        deleteBtn.innerHTML =
+          '<svg viewBox="0 0 20 20" fill="currentColor">' +
+          '<path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.298 1.487l.084-.017 1.107 12.18A2.25 2.25 0 007.37 20h5.26a2.25 2.25 0 002.246-1.86l1.107-12.18.084.017a.75.75 0 00.298-1.487A41.04 41.04 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" />' +
+          '</svg>';
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation(); // 不触发 item 的填充
+          if (!confirm(`确定删除已保存的账号「${account.email}」吗？`)) return;
+          if (window.electronAPI && window.electronAPI.accounts) {
+            const r = await window.electronAPI.accounts.remove(account.email);
+            if (r && r.success) {
+              await refreshAccounts();
+            }
+          }
+        });
+
+        item.appendChild(avatar);
+        item.appendChild(info);
+        item.appendChild(deleteBtn);
+        item.addEventListener('click', () => selectAccount(account));
+        accountsDropdown.appendChild(item);
+      });
+
+      if (savedAccounts.length > 1) {
+        const clearAll = document.createElement('button');
+        clearAll.type = 'button';
+        clearAll.className = 'account-clear-all';
+        clearAll.textContent = '清空所有已保存账号';
+        clearAll.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('确定清空所有已保存的账号吗？此操作不可恢复。')) return;
+          if (window.electronAPI && window.electronAPI.accounts) {
+            await window.electronAPI.accounts.clear();
+            await refreshAccounts();
+          }
+        });
+        accountsDropdown.appendChild(clearAll);
+      }
+    }
+
+    /**
+     * 选中某个已保存的账号：填充邮箱和密码
+     */
+    async function selectAccount(account) {
+      emailInput.value = account.email;
+      passwordInput.value = '';
+      passwordInput.placeholder = '正在加载密码...';
+      closeDropdown();
+      if (window.electronAPI && window.electronAPI.accounts) {
+        const r = await window.electronAPI.accounts.getPassword(account.email);
+        if (r && r.success && r.password) {
+          passwordInput.value = r.password;
+        } else {
+          // 取不到密码（环境不支持解密）时仅填充邮箱，让用户手动输入
+          passwordInput.value = '';
+        }
+      }
+      passwordInput.placeholder = '请输入密码';
+      rememberCb.checked = true; // 既然选了历史账号，默认勾选记住
+      passwordInput.focus();
+    }
+
+    function openDropdown() {
+      if (savedAccounts.length === 0) return;
+      accountsDropdown.classList.add('show');
+      emailToggle.classList.add('active');
+      dropdownOpen = true;
+    }
+
+    function closeDropdown() {
+      accountsDropdown.classList.remove('show');
+      emailToggle.classList.remove('active');
+      dropdownOpen = false;
+    }
+
+    function toggleDropdown() {
+      if (dropdownOpen) closeDropdown();
+      else openDropdown();
+    }
+
+    /**
+     * 从主进程拉取账号列表并刷新 UI
+     */
+    async function refreshAccounts() {
+      if (!window.electronAPI || !window.electronAPI.accounts) return;
+      try {
+        const r = await window.electronAPI.accounts.list();
+        if (r && r.success) {
+          savedAccounts = r.data || [];
+        } else {
+          savedAccounts = [];
+        }
+      } catch (err) {
+        savedAccounts = [];
+      }
+      renderAccountsDropdown();
+      if (savedAccounts.length === 0 && dropdownOpen) closeDropdown();
+    }
+
+    // 点击下拉箭头
+    emailToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown();
+    });
+
+    // 点击其他区域关闭下拉
+    document.addEventListener('click', (e) => {
+      if (!dropdownOpen) return;
+      if (accountsDropdown.contains(e.target) || emailToggle.contains(e.target)) return;
+      closeDropdown();
+    });
+
+    // 页面加载时拉取账号列表
+    refreshAccounts();
 
     // 注册链接：切换到内嵌 webview 注册页
     document.getElementById('registerLink').addEventListener('click', async (e) => {
@@ -376,13 +735,14 @@
         const result = await window.electronAPI.login(email, password);
 
         if (result.success) {
-          // 记住密码逻辑
-          if (rememberCb.checked) {
-            localStorage.setItem('remembered_email', email);
-            localStorage.setItem('remembered_password', password);
-          } else {
-            localStorage.removeItem('remembered_email');
-            localStorage.removeItem('remembered_password');
+          // 多账号记住密码：勾选则加密保存，未勾选则不主动删除
+          // （即使用户取消勾选，也保留历史账号方便下次切换）
+          if (rememberCb.checked && window.electronAPI.accounts) {
+            const profile = (result && result.profile) || {};
+            await window.electronAPI.accounts.save(email, password, {
+              name: profile.nickname || profile.name || '',
+              avatar: profile.avatar || profile.avatar_url || '',
+            });
           }
           window.electronAPI.loginSuccess();
         } else {
