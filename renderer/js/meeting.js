@@ -338,25 +338,39 @@ document.getElementById('btnScreen').addEventListener('click', async () => {
 });
 
 // ========== 头像菜单 ==========
-// 头像菜单的展开/收起已迁移到 enterprise-sso.js（统一管理）
-// 这里仅保留菜单项的点击回调绑定
+// 头像菜单的 UI 渲染在独立悬浮子窗口中（见 renderer/avatar-menu-overlay.html +
+// utils/avatar-menu-window.js），本页面不再持有菜单 DOM。菜单项点击后主进程会把
+// action 转发到这里的 'avatar-menu-action' 事件，按 action 分发到对应业务逻辑。
 
-const avatarMenu = document.getElementById('avatarMenu');
-
-document.getElementById('logoutMenu').addEventListener('click', async () => {
-  if (avatarMenu) avatarMenu.classList.remove('show');
-  await window.electronAPI.logout();
-});
-
-document.getElementById('uploadLogsMenu').addEventListener('click', async () => {
-  if (avatarMenu) avatarMenu.classList.remove('show');
-  try {
-    const result = await window.electronAPI.showUploadLogsView();
-    if (!result.success) alert(result.message || '无法打开上传日志界面');
-  } catch (err) {
-    alert('操作失败: ' + err.message);
+async function handleAvatarMenuAction(action) {
+  if (action === 'logout') {
+    await window.electronAPI.logout();
+    return;
   }
-});
+  if (action === 'upload-logs') {
+    try {
+      const result = await window.electronAPI.showUploadLogsView();
+      if (!result.success) alert(result.message || '无法打开上传日志界面');
+    } catch (err) {
+      alert('操作失败: ' + err.message);
+    }
+    return;
+  }
+  if (action === 'change-password') {
+    oldPwdInput.value = '';
+    newPwdInput.value = '';
+    confirmPwdInput.value = '';
+    modalError.textContent = '';
+    modalSuccess.textContent = '';
+    modal.classList.add('show');
+    return;
+  }
+  // 'enterprise-admin' 由 enterprise-sso.js 自己监听同一事件处理，这里不重复处理
+}
+
+if (window.electronAPI && window.electronAPI.onAvatarMenuAction) {
+  window.electronAPI.onAvatarMenuAction(handleAvatarMenuAction);
+}
 
 // ========== 修改密码弹窗 ==========
 
@@ -367,16 +381,6 @@ const confirmPwdInput = document.getElementById('confirmPassword');
 const modalError = document.getElementById('changePasswordError');
 const modalSuccess = document.getElementById('changePasswordSuccess');
 const submitBtn = document.getElementById('submitChangePassword');
-
-document.getElementById('changePasswordMenu').addEventListener('click', () => {
-  avatarMenu.classList.remove('show');
-  oldPwdInput.value = '';
-  newPwdInput.value = '';
-  confirmPwdInput.value = '';
-  modalError.textContent = '';
-  modalSuccess.textContent = '';
-  modal.classList.add('show');
-});
 
 document.getElementById('cancelChangePassword').addEventListener('click', () => {
   modal.classList.remove('show');

@@ -9,6 +9,7 @@ const wemeetSdkModule = require('./sdk_mgmt/wemeet-sdk');
 const meetingPolling = require('./backend_api/meeting-polling');
 const userPicker = require('./sdk_mgmt/user-picker');
 const webviewManager = require('./utils/webview-manager');
+const avatarMenuWindow = require('./utils/avatar-menu-window');
 const ipcHandlers = require('./ipc-handlers');
 
 const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback, SCHEME_NAME } = wemeetSdkModule;
@@ -110,6 +111,12 @@ function createWindow() {
 
   // 初始化 webview 管理模块
   webviewManager.init(mainWindow);
+  // 初始化头像菜单悬浮窗模块
+  avatarMenuWindow.init({ getMainWindow });
+
+  // 主窗口移动/缩放后悬浮菜单的定位会失效，直接隐藏（下次点击会重新按新位置定位）
+  mainWindow.on('move', () => avatarMenuWindow.hideMenu());
+  mainWindow.on('resize', () => avatarMenuWindow.hideMenu());
 
   // 检查是否已有有效 token，自动登录
   if (!tokenStore.isAccessTokenExpired()) {
@@ -162,6 +169,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     webviewManager.closeWebview();
+    avatarMenuWindow.hideMenu();
     mainWindow = null;
     meetingPolling.stopMeetingListPolling();
   });
@@ -413,6 +421,8 @@ app.whenReady().then(() => {
     setActiveWebview: webviewManager.setActive,
     listWebviews: webviewManager.listWebviews,
     webviewManagerAPI: webviewManager,
+    // 头像菜单悬浮窗
+    avatarMenuWindowAPI: avatarMenuWindow,
   });
 
   // 冷启动：检查 Windows 通过命令行参数传入的 scheme URL

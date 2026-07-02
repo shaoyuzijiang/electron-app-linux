@@ -222,6 +222,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ssoRequestTicket: (audience, target, nonce) =>
     ipcRenderer.invoke('sso-request-ticket', { audience, target, nonce }),
 
+  // ========== 头像菜单悬浮窗接口 ==========
+  // 供主窗口调用：切换/隐藏悬浮菜单，监听菜单项点击后转发回来的 action
+  avatarMenuToggle: (opts) => ipcRenderer.invoke('avatar-menu-toggle', opts),
+  avatarMenuHide: () => ipcRenderer.invoke('avatar-menu-hide'),
+  onAvatarMenuAction: (callback) => {
+    ipcRenderer.on('avatar-menu-action', (_event, action) => callback(action));
+  },
+  // 供悬浮窗自身（avatar-menu-overlay.html）调用：接收初始化数据、上报点击
+  onAvatarMenuInit: (callback) => {
+    ipcRenderer.on('avatar-menu-init', (_event, data) => callback(data));
+  },
+  sendAvatarMenuItemClick: (action) => ipcRenderer.send('avatar-menu-item-click', action),
+
   // ========== 账号历史（多账号记住密码）接口 ==========
   accounts: {
     list: () => ipcRenderer.invoke('accounts-list'),

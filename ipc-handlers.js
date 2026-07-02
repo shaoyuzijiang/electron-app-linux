@@ -124,6 +124,7 @@ function getClientOs() {
  * @param {Function} deps.setActiveWebview - 切换活动 webview（按 tabId）
  * @param {Function} deps.listWebviews - 列出所有 webview
  * @param {Function} deps.webviewManagerAPI - webview-manager 完整模块（用于多 webview 兼容调用）
+ * @param {Object} deps.avatarMenuWindowAPI - 头像菜单悬浮窗模块（utils/avatar-menu-window.js）
  */
 function register(ipcMain, deps) {
   const {
@@ -160,6 +161,7 @@ function register(ipcMain, deps) {
     // 多 webview 扩展（多走 webviewManagerAPI 间接调用，避免重复解构）
     closeAllWebviews,
     webviewManagerAPI,
+    avatarMenuWindowAPI,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -1486,6 +1488,39 @@ function register(ipcMain, deps) {
         return { success: false, message: '未登录，请重新登录' };
       }
       return { success: false, message: err.message };
+    }
+  });
+
+  // ========== 头像菜单悬浮窗接口 ==========
+  // 详见 utils/avatar-menu-window.js 顶部说明：用独立子窗口盖在 webview 上面，
+  // 避免 HTML z-index 压不过 WebContentsView 的问题。
+
+  // 切换显隐（点击头像时调用）
+  ipcMain.handle('avatar-menu-toggle', async (_event, opts) => {
+    if (avatarMenuWindowAPI && avatarMenuWindowAPI.toggleMenu) {
+      return avatarMenuWindowAPI.toggleMenu(opts);
+    }
+    return { success: false, message: '头像菜单模块未注入' };
+  });
+
+  // 主动隐藏（菜单项点击后 / 其他需要强制关闭的场景）
+  ipcMain.handle('avatar-menu-hide', async () => {
+    if (avatarMenuWindowAPI && avatarMenuWindowAPI.hideMenu) {
+      return avatarMenuWindowAPI.hideMenu();
+    }
+    return { success: true };
+  });
+
+  // 悬浮窗内菜单项被点击：隐藏悬浮窗 + 把 action 转发给主窗口执行实际业务逻辑
+  // （修改密码 / 上传日志 / 企业管理 / 退出登录 均由主窗口渲染进程处理，
+  //  悬浮窗本身只负责展示 UI 和上报点击）
+  ipcMain.on('avatar-menu-item-click', (_event, action) => {
+    if (avatarMenuWindowAPI && avatarMenuWindowAPI.hideMenu) {
+      avatarMenuWindowAPI.hideMenu();
+    }
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('avatar-menu-action', action);
     }
   });
 }

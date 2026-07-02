@@ -21,6 +21,13 @@
 //   - 并发去重：同一次点击内的并发调用共享同一个 in-flight Promise
 //   - 占位 tab：点击后立即创建 tab 并切过去（loading 状态），不等 ticket 申请完成
 //   - 关闭 tab 时清理该 audience 的 ticket 缓存，避免残留
+//
+// 头像菜单：
+//   - 菜单 UI 渲染在独立的悬浮子窗口（utils/avatar-menu-window.js + renderer/avatar-menu-overlay.html），
+//     而不是本页面内的 HTML，原因是企业 webview 是原生 WebContentsView，
+//     HTML z-index 压不过它；独立子窗口是 OS 级别的窗口，天然盖在其上面
+//   - 本文件只负责：点击头像时通知主进程弹出/收起菜单，以及接收菜单项点击后
+//     转发回来的 action 并执行相应业务逻辑
 
 (function () {
   // 受众白名单（前端冗余一份，仅用于本地判断；服务端仍会二次校验）
@@ -61,9 +68,8 @@
   // 当前用户信息
   let currentUser = null;
 
-  // 头像元素 & 菜单元素
+  // 头像元素（菜单本身渲染在独立悬浮子窗口中，见 avatar-menu-overlay.html）
   let userAvatar;
-  let avatarMenu;
 
   // ticket 缓存：audienceId -> { ticket, jti, expiresAt, pending? }
   // - ticket 已就绪且 expiresAt - Date.now() > 30s 时直接复用
@@ -156,15 +162,14 @@
    */
   async function init() {
     userAvatar = document.getElementById('userAvatarNav');
-    avatarMenu = document.getElementById('avatarMenu');
 
-    if (!userAvatar || !avatarMenu) {
+    if (!userAvatar) {
       console.warn('[EnterpriseSSO] 头像元素未找到');
       return;
     }
 
-    // 头像点击展开菜单
-    userAvatar.addEventListener('click', toggleMenu);
+    // 头像点击：通知主进程弹出/收起悬浮菜单（菜单 UI 在独立子窗口中）
+    userAvatar.addEventListener('click', onAvatarClick);
 
     // 头像 hover 触发预申请：用户进入菜单时大概率要点「企业管理」，
     // 此时提前申请 ticket 缓存，让点击时几乎无延迟
@@ -175,15 +180,15 @@
       _prewarmDefaultTicket();
     });
 
-    // 外部点击关闭
-    document.addEventListener('click', () => {
-      if (avatarMenu) avatarMenu.classList.remove('show');
-    });
-
-    // 菜单内部点击不冒泡
-    avatarMenu.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    // 接收悬浮菜单里点击的 action，转发给对应的业务逻辑执行
+    // （修改密码 / 上传日志 / 退出登录由 meeting.js 监听同一事件处理）
+    if (window.electronAPI && window.electronAPI.onAvatarMenuAction) {
+      window.electronAPI.onAvatarMenuAction(async (action) => {
+        if (action === 'enterprise-admin') {
+          await openEnterpriseDefault();
+        }
+      });
+    }
 
     // 加载用户信息
     try {
@@ -192,7 +197,6 @@
         currentUser = result.profile;
         const username = currentUser.username || '?';
         userAvatar.textContent = username.charAt(0).toUpperCase();
-        updateAdminMenuVisibility();
         // 登录后立即预申请（用户角色已确认）
         _prewarmDefaultTicket();
       } else {
@@ -201,20 +205,6 @@
     } catch (err) {
       console.error('[EnterpriseSSO] 获取用户信息失败:', err);
       userAvatar.textContent = '?';
-    }
-
-    // 绑定「企业管理」菜单点击
-    const menuItem = document.getElementById('enterpriseAdminMenu');
-    if (menuItem) {
-      menuItem.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (avatarMenu) avatarMenu.classList.remove('show');
-        await openEnterpriseDefault();
-      });
-      // 菜单项 hover 也预热一次（防止缓存过期）
-      menuItem.addEventListener('mouseenter', () => {
-        _prewarmDefaultTicket();
-      });
     }
 
     // 监听 webview 标题更新
@@ -266,28 +256,18 @@
   }
 
   /**
-   * 头像菜单切换
+   * 头像点击：通知主进程弹出/收起悬浮头像菜单
+   * 菜单本身渲染在独立子窗口（见文件头说明），这里只负责传坐标 + 权限位
    */
-  function toggleMenu(e) {
+  function onAvatarClick(e) {
     e.stopPropagation();
-    if (!userAvatar || !avatarMenu) return;
+    if (!userAvatar || !window.electronAPI || !window.electronAPI.avatarMenuToggle) return;
     const rect = userAvatar.getBoundingClientRect();
-    avatarMenu.style.left = rect.left + 'px';
-    avatarMenu.style.top = (rect.bottom + 4) + 'px';
-    avatarMenu.classList.toggle('show');
-  }
-
-  /**
-   * 根据 role 决定是否显示「企业管理」菜单项
-   */
-  function updateAdminMenuVisibility() {
-    const menuItem = document.getElementById('enterpriseAdminMenu');
-    if (!menuItem) return;
-    if (_isAdmin()) {
-      menuItem.style.display = '';
-    } else {
-      menuItem.style.display = 'none';
-    }
+    window.electronAPI.avatarMenuToggle({
+      x: rect.left,
+      y: rect.bottom + 4,
+      showEnterpriseAdmin: _isAdmin(),
+    });
   }
 
   /**

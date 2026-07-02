@@ -408,14 +408,9 @@
     </div>
   </div>
 
-  <!-- 头像下拉菜单 -->
-  <div class="avatar-menu" id="avatarMenu">
-    <div class="avatar-menu-item" id="changePasswordMenu">修改密码</div>
-    <div class="avatar-menu-item" id="uploadLogsMenu">上传腾讯会议日志</div>
-    <div class="avatar-menu-item avatar-menu-item-admin" id="enterpriseAdminMenu" style="display:none;">企业管理</div>
-    <div class="avatar-menu-divider"></div>
-    <div class="avatar-menu-item danger" id="logoutMenu">退出登录</div>
-  </div>
+  <!-- 头像下拉菜单：UI 已迁移到独立悬浮子窗口渲染，见 renderer/avatar-menu-overlay.html
+       （企业 webview 是原生 WebContentsView，HTML z-index 压不过，
+       只有 OS 级别的独立窗口才能盖在其上面） -->
 
   <!-- 修改密码弹窗 -->
   <div class="modal-overlay" id="changePasswordModal">
