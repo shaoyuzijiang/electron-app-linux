@@ -419,11 +419,15 @@
     // 4. 拼装跳转 URL
     const redirectUrl = `${REDIRECT_BASE}/sso/redirect?ticket=${encodeURIComponent(ticketData.ticket)}`;
 
-    // 5. 创建 webview（不传 activate，因为前面已经 switchTab）
+    // 5. 创建 webview 并立即激活
+    //    必须传 activate: true —— _attachView 内部默认 setVisible(false),
+    //    后续的 switchTab 派发的 tab-switched 在 50ms 后查 webviewGetInfo,
+    //    此时 webview 才刚创建,信息可能尚未就绪(info.success=false 不会触发 webviewShow),
+    //    所以需要主进程在创建后立刻 setActive 把 view 显示出来。
     try {
       const createRes = await window.electronAPI.webviewCreate(redirectUrl, bounds, {
         tabId,
-        activate: false, // 已切到目标 tab；webview 内部可能尚未 ready
+        activate: true,
       });
       if (!createRes || !createRes.success) {
         alert('打开企业页面失败：' + (createRes && createRes.message ? createRes.message : '未知错误'));
