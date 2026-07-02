@@ -1666,3 +1666,14 @@ window.IMModule = {
     }
   },
 };
+
+// 兜底自动初始化：nav.js 中的 `if (window.IMModule) window.IMModule.init()`
+// 在 im.js 之前就已经执行过，此时 IMModule 还不存在，所以默认页签是 IM 时
+// 需要在 im.js 加载完成后主动触发一次初始化。
+// 这里用 imPage 是否可见来判断当前是否激活了 IM 标签。
+(function autoInitIfActive() {
+  const imPageEl = document.getElementById('imPage');
+  if (imPageEl && imPageEl.style.display !== 'none') {
+    initIM();
+  }
+})();

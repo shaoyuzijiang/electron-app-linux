@@ -263,7 +263,7 @@ meetingContentEls().forEach((el) => { el.style.display = 'none'; });
 sdkLoadingEl.style.display = 'none';
 contactsPageEl.style.display = 'none';
 if (imPageEl) imPageEl.style.display = '';
-if (calendarPageEl) calendarPageEl.style.display = '';
+if (calendarPageEl) calendarPageEl.style.display = 'none';
 if (window.IMModule) window.IMModule.init();
 
 // 用户头像 + 头像菜单的初始化由 enterprise-sso.js 自行处理（脚本在 nav.js 之后加载）
