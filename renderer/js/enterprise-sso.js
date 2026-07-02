@@ -14,11 +14,13 @@
 // 「企业管理」菜单仅对 admin/superadmin 可见；首次点击默认打开「组织架构」。
 //
 // 性能优化：
-//   - 登录成功后立即在后台预申请 ORG ticket（prewarm），省掉用户点击后的 RPC 往返
-//   - 用户 hover 头像菜单时再次触发预申请（保持缓存热度）
-//   - ticket 缓存：同一 audience 在 TTL 内复用（< 30s 直接返回；> 30s 重新申请）
-//   - 并发去重：同一 audience 同时多次申请共享同一个 in-flight Promise
+//   - prewarm 已停用：登录/hover 不再自动发 SSO 请求，避免噪音；ticket 只在
+//     用户主动点击「企业管理」时申请（走 /sso/redirect 换 cookie + 302 到 /user-center）
+//   - ticket 不跨调用复用：60s TTL 一次性消费，跨次复用会触发后端"已消费"拒绝
+//     （错误 reason 可能映射为 expired_ticket / invalid_ticket）；每次点击都申请新 ticket
+//   - 并发去重：同一次点击内的并发调用共享同一个 in-flight Promise
 //   - 占位 tab：点击后立即创建 tab 并切过去（loading 状态），不等 ticket 申请完成
+//   - 关闭 tab 时清理该 audience 的 ticket 缓存，避免残留
 
 (function () {
   // 受众白名单（前端冗余一份，仅用于本地判断；服务端仍会二次校验）
@@ -82,57 +84,49 @@
 
   /**
    * 获取或申请 SSO ticket（含缓存复用 + 并发去重）
-   * - 命中未过期缓存 → 立即返回（< 30s 内复用）
    * - 已有 in-flight 请求 → 复用同一个 Promise
    * - 否则发起新申请
+   *
+   * ticket 一次性消费（60s TTL），不能跨调用复用 —— 二次消费会被后端拒
+   * （错误 reason 后端可能映射为 expired_ticket / invalid_ticket）。因此本函数
+   * 只做并发去重，不再跨调用缓存 ticket：每次用户主动点击都申请新 ticket，
+   * 同一次点击内的并发调用共享同一个 pending Promise。
+   *
+   * 双保险：动态 tab 关闭时（onClose）会清掉 _ticketCache，避免残留。
    *
    * @param {{id: string, target: string}} audience
    * @returns {Promise<{ticket: string, jti: string, expiresAt: number}>}
    */
   async function _getOrFetchTicket(audience) {
     if (!audience || !audience.id) throw new Error('audience 非法');
-    const now = Date.now();
 
-    // 1. 命中缓存
+    // 1. 复用 in-flight（同时刻的并发去重）
     const cached = _ticketCache.get(audience.id);
-    if (cached && cached.ticket && cached.expiresAt && cached.expiresAt - now > 30000) {
-      return cached;
-    }
-
-    // 2. 复用 in-flight
     if (cached && cached.pending) {
       return cached.pending;
     }
 
-    // 3. 发起新申请；写入 pending 让其他调用复用
+    // 2. 每次调用都申请新 ticket
     const pending = (async () => {
       const result = await window.electronAPI.ssoRequestTicket(audience.id, audience.target);
       if (!result || !result.success) {
-        // 失败时清除占位
-        _ticketCache.delete(audience.id);
         throw new Error((result && result.message) || '申请 SSO 票据失败');
       }
       const data = result.data || {};
       // 后端返回 { ticket, jti, expiresIn, expiresAt }，容错处理 expiresIn
       const expiresAt = data.expiresAt || (Date.now() + (data.expiresIn || 60) * 1000);
-      const entry = { ticket: data.ticket, jti: data.jti, expiresAt };
-      _ticketCache.set(audience.id, entry);
-      return entry;
-    })()
-      .finally(() => {
-        // 申请完成（无论成功失败）清除 pending；保留成功 entry
-        const cur = _ticketCache.get(audience.id);
-        if (cur && cur.pending) {
-          const { pending: _omit, ...rest } = cur;
-          if (rest && rest.ticket) {
-            _ticketCache.set(audience.id, rest);
-          } else {
-            _ticketCache.delete(audience.id);
-          }
-        }
-      });
+      return { ticket: data.ticket, jti: data.jti, expiresAt };
+    })();
 
-    _ticketCache.set(audience.id, { ...(cached || {}), pending });
+    // 3. 记录 pending 用于并发去重；完成后清掉，不跨调用复用
+    _ticketCache.set(audience.id, { pending });
+    pending.finally(() => {
+      const cur = _ticketCache.get(audience.id);
+      if (cur && cur.pending === pending) {
+        _ticketCache.delete(audience.id);
+      }
+    });
+
     return pending;
   }
 
@@ -382,6 +376,8 @@
       },
       onClose: () => {
         // 关闭 webview 的清理由 nav.js 的 unregisterDynamicTab 统一处理
+        // 双保险：清理该 audience 的 ticket 缓存，避免残留旧 ticket 触发二次消费
+        _ticketCache.delete(audience.id);
       },
     });
 
