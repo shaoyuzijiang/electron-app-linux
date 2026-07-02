@@ -338,35 +338,18 @@ document.getElementById('btnScreen').addEventListener('click', async () => {
 });
 
 // ========== 头像菜单 ==========
+// 头像菜单的展开/收起已迁移到 enterprise-sso.js（统一管理）
+// 这里仅保留菜单项的点击回调绑定
 
-const userAvatar = document.getElementById('userAvatarNav');
 const avatarMenu = document.getElementById('avatarMenu');
 
-function toggleMenu(e) {
-  e.stopPropagation();
-  const rect = userAvatar.getBoundingClientRect();
-  avatarMenu.style.left = rect.left + 'px';
-  avatarMenu.style.top = (rect.bottom + 4) + 'px';
-  avatarMenu.classList.toggle('show');
-}
-
-userAvatar.addEventListener('click', toggleMenu);
-
-document.addEventListener('click', () => {
-  avatarMenu.classList.remove('show');
-});
-
-avatarMenu.addEventListener('click', (e) => {
-  e.stopPropagation();
-});
-
 document.getElementById('logoutMenu').addEventListener('click', async () => {
-  avatarMenu.classList.remove('show');
+  if (avatarMenu) avatarMenu.classList.remove('show');
   await window.electronAPI.logout();
 });
 
 document.getElementById('uploadLogsMenu').addEventListener('click', async () => {
-  avatarMenu.classList.remove('show');
+  if (avatarMenu) avatarMenu.classList.remove('show');
   try {
     const result = await window.electronAPI.showUploadLogsView();
     if (!result.success) alert(result.message || '无法打开上传日志界面');

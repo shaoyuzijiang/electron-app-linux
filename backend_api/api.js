@@ -19,6 +19,7 @@ const {
 const im = require('./im');
 const meeting = require('./meeting');
 const calendar = require('./calendar');
+const sso = require('./sso');
 
 /**
  * 用户登录（邮箱）
@@ -176,4 +177,6 @@ module.exports = {
   ...meeting,
   // 日程（re-export，保持兼容）
   ...calendar,
+  // Web SSO（re-export）
+  ...sso,
 };

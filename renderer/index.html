@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/im.css" />
   <link rel="stylesheet" href="css/calendar.css" />
   <link rel="stylesheet" href="css/webview.css" />
+  <link rel="stylesheet" href="css/enterprise-sso.css" />
 </head>
 <body>
   <!-- 左侧窄导航 -->
@@ -382,8 +383,9 @@
     </div>
   </div>
 
-  <!-- Webview 嵌入网页页面 -->
-  <div class="webview-page" id="webviewPage" style="display:none;">
+  <!-- Webview 嵌入网页页面（多 webview 共享：每个 enterprise tab 共用同一个容器，
+       通过 tabId 在主进程区分不同的 WebContentsView） -->
+  <div class="webview-page" id="webviewPage" style="display:none;" data-active-tab="webview">
     <div class="webview-toolbar">
       <button class="webview-btn-secondary" id="webviewBackBtn" title="后退">
         <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
@@ -410,6 +412,7 @@
   <div class="avatar-menu" id="avatarMenu">
     <div class="avatar-menu-item" id="changePasswordMenu">修改密码</div>
     <div class="avatar-menu-item" id="uploadLogsMenu">上传腾讯会议日志</div>
+    <div class="avatar-menu-item avatar-menu-item-admin" id="enterpriseAdminMenu" style="display:none;">企业管理</div>
     <div class="avatar-menu-divider"></div>
     <div class="avatar-menu-item danger" id="logoutMenu">退出登录</div>
   </div>
@@ -487,13 +490,14 @@
     </div>
   </div>
 
-  <script src="js/renderer-logger.js"></script>
-  <script src="js/nav.js"></script>
-  <script src="js/contacts.js"></script>
-  <script src="js/im-cache.js"></script>
-  <script src="js/im.js"></script>
-  <script src="js/meeting.js"></script>
-  <script src="js/calendar.js"></script>
-  <script src="js/webview.js"></script>
+<script src="js/renderer-logger.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/contacts.js"></script>
+<script src="js/im-cache.js"></script>
+<script src="js/im.js"></script>
+<script src="js/meeting.js"></script>
+<script src="js/calendar.js"></script>
+<script src="js/enterprise-sso.js"></script>
+<script src="js/webview.js"></script>
 </body>
 </html>

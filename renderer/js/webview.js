@@ -1,5 +1,8 @@
 // Webview 嵌入网页页签交互逻辑
 // 负责计算 WebContentsView 的 bounds、与主进程 IPC 通信、resize 同步
+//
+// 支持多 webview：每个企业动态页签对应一个独立的 WebContentsView（按 tabId 区分）。
+// 当 webviewPage 显示时，根据 data-active-tab 决定激活哪个 webview。
 
 (function () {
   const webviewPage = document.getElementById('webviewPage');
@@ -44,7 +47,7 @@
     return url;
   }
 
-  // 打开网页
+  // 打开网页（开发模式下的「应用」页签）
   async function openWebview(url) {
     url = normalizeUrl(url);
     if (!url) {
@@ -52,14 +55,15 @@
       return;
     }
     const bounds = calculateBounds();
-    const result = await window.electronAPI.webviewCreate(url, bounds);
+    // 兼容旧 tabId='webview'
+    const result = await window.electronAPI.webviewCreate(url, bounds, { tabId: 'webview', activate: true });
     if (!result.success) {
       alert('无法打开网页: ' + (result.message || '未知错误'));
       return;
     }
     showPlaceholder(false);
-    // 更新输入框为规范化后的 URL
     urlInput.value = url;
+    webviewPage.dataset.activeTab = 'webview';
   }
 
   // 按钮事件
@@ -69,30 +73,37 @@
   });
 
   closeBtn.addEventListener('click', async () => {
-    await window.electronAPI.webviewClose();
-    urlInput.value = '';
-    showPlaceholder(true);
+    // 如果当前激活的是开发 tab（webview），则销毁它
+    const active = webviewPage.dataset.activeTab || 'webview';
+    await window.electronAPI.webviewClose(active);
+    if (active === 'webview') {
+      urlInput.value = '';
+      showPlaceholder(true);
+    }
   });
 
   // 后退 / 前进 / 刷新
   backBtn.addEventListener('click', async () => {
-    const info = await window.electronAPI.webviewGetInfo();
+    const active = webviewPage.dataset.activeTab || 'webview';
+    const info = await window.electronAPI.webviewGetInfo(active);
     if (info.success) {
-      await window.electronAPI.webviewGoBack();
+      await window.electronAPI.webviewGoBack(active);
     }
   });
 
   forwardBtn.addEventListener('click', async () => {
-    const info = await window.electronAPI.webviewGetInfo();
+    const active = webviewPage.dataset.activeTab || 'webview';
+    const info = await window.electronAPI.webviewGetInfo(active);
     if (info.success) {
-      await window.electronAPI.webviewGoForward();
+      await window.electronAPI.webviewGoForward(active);
     }
   });
 
   reloadBtn.addEventListener('click', async () => {
-    const info = await window.electronAPI.webviewGetInfo();
+    const active = webviewPage.dataset.activeTab || 'webview';
+    const info = await window.electronAPI.webviewGetInfo(active);
     if (info.success) {
-      await window.electronAPI.webviewReload();
+      await window.electronAPI.webviewReload(active);
     }
   });
 
@@ -101,26 +112,33 @@
     if (webviewPage.style.display === 'none') return;
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(async () => {
+      const active = webviewPage.dataset.activeTab || 'webview';
       await window.electronAPI.webviewResize(calculateBounds());
+      await window.electronAPI.webviewShow(active);
     }, 100);
   });
 
-  // 监听 tab 切换事件（由 meeting.js 的 switchTab 派发）
+  // 监听 tab 切换事件（由 nav.js 派发）
   document.addEventListener('tab-switched', (e) => {
-    if (e.detail.tab === 'webview') {
-      // 切到 webview tab：若有活跃视图则重新计算 bounds 并显示
+    const tab = e.detail.tab;
+    if (tab === 'webview' || tab.startsWith && tab.startsWith('enterprise-')) {
+      // 切到 webview/enterprise tab：激活对应的 webview
+      webviewPage.dataset.activeTab = tab;
       setTimeout(async () => {
-        const info = await window.electronAPI.webviewGetInfo();
+        const info = await window.electronAPI.webviewGetInfo(tab);
         if (info.success) {
           await window.electronAPI.webviewResize(calculateBounds());
-          await window.electronAPI.webviewShow();
-          showPlaceholder(false);
+          await window.electronAPI.webviewShow(tab);
+          // 动态企业页签没有 placeholder（始终由 webview 接管）
+          showPlaceholder(tab === 'webview' ? false : false);
         } else {
-          showPlaceholder(true);
+          if (tab === 'webview') {
+            showPlaceholder(true);
+          }
         }
       }, 50);
     } else {
-      // 切到其他 tab：隐藏 webview，避免遮挡其他页面
+      // 切到其他 tab：隐藏所有 webview，避免遮挡
       window.electronAPI.webviewHide();
     }
   });

@@ -405,6 +405,14 @@ app.whenReady().then(() => {
     webviewGoBack: webviewManager.goBack,
     webviewGoForward: webviewManager.goForward,
     webviewReload: webviewManager.reload,
+    // 多 webview 扩展（企业 SSO 动态页签）
+    closeWebviewById: webviewManager.closeWebviewById,
+    closeAllWebviews: webviewManager.closeAllWebviews,
+    hideWebviewAll: webviewManager.hideWebviewAll,
+    showActiveWebview: webviewManager.showActiveWebview,
+    setActiveWebview: webviewManager.setActive,
+    listWebviews: webviewManager.listWebviews,
+    webviewManagerAPI: webviewManager,
   });
 
   // 冷启动：检查 Windows 通过命令行参数传入的 scheme URL

@@ -152,6 +152,10 @@
 | 双架构支持 | macOS Apple Silicon (arm64) & Intel (x64) 双架构编译与打包 |
 | Windows x64 支持 | Windows x64 平台编译与打包（NSIS 安装包） |
 | 全进程日志覆盖 | 主进程劫持 `console` + 渲染进程 IPC 转发，主进程与渲染进程日志统一写入按小时滚动的文件，自动清理 7 天前过期日志 |
+| SSO 一次性 Ticket | 颁发一次性 JWT Ticket（HS256，60 秒 TTL），Ticket 不出现在 URL/Referer/access log 中；颁发与兑换均通过 `sso_tickets` 表的原子 `UPDATE ... WHERE used=0` 消费，杜绝重放 |
+| SSO Web Session 隔离 | 兑换成功后服务端签发 `sso_session` Cookie（HttpOnly + SameSite=Strict），WebView 内 API 调用走 Cookie，JS 读不到；与 Access Token 互不污染 |
+| SSO 角色双校验 | `web-user-center:role` 等管理员专属 audience 在 `issue` 与 `exchange/redirect` 阶段各校验一次 `isAdmin`，避免"先发后拒"造成票据浪费 |
+| SSO 频次限流 | 单用户颁发限流 10 次/分钟（滑动窗口），跨源 HMAC 鉴权 5 分钟时间窗 + 一次性 nonce 防重放 |
 
 ## 11. SDK 运维与调试
 
@@ -164,3 +168,19 @@
 | SDK 回调格式兼容 | SDK 回调中 `code=0` 且 `msg` 为空时省略 `code`/`msg` 字段，回调处理逻辑已兼容此格式 |
 | SDK 文件拷贝脚本 | 提供 `wemeet_sdk/win/x64/copy.bat`，一键从 SDK 分发包拷贝 DLL、Release 目录、lib 和 .node 到项目 |
 | SDK 版本 | 腾讯会议 SDK `3.30.308.2`（Windows x64） |
+
+## 12. 企业管理（SSO 免登 Web 页面）
+
+| 功能 | 说明 |
+|------|------|
+| 一次性 Ticket 免登 | APP 端用 Access Token 申请一次性 SSO Ticket（`POST /api/auth/sso/ticket`），WebView 打开 `https://host/sso/redirect?ticket=xxx`，服务端 302 + Set-Cookie 落到目标页；Access Token 全程不进 URL/Referer/access log |
+| 受众白名单 | 前端 `AUDIENCES` 与后端 `config.sso.audiences` 对齐：`web-user-center:chat`（即时通讯）、`web-user-center:organization`（组织架构）、`web-user-center:role`（角色管理） |
+| 角色控制 | 仅 `role === 'admin' \|\| 'superadmin'` 在头像菜单中看到"企业管理"入口；前端预校验 + 后端 `requireAdmin` 二次校验（颁发时与兑换时各一次） |
+| 头像菜单 | 点击用户头像展开下拉菜单，含"企业管理"入口；点击外部区域自动关闭 |
+| 默认入口 | 首次点击"企业管理"默认打开"组织架构"页；后续可扩展为多个子模块 |
+| 动态页签 | 在侧边栏会议页签下方插入新的页签，标题为 webview 当前 `document.title`（实时更新），右侧带 × 关闭按钮 |
+| 稳定 tabId | tabId 采用 `enterprise-${audience.id}` 稳定策略，同一受众只对应一个页签；二次点击复用已有页签并刷新 Ticket（避免过期） |
+| 多 webview 管理 | 基于 `Map<tabId, {view, url, title}>` 的 WebContentsView 池，所有 webview 共享 bounds，仅 active 显示；标题变化通过 `page-title-updated` 事件实时同步到 tab 标题 |
+| 全局清理 | 退出登录或主动调用 `closeAllWebviews()` 时销毁所有内嵌 webview 并清空 Map，避免下次登录时残留状态 |
+| 错误处理 | 申请 Ticket 失败 / 角色不足 / Bounds 计算失败等场景均给出明确错误提示（`alert`），不会进入半成品状态 |
+| 文档 | 详细流程见 `backend_api/sso.md`（架构、数据模型、风险对策）与 `backend_api/sso-interface.md`（接口参考、curl 示例） |

@@ -107,15 +107,22 @@ function getClientOs() {
  * @param {Function} deps.handleScheme - 处理腾讯会议 scheme 唤起 URL
  * @param {Function} deps.getPendingSchemeUrl - 获取当前挂起的 scheme URL
  * @param {Function} deps.consumePendingSchemeUrl - 取出并清除挂起的 scheme URL
- * @param {Function} deps.createWebview - 创建嵌入网页视图
+ * @param {Function} deps.createWebview - 创建嵌入网页视图（多 webview：tabId 区分）
  * @param {Function} deps.resizeWebview - 调整嵌入视图位置/大小
- * @param {Function} deps.closeWebview - 关闭并销毁嵌入视图
+ * @param {Function} deps.closeWebview - 关闭并销毁当前 active 嵌入视图
  * @param {Function} deps.hideWebview - 隐藏嵌入视图
  * @param {Function} deps.showWebview - 显示嵌入视图
  * @param {Function} deps.getWebviewInfo - 获取当前 webview 信息
  * @param {Function} deps.webviewGoBack - 嵌入网页后退
  * @param {Function} deps.webviewGoForward - 嵌入网页前进
  * @param {Function} deps.webviewReload - 嵌入网页刷新
+ * @param {Function} deps.closeWebviewById - 关闭指定 tabId 的 webview
+ * @param {Function} deps.closeAllWebviews - 关闭所有 webview（登出时调用）
+ * @param {Function} deps.hideWebviewAll - 隐藏所有 webview
+ * @param {Function} deps.showActiveWebview - 显示当前 active 的 webview
+ * @param {Function} deps.setActiveWebview - 切换活动 webview（按 tabId）
+ * @param {Function} deps.listWebviews - 列出所有 webview
+ * @param {Function} deps.webviewManagerAPI - webview-manager 完整模块（用于多 webview 兼容调用）
  */
 function register(ipcMain, deps) {
   const {
@@ -149,6 +156,9 @@ function register(ipcMain, deps) {
     webviewGoBack,
     webviewGoForward,
     webviewReload,
+    // 多 webview 扩展（多走 webviewManagerAPI 间接调用，避免重复解构）
+    closeAllWebviews,
+    webviewManagerAPI,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -208,8 +218,9 @@ function register(ipcMain, deps) {
   });
 
   ipcMain.on('login-success', () => {
-    // 切换 HTML 前关闭 webview，避免注册页视图浮在主页之上
-    if (closeWebview) closeWebview();
+    // 切换 HTML 前关闭所有 webview，避免注册页视图浮在主页之上
+    if (closeAllWebviews) closeAllWebviews();
+    else if (closeWebview) closeWebview();
     const mainWindow = getMainWindow();
     if (mainWindow) {
       mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -243,8 +254,9 @@ function register(ipcMain, deps) {
     }
     tokenStore.clearTokens();
     tokenStore.clearMeetingTokens();
-    // 切换 HTML 前关闭 webview，避免主页残留的嵌入视图浮在登录页之上
-    if (closeWebview) closeWebview();
+    // 切换 HTML 前关闭所有 webview，避免主页残留的嵌入视图浮在登录页之上
+    if (closeAllWebviews) closeAllWebviews();
+    else if (closeWebview) closeWebview();
     const mainWindow = getMainWindow();
     if (mainWindow) {
       mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
@@ -1342,11 +1354,11 @@ function register(ipcMain, deps) {
 
   // ========== Webview 嵌入网页接口 ==========
 
-  ipcMain.handle('webview-create', async (_event, { url, bounds }) => {
+  ipcMain.handle('webview-create', async (_event, { tabId, url, bounds, options }) => {
     if (!createWebview) {
       return { success: false, message: 'webview 模块未注入' };
     }
-    return createWebview(url, bounds);
+    return createWebview(tabId, url, bounds, options || {});
   });
 
   ipcMain.handle('webview-resize', async (_event, { bounds }) => {
@@ -1354,39 +1366,87 @@ function register(ipcMain, deps) {
     return { success: true };
   });
 
-  ipcMain.handle('webview-close', async () => {
+  // 关闭指定 tabId 的 webview；不传 tabId 时关闭当前 active
+  ipcMain.handle('webview-close', async (_event, { tabId } = {}) => {
+    if (typeof tabId === 'string' && tabId) {
+      return webviewManagerAPI.closeWebviewById(tabId);
+    }
     if (closeWebview) return closeWebview();
     return { success: true };
   });
 
+  // 关闭所有 webview（用于登出场景）
+  ipcMain.handle('webview-close-all', async () => {
+    if (webviewManagerAPI.closeAllWebviews) {
+      return webviewManagerAPI.closeAllWebviews();
+    }
+    return { success: true };
+  });
+
+  // 隐藏所有 webview（切到非 webview tab 时）
   ipcMain.handle('webview-hide', async () => {
+    if (webviewManagerAPI.hideWebviewAll) {
+      return webviewManagerAPI.hideWebviewAll();
+    }
     if (hideWebview) return hideWebview();
     return { success: true };
   });
 
-  ipcMain.handle('webview-show', async () => {
+  // 显示指定 tabId 的 webview（同时隐藏其他）
+  ipcMain.handle('webview-show', async (_event, { tabId } = {}) => {
+    if (typeof tabId === 'string' && tabId) {
+      return webviewManagerAPI.setActive(tabId);
+    }
+    if (webviewManagerAPI.showActiveWebview) {
+      return webviewManagerAPI.showActiveWebview();
+    }
     if (showWebview) return showWebview();
     return { success: true };
   });
 
-  ipcMain.handle('webview-get-info', async () => {
+  ipcMain.handle('webview-get-info', async (_event, { tabId } = {}) => {
+    if (typeof tabId === 'string' && tabId) {
+      if (webviewManagerAPI.getWebviewInfo) return webviewManagerAPI.getWebviewInfo(tabId);
+    }
     if (getWebviewInfo) return getWebviewInfo();
     return { success: false, message: 'webview 模块未注入' };
   });
 
-  ipcMain.handle('webview-go-back', async () => {
-    if (webviewGoBack) return webviewGoBack();
+  // 列出所有 webview
+  ipcMain.handle('webview-list', async () => {
+    if (webviewManagerAPI.listWebviews) return webviewManagerAPI.listWebviews();
+    return { success: true, data: [], activeTabId: null };
+  });
+
+  ipcMain.handle('webview-go-back', async (_event, { tabId } = {}) => {
+    if (webviewGoBack) return webviewGoBack(tabId);
     return { success: true };
   });
 
-  ipcMain.handle('webview-go-forward', async () => {
-    if (webviewGoForward) return webviewGoForward();
+  ipcMain.handle('webview-go-forward', async (_event, { tabId } = {}) => {
+    if (webviewGoForward) return webviewGoForward(tabId);
     return { success: true };
   });
 
-  ipcMain.handle('webview-reload', async () => {
-    if (webviewReload) return webviewReload();
+  ipcMain.handle('webview-reload', async (_event, { tabId } = {}) => {
+    if (webviewReload) return webviewReload(tabId);
     return { success: true };
+  });
+
+  // ========== Web SSO 免登接口 ==========
+
+  // 颁发一次性 SSO Ticket（APP 用 Bearer Token 申请）
+  ipcMain.handle('sso-request-ticket', async (_event, { audience, target, nonce } = {}) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.requestSsoTicket(accessToken, { audience, target, nonce });
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') {
+        return { success: false, message: '未登录，请重新登录' };
+      }
+      return { success: false, message: err.message };
+    }
   });
 }
 

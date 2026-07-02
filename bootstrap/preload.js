@@ -189,15 +189,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   handleScheme: (url) => ipcRenderer.invoke('handle-scheme', { url }),
 
   // ========== Webview 嵌入网页接口 ==========
-  webviewCreate: (url, bounds) =>
-    ipcRenderer.invoke('webview-create', { url, bounds }),
+  // 多 webview 支持：每个调用都可指定 tabId，未传则保持向后兼容（默认 'webview'）
+  webviewCreate: (url, bounds, options) => {
+    const tabId = options && options.tabId ? options.tabId : 'webview';
+    return ipcRenderer.invoke('webview-create', { tabId, url, bounds, options: options || {} });
+  },
   webviewResize: (bounds) =>
     ipcRenderer.invoke('webview-resize', { bounds }),
-  webviewClose: () => ipcRenderer.invoke('webview-close'),
+  webviewClose: (tabId) => ipcRenderer.invoke('webview-close', { tabId }),
+  webviewCloseAll: () => ipcRenderer.invoke('webview-close-all'),
   webviewHide: () => ipcRenderer.invoke('webview-hide'),
-  webviewShow: () => ipcRenderer.invoke('webview-show'),
-  webviewGetInfo: () => ipcRenderer.invoke('webview-get-info'),
-  webviewGoBack: () => ipcRenderer.invoke('webview-go-back'),
-  webviewGoForward: () => ipcRenderer.invoke('webview-go-forward'),
-  webviewReload: () => ipcRenderer.invoke('webview-reload'),
+  webviewShow: (tabId) => ipcRenderer.invoke('webview-show', { tabId }),
+  webviewGetInfo: (tabId) => ipcRenderer.invoke('webview-get-info', { tabId }),
+  webviewList: () => ipcRenderer.invoke('webview-list'),
+  webviewGoBack: (tabId) => ipcRenderer.invoke('webview-go-back', { tabId }),
+  webviewGoForward: (tabId) => ipcRenderer.invoke('webview-go-forward', { tabId }),
+  webviewReload: (tabId) => ipcRenderer.invoke('webview-reload', { tabId }),
+
+  // 监听 webview 标题更新（动态页签显示用）
+  onWebviewTitleUpdated: (callback) => {
+    ipcRenderer.on('webview-title-updated', (_event, data) => callback(data));
+  },
+
+  // 监听 webview 跳转链（含 302 重定向、最终落地、加载失败），用于 SSO 失败诊断
+  // payload: { tabId, type: 'start' | 'redirect' | 'navigate' | 'navigate-in-page' | 'fail',
+  //            url, errorCode?, errorDescription?, chain: [...] }
+  onWebviewNavigation: (callback) => {
+    ipcRenderer.on('webview-navigation', (_event, data) => callback(data));
+  },
+
+  // ========== Web SSO 免登接口 ==========
+  ssoRequestTicket: (audience, target, nonce) =>
+    ipcRenderer.invoke('sso-request-ticket', { audience, target, nonce }),
 });
