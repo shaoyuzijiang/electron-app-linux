@@ -16,8 +16,7 @@
 | audience | pathPrefix | requireAdmin |
 | --- | --- | --- |
 | `web-user-center:chat` | `/user-center/chat` | false |
-| `web-user-center:organization` | `/user-center/organization-management` | false |
-| `web-user-center:role` | `/user-center/role-management` | true |
+| `web-user-center:organization` | `/user-center` | false |
 
 ---
 

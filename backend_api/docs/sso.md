@@ -79,8 +79,8 @@ APP（腾讯会议 SDK）登录用户希望在自带的 WebView 中直接打开�
 | 页面 | URL Path | audience 取值 | 是否需要登录 | 是否纳入 SSO |
 | --- | --- | --- | --- | --- |
 | 即时通讯 | `/user-center/chat` | `web-user-center:chat` | 是 | ✅ |
-| 组织架构管理 | `/user-center/organization-management` | `web-user-center:organization` | 是（部分菜单需管理员） | ✅ |
-| 角色管理 | `/user-center/role-management` | `web-user-center:role` | 是（仅管理员） | ✅ |
+| 组织架构管理 | `/user-center` | `web-user-center:organization` | 是（部分菜单需管理员） | ✅ |
+| 角色管理 | `/user-center?tab=roles` | `web-user-center:organization` | 是（仅管理员，前端按角色控制展示） | ✅ |
 | 登录页 | `/user-center/login` | — | 否 | ❌ |
 | 注册页 | `/user-center/register` | — | 否（UA 拦截） | ❌ |
 
@@ -405,12 +405,11 @@ const webSessions = new Map(); // sessionId -> SessionInfo
 ```js
 [
   { id: 'web-user-center:chat',          pathPrefix: '/user-center/chat',          requireAdmin: false },
-  { id: 'web-user-center:organization',  pathPrefix: '/user-center/organization-management', requireAdmin: false },
-  { id: 'web-user-center:role',          pathPrefix: '/user-center/role-management',         requireAdmin: true  },
+  { id: 'web-user-center:organization',  pathPrefix: '/user-center',               requireAdmin: false },
 ]
 ```
 
-> 角色管理（`web-user-center:role`）的 `requireAdmin: true`：当 ticket 的 `audience` 命中该条且 `user.isAdmin === false` 时，**issue 接口直接 403**（`{"code":403,"message":"Admin role required"}`），避免"先发后拒"造成票据浪费。
+> 角色管理已并入 `web-user-center:organization` 页面（`?tab=roles` 内嵌面板），不在 `audiences` 中单独签发；访问控制由前端按 `currentUser.role === 'superadmin'` 决定是否展示入口。
 
 ---
 
@@ -442,8 +441,7 @@ const webSessions = new Map(); // sessionId -> SessionInfo
 | `src/config/index.js` | 新增 `config.sso.*` 块 |
 | `src/app.js` | 注册 `webSession` 中间件（早于业务路由），加载新路由 |
 | `public/user-center/chat.html` | 顶部新增 12 行：从 `URL?reason=xxx` 提示；从 `localStorage.sso_inflight` 拉取目标页（防御性，无也可） |
-| `public/user-center/organization-management.html` | 同上 |
-| `public/user-center/role-management.html` | 同上（额外检查管理员身份，否则显示"无权限"） |
+| `public/user-center/index.html` | 同上（内嵌 `?tab=roles` 角色管理面板，由前端按 `currentUser.role` 决定是否展示） |
 | `public/admin.html` | 左侧菜单新增"Web SSO 票据" Tab；分页 / 多维筛选 |
 
 **预期代码量**：服务端 ~650 行新增 + ~30 行修改；前端 ~180 行新增 + ~30 行修改。
@@ -461,7 +459,7 @@ const webSessions = new Map(); // sessionId -> SessionInfo
 | 3 | `jwt.service.js` 加 `signSsoTicket` / `verifySsoTicket` | 单元测试往返 |
 | 4 | `webSession` 中间件 + `requireAuth` 改造（Bearer ∪ Cookie） | curl 带 Cookie 调 `/api/auth/profile` |
 | 5 | `ssoRateLimit` + `webServerHmac` + `sso.service` + `sso.controller` + 路由 | curl 全链路 |
-| 6 | `chat.html` / `organization-management.html` / `role-management.html` 顶部加 `?reason=xxx` 提示 + `role-management` 管理员兜底 | 浏览器打开看 |
+| 6 | `chat.html` / `index.html` 顶部加 `?reason=xxx` 提示 + `?tab=roles` 管理员兜底 | 浏览器打开看 |
 | 7 | `admin.html` 加 SSO 票据 Tab（分页 / 筛选） | 浏览器打开看 |
 | 8 | `sso-interface.md` 写接口参考 | 文档校对 |
 | 9 | §10 测试用例自测 + 集成测试 | 全部 PASS |
@@ -594,7 +592,7 @@ APP          Auth Server         跨源 H5 Server       H5 浏览器
 | 管理员误发 audit 日志过大 | 90 天自动清理（`config.sso.auditRetentionDays`），保留 7 天的 ticket 行 |
 | 跨源 AppSecret 泄漏 | AppSecret 仅存于跨源服务端；HMAC 时间窗 5 分钟 + nonce 一次性降低被重放窗口；定期轮换通过配置项热更新 |
 | 攻击者刷 `/sso/redirect?ticket=xxx` 暴力猜 ticket | ticket 长度 ≥ 128 bit 且 HS256 签名，无签名钥无法伪造；颁发限流 + 消费原子 UPDATE 防重放 |
-| `role-management` 出现误开放 | `requireAdmin: true` 在 **颁发时** 校验一次，**兑换时** 再校验一次（防下发后再撤销） |
+| `?tab=roles` 角色面板误开放 | 前端 `switchToRoles()` / `updateRoleNavVisibility()` 双重判断 `currentUser.role === 'superadmin'`，否则回退到默认页 |
 
 ---
 
