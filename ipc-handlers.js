@@ -208,6 +208,8 @@ function register(ipcMain, deps) {
   });
 
   ipcMain.on('login-success', () => {
+    // 切换 HTML 前关闭 webview，避免注册页视图浮在主页之上
+    if (closeWebview) closeWebview();
     const mainWindow = getMainWindow();
     if (mainWindow) {
       mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -241,6 +243,8 @@ function register(ipcMain, deps) {
     }
     tokenStore.clearTokens();
     tokenStore.clearMeetingTokens();
+    // 切换 HTML 前关闭 webview，避免主页残留的嵌入视图浮在登录页之上
+    if (closeWebview) closeWebview();
     const mainWindow = getMainWindow();
     if (mainWindow) {
       mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));

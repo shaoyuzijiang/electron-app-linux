@@ -142,6 +142,95 @@
       cursor: pointer;
       user-select: none;
     }
+
+    /* ========== 注册页（内嵌 webview） ========== */
+    .register-page {
+      position: fixed;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    .register-page.active {
+      display: flex;
+    }
+
+    .register-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      background: #f5f5f7;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+      -webkit-app-region: drag; /* 允许拖动窗口 */
+    }
+
+    .register-toolbar button {
+      -webkit-app-region: no-drag;
+    }
+
+    .register-toolbar .toolbar-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    .register-back-btn {
+      padding: 6px 14px;
+      background: #fff;
+      color: #374151;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .register-back-btn:hover {
+      background: #f3f4f6;
+    }
+
+    .register-container {
+      flex: 1;
+      position: relative;
+      background: #fff;
+      /* WebContentsView 会精确覆盖此区域 */
+    }
+
+    .register-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 13px;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .register-loading::before {
+      content: '';
+      width: 28px;
+      height: 28px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* 注册页激活时隐藏登录卡 */
+    body.register-mode .login-card {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -167,6 +256,17 @@
     </form>
   </div>
 
+  <!-- 内嵌 webview 注册页 -->
+  <div class="register-page" id="registerPage">
+    <div class="register-toolbar">
+      <button type="button" class="register-back-btn" id="registerBackBtn">← 返回登录</button>
+      <div class="toolbar-title">注册账号</div>
+    </div>
+    <div class="register-container" id="registerContainer">
+      <div class="register-loading">正在打开注册页...</div>
+    </div>
+  </div>
+
   <script src="js/renderer-logger.js"></script>
   <script>
     const form = document.getElementById('loginForm');
@@ -185,10 +285,69 @@
       rememberCb.checked = true;
     }
 
-    // 注册链接
-    document.getElementById('registerLink').addEventListener('click', (e) => {
+    // 注册链接：切换到内嵌 webview 注册页
+    document.getElementById('registerLink').addEventListener('click', async (e) => {
       e.preventDefault();
-      window.electronAPI.openExternal('https://wemeetapp.liuqi92.cn/user-center/register');
+      await openRegisterPage();
+    });
+
+    // 返回登录
+    document.getElementById('registerBackBtn').addEventListener('click', async () => {
+      await closeRegisterPage();
+    });
+
+    // ========== 内嵌 webview 注册页 ==========
+    const registerPage = document.getElementById('registerPage');
+    const registerContainer = document.getElementById('registerContainer');
+    const REGISTER_URL = 'https://wemeetapp.liuqi92.cn/user-center/register';
+    let registerResizeTimer = null;
+
+    function calculateRegisterBounds() {
+      const rect = registerContainer.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+      };
+    }
+
+    async function openRegisterPage() {
+      if (!window.electronAPI || !window.electronAPI.webviewCreate) {
+        // preload 未暴露 webview API：降级为原系统浏览器方案
+        window.electronAPI.openExternal(REGISTER_URL);
+        return;
+      }
+      // 切换显示
+      document.body.classList.add('register-mode');
+      registerPage.classList.add('active');
+      // 等下一帧让容器拿到正确尺寸后再创建 webview
+      await new Promise((r) => requestAnimationFrame(r));
+      const bounds = calculateRegisterBounds();
+      const result = await window.electronAPI.webviewCreate(REGISTER_URL, bounds);
+      if (!result.success) {
+        alert('无法打开注册页: ' + (result.message || '未知错误'));
+        await closeRegisterPage();
+      }
+    }
+
+    async function closeRegisterPage() {
+      if (window.electronAPI && window.electronAPI.webviewClose) {
+        await window.electronAPI.webviewClose();
+      }
+      registerPage.classList.remove('active');
+      document.body.classList.remove('register-mode');
+    }
+
+    // 窗口 resize 时同步 webview 大小
+    window.addEventListener('resize', () => {
+      if (!registerPage.classList.contains('active')) return;
+      clearTimeout(registerResizeTimer);
+      registerResizeTimer = setTimeout(async () => {
+        if (window.electronAPI && window.electronAPI.webviewResize) {
+          await window.electronAPI.webviewResize(calculateRegisterBounds());
+        }
+      }, 100);
     });
 
     form.addEventListener('submit', async (e) => {

@@ -16,14 +16,34 @@ const ALLOWED_ORIGINS = [
   'https://meeting.tencent.com',
   'https://www.tencent.com',
   'https://cloud.tencent.com',
+  'https://wemeetapp.liuqi92.cn',
 ];
 
 // 独立 session 分区，避免与主窗口共享 cookie / UA
 const WEBVIEW_PARTITION = 'webview-session';
 
 // 默认自定义 UA（可在 createWebview 时通过 options 覆盖）
-const DEFAULT_UA =
-  'WeMeetElectronDemo/1.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+// 根据当前运行平台与 Electron 内置 Chromium 版本动态生成
+function getDefaultUA() {
+  let platformStr;
+  switch (process.platform) {
+    case 'win32':
+      platformStr = 'Windows NT 10.0; Win64; x64';
+      break;
+    case 'darwin':
+      platformStr =
+        process.arch === 'arm64'
+          ? 'Macintosh; ARM Mac OS X'
+          : 'Macintosh; Intel Mac OS X 10_15_7';
+      break;
+    case 'linux':
+    default:
+      platformStr = 'X11; Linux x86_64';
+      break;
+  }
+  const chromeVer = process.versions.chrome || '126.0.0.0';
+  return `WeMeetSDK/1.0 (${platformStr}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`;
+}
 
 let webviewView = null;
 let parentWindow = null;
@@ -101,7 +121,7 @@ function createWebview(url, bounds, options = {}) {
   const wc = webviewView.webContents;
 
   // 设置自定义 UA（独立 partition，不影响主窗口）
-  wc.setUserAgent(options.userAgent || DEFAULT_UA);
+  wc.setUserAgent(options.userAgent || getDefaultUA());
 
   // 安全：拦截导航，仅允许白名单内跳转
   wc.on('will-navigate', (event, navUrl) => {
