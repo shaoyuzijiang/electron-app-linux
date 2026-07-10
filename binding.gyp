@@ -56,7 +56,7 @@
         }
 	    ]
     }],
-    ['OS=="mac"', {
+    ['OS=="mac" and target_arch=="arm64"', {
       "targets": [
         {
           "target_name": "wemeet_electron_sdk",
@@ -64,12 +64,9 @@
           "link_settings": {
             "libraries": [  
               "-framework TMSDK",
-              # "-iframework wemeet_sdk/mac/Frameworks",
-              # "-Wl,-rpath,wemeet_sdk/mac/Frameworks", 
-              "-F../wemeet_sdk/mac/Frameworks/<(target_arch)/ -framework TMSDK"
-              # '$(PWD)/mac/Frameworks/TMSDK.framework',
+              "-F../wemeet_sdk/mac/Frameworks/arm64/ -framework TMSDK"
               ],
-            "library_dirs" : ["../wemeet_sdk/mac/Frameworks/<(target_arch)/"],
+            "library_dirs" : ["../wemeet_sdk/mac/Frameworks/arm64/"],
           },
           "xcode_settings": {
             "MACOSX_DEPLOYMENT_TARGET": "10.11",
@@ -77,7 +74,7 @@
             "CLANG_ENABLE_OBJC_WEAK": "YES",
             "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
             "FRAMEWORK_SEARCH_PATHS": [
-              "$(SDKROOT)/wemeet_sdk/mac/Frameworks/<(target_arch)/"
+              "$(SDKROOT)/wemeet_sdk/mac/Frameworks/arm64/"
             ],
             "cflags":[
               "-std=c++11",
@@ -87,7 +84,42 @@
 
           },
           "include_dirs" : [
-            'wemeet_sdk/mac/Frameworks/<(target_arch)/TMSDK.framework/Headers',
+            'wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework/Headers',
+            "include",
+            "wemeet_sdk/mac",
+           ],
+        }
+      ]
+    }],
+    ['OS=="mac" and target_arch=="x64"', {
+      "targets": [
+        {
+          "target_name": "wemeet_electron_sdk",
+          "sources": [ "wemeet_sdk/wemeet.cpp", "wemeet_sdk/mac/utils/log_utils.mm" ],
+          "link_settings": {
+            "libraries": [  
+              "-framework TMSDK",
+              "-F../wemeet_sdk/mac/Frameworks/x86_64/ -framework TMSDK"
+              ],
+            "library_dirs" : ["../wemeet_sdk/mac/Frameworks/x86_64/"],
+          },
+          "xcode_settings": {
+            "MACOSX_DEPLOYMENT_TARGET": "10.11",
+            "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+            "CLANG_ENABLE_OBJC_WEAK": "YES",
+            "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+            "FRAMEWORK_SEARCH_PATHS": [
+              "$(SDKROOT)/wemeet_sdk/mac/Frameworks/x86_64/"
+            ],
+            "cflags":[
+              "-std=c++11",
+              "-stdlib=libc++",
+              "-F=Release"
+            ],
+
+          },
+          "include_dirs" : [
+            'wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework/Headers',
             "include",
             "wemeet_sdk/mac",
            ],

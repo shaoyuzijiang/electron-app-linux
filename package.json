@@ -14,11 +14,8 @@
     "pack": "node bootstrap/build.js --dir",
     "dist": "node bootstrap/build.js",
     "dist:mac:arm64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --arm64",
-    "dist:mac:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/x64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --x64",
+    "dist:mac:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --x64",
     "dist:win:x64": "node bootstrap/build.js --x64",
-    "create-universal-node": "lipo -create output/mac/wemeet_electron_sdk.arm64.node output/mac/wemeet_electron_sdk.x64.node -output output/mac/wemeet_electron_sdk.node",
-    "create-universal-framework": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && lipo -create wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework/Versions/A/TMSDK wemeet_sdk/mac/Frameworks/x64/TMSDK.framework/Versions/A/TMSDK -output output/mac/TMSDK.framework/Versions/A/TMSDK && cp output/mac/TMSDK.framework/Versions/A/TMSDK output/mac/TMSDK.framework/TMSDK",
-    "dist:mac:universal": "npm run create-universal-node && npm run create-universal-framework && node bootstrap/build.js --universal",
     "postinstall:mac": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers",
     "postinstall:win": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist wemeet_sdk\\win\\x64 mkdir wemeet_sdk\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node wemeet_sdk\\win\\x64\\wemeet_electron_sdk.node"
   },

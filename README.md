@@ -334,14 +334,6 @@ npm run build:native:win-x64 && npm run dist:win:x64
 - SDK 内部日志同时输出到控制台（`stderr`）和日志文件，便于调试
 - SDK 回调格式：当 `code=0` 且 `msg` 为空时，回调 JSON 中省略 `code`/`msg` 字段，此时应视为成功
 
-### Universal 构建说明（macOS）
-
-Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用二进制，需注意以下几点：
-
-1. **原生模块需双架构编译**：运行 `npm run build:native:mac` 生成 arm64 和 x64 两个 `.node` 文件，`dist:mac:universal` 会自动通过 `lipo -create` 将它们合并为通用二进制
-2. **SDK Framework 符号链接**：`wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 必须是**相对符号链接**（`../arm64/TMSDK.framework`），不能是绝对路径符号链接，否则 `@electron/universal` 合并时因路径不一致会报 mach-o mismatch 错误
-3. **架构特定 .node 文件已排除**：`package.json` 的 `files` 配置中排除了 `wemeet_electron_sdk.arm64.node` 和 `wemeet_electron_sdk.x64.node`，只保留合并后的通用 `wemeet_electron_sdk.node`
-
 ### 更新 SDK 包
 
 当需要替换新版腾讯会议 SDK 时，请按以下步骤操作：
@@ -350,17 +342,7 @@ Universal 构建会将 arm64 和 x64 两个架构的 app 合并为一个通用�
    - macOS：将新 SDK 的 `wemeet_sdk/mac/` 目录替换
    - Windows：将新 SDK 的头文件复制到 `wemeet_sdk/win/include/`，`.lib` 文件复制到 `wemeet_sdk/win/lib/x64/release/`，运行时 DLL 和 `Release` 目录复制到 `wemeet_sdk/win/x64/`（可使用 `wemeet_sdk/win/x64/copy.bat`，修改其中的 `SDK_SRC` 路径后执行）
 2. **替换 C++ 封装**：将新 SDK Electron Demo 的 `wemeet_sdk/wemeet.cpp` 和 `wemeet_sdk/jsoncpp.cpp` 替换到项目
-3. **检查 macOS 符号链接**：确保 `wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 是**相对符号链接**，而非绝对路径符号链接。替换后执行以下命令检查和修复：
-   ```bash
-   readlink wemeet_sdk/mac/Frameworks/x64/TMSDK.framework
-   
-   # 如果输出是绝对路径（以 / 开头），需修复为相对路径：
-   cd wemeet_sdk/mac/Frameworks/x64
-   rm TMSDK.framework
-   ln -s ../arm64/TMSDK.framework TMSDK.framework
-   cd -
-   ```
-4. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
+3. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
    ```bash
    # macOS
    npm run build:native:mac
