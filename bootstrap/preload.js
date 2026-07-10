@@ -161,6 +161,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAddMemberDone: (callback) => {
     ipcRenderer.on('im-add-member-done', () => callback());
   },
+  imOpenNewChatPicker: (currentUserId) =>
+    ipcRenderer.invoke('im-open-new-chat-picker', { currentUserId }),
+  notifyNewChatCreated: (conversationId) =>
+    ipcRenderer.send('im-new-chat-created', conversationId),
+  onNewChatCreated: (callback) => {
+    ipcRenderer.on('im-new-chat-created', (_event, conversationId) => callback(conversationId));
+  },
   imGetUnreadCount: () => ipcRenderer.invoke('im-get-unread-count'),
   imGetOnlineUsers: () => ipcRenderer.invoke('im-get-online-users'),
   imUploadFile: (filePath, filename, mimetype, fileData) =>

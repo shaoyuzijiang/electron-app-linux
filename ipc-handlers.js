@@ -1243,6 +1243,25 @@ function register(ipcMain, deps) {
     }
   });
 
+  // 打开选人组件发起会话
+  ipcMain.handle('im-open-new-chat-picker', async (_event, { currentUserId }) => {
+    try {
+      const cbMsg = JSON.stringify({ currentUserId: currentUserId || '' });
+      openUserPickerWindow('new_conversation', cbMsg);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 选人组件创建会话完成通知 → 转发给主窗口
+  ipcMain.on('im-new-chat-created', (_event, conversationId) => {
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('im-new-chat-created', conversationId);
+    }
+  });
+
   // 获取总未读数
   ipcMain.handle('im-get-unread-count', async () => {
     try {

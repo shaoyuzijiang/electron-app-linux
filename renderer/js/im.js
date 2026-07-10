@@ -1260,27 +1260,14 @@ let newChatState = {
   searchTimer: null,
 };
 
-function openNewChatModal() {
-  newChatState = { type: 'single', groupName: '', selectedUsers: [], searchTimer: null };
-
-  const modal = document.getElementById('imNewChatModal');
-  const searchInput = document.getElementById('imNewChatSearchInput');
-  const groupNameInput = document.getElementById('imNewChatGroupName');
-  const groupNameRow = document.getElementById('imNewChatGroupNameRow');
-  const resultsContainer = document.getElementById('imNewChatSearchResults');
-  const selectedContainer = document.getElementById('imNewChatSelectedUsers');
-
-  // 重置
-  searchInput.value = '';
-  groupNameInput.value = '';
-  groupNameRow.style.display = 'none';
-  resultsContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#bbb;font-size:13px;">输入关键词搜索用户</div>';
-  selectedContainer.innerHTML = '';
-
-  updateNewChatTypeTabs();
-  modal.classList.add('show');
-
-  setTimeout(() => searchInput.focus(), 100);
+/**
+ * 打开选人组件发起会话（单聊/群聊）
+ */
+async function openNewChatPicker() {
+  const result = await window.electronAPI.imOpenNewChatPicker(imCurrentUserId);
+  if (!result.success) {
+    alert(result.message || '打开选人组件失败');
+  }
 }
 
 function updateNewChatTypeTabs() {
@@ -1774,8 +1761,16 @@ function bindIMEvents() {
     }
   });
 
-  // 新建会话按钮
-  document.getElementById('imNewChatBtn').addEventListener('click', openNewChatModal);
+  // 新建会话按钮 — 打开选人组件
+  document.getElementById('imNewChatBtn').addEventListener('click', openNewChatPicker);
+
+  // 选人组件创建会话完成通知 → 刷新会话列表并选中新会话
+  window.electronAPI.onNewChatCreated(async (conversationId) => {
+    await loadConversations(true);
+    if (conversationId) {
+      await selectConversation(conversationId);
+    }
+  });
 
   // 搜索会话
   document.getElementById('imConvSearchInput').addEventListener('input', (e) => {

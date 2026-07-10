@@ -99,6 +99,7 @@ function openUserPickerWindow(type, cbMsg) {
     invite_meeting: '邀请参会',
     invite_users: '邀请成员',
     add_group_members: '添加群成员',
+    new_conversation: '发起会话',
   };
 
   userPickerWindow = new BrowserWindow({

@@ -35,6 +35,13 @@ window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
       titleEl.textContent = '添加群成员';
       document.title = '添加群成员';
       inviteBtn.textContent = '确认添加';
+    } else if (type === 'new_conversation') {
+      // 发起会话模式：cbMsg 为 { currentUserId }
+      const data = typeof cbMsg === 'string' ? JSON.parse(cbMsg) : cbMsg;
+      pickerInMeetingUserIds = data.currentUserId ? [data.currentUserId] : [];
+      titleEl.textContent = '发起会话';
+      document.title = '发起会话';
+      inviteBtn.textContent = '确认';
     } else {
       // 会中邀请模式：cbMsg 为 SDK 回调 JSON
       const cb = JSON.parse(cbMsg);
@@ -360,8 +367,18 @@ function renderPickerSelectedUsers() {
   countEl.textContent = count > 0 ? `已选 ${count} 人` : '';
   inviteBtn.disabled = count === 0;
 
+  // 发起会话模式：选中2人以上时显示群名输入框
+  const groupNameRow = document.getElementById('pickerGroupNameRow');
+  if (groupNameRow) {
+    groupNameRow.style.display = (pickerCallbackType === 'new_conversation' && count >= 2) ? '' : 'none';
+  }
+
   if (count === 0) {
-    const hintText = pickerCallbackType === 'add_group_members' ? '从右侧通讯录中选择要添加的成员' : '从右侧通讯录中选择要邀请的人员';
+    const hintText = pickerCallbackType === 'add_group_members'
+      ? '从右侧通讯录中选择要添加的成员'
+      : pickerCallbackType === 'new_conversation'
+        ? '从右侧通讯录中选择聊天对象'
+        : '从右侧通讯录中选择要邀请的人员';
     container.innerHTML = `<div class="picker-empty-hint">${hintText}</div>`;
     return;
   }
@@ -433,6 +450,49 @@ async function confirmInviteUsers() {
     // 通知主窗口刷新成员列表
     window.electronAPI.notifyAddMemberDone();
     window.electronAPI.closeUserPickerWindow();
+    return;
+  }
+
+  // ---- 发起会话模式：根据选中人数创建单聊或群聊 ----
+  if (pickerCallbackType === 'new_conversation') {
+    inviteBtn.textContent = '创建中...';
+    let type, name;
+    if (userIds.length === 1) {
+      type = 'single';
+      name = '';
+    } else {
+      type = 'group';
+      const nameInput = document.getElementById('pickerGroupNameInput');
+      name = (nameInput ? nameInput.value : '').trim();
+      if (!name) {
+        alert('请输入群聊名称');
+        inviteBtn.disabled = false;
+        inviteBtn.textContent = '确认';
+        return;
+      }
+      if (name.length > 64) {
+        alert('群名不能超过64个字符');
+        inviteBtn.disabled = false;
+        inviteBtn.textContent = '确认';
+        return;
+      }
+    }
+
+    try {
+      const result = await window.electronAPI.imCreateConversation(type, name, userIds);
+      if (result.success && result.data) {
+        window.electronAPI.notifyNewChatCreated(result.data.id);
+        window.electronAPI.closeUserPickerWindow();
+      } else {
+        alert(result.message || '创建失败');
+        inviteBtn.disabled = false;
+        inviteBtn.textContent = '确认';
+      }
+    } catch (err) {
+      alert('创建失败: ' + err.message);
+      inviteBtn.disabled = false;
+      inviteBtn.textContent = '确认';
+    }
     return;
   }
 

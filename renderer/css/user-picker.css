@@ -97,6 +97,35 @@ html, body {
   color: #333;
 }
 
+/* 群名输入（发起会话+多选时显示） */
+.picker-group-name-row {
+  padding: 0 16px 10px;
+  flex-shrink: 0;
+}
+
+.picker-group-name-row label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.picker-group-name-row input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.picker-group-name-row input:focus {
+  border-color: #1e6fff;
+  box-shadow: 0 0 0 3px rgba(30, 111, 255, 0.15);
+}
+
 .user-picker-selected-count {
   font-size: 12px;
   color: #1e6fff;
