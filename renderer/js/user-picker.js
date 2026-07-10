@@ -1,12 +1,13 @@
 // ========== 会中自定义通讯录选人组件（独立窗口模式） ==========
 
-let pickerInMeetingUserIds = []; // 已在会中的用户ID列表
+let pickerInMeetingUserIds = []; // 已在会中/群中的用户ID列表（禁选）
 let pickerSelectedUsers = new Map(); // 已选中的用户 id -> { id, username, departmentName }
 let pickerDeptTreeRoot = null;
 let pickerExpandedDepts = new Set();
 let pickerSelectedDeptId = null;
 let pickerSearchTimer = null;
-let pickerCallbackType = null; // 'invite_users' 或 'invite_meeting'
+let pickerCallbackType = null; // 'invite_users' | 'invite_meeting' | 'add_group_members'
+let pickerConversationId = null; // 添加群成员模式下的会话ID
 
 // 分页状态
 let pickerCurrentPage = 1;
@@ -21,25 +22,36 @@ let pickerLoadingMore = false;
 
 window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
   try {
-    const cb = JSON.parse(cbMsg);
     pickerCallbackType = type;
 
-    // 解析已在会中的用户列表
-    if (type === 'invite_users' && cb.param) {
-      let data = typeof cb.param === 'string' ? JSON.parse(cb.param) : cb.param;
-      pickerInMeetingUserIds = data.users || [];
-    } else {
-      pickerInMeetingUserIds = [];
-    }
-
-    // 更新标题
     const titleEl = document.getElementById('userPickerTitle');
-    if (type === 'invite_meeting') {
-      titleEl.textContent = '邀请参会';
-      document.title = '邀请参会';
+    const inviteBtn = document.getElementById('userPickerInviteBtn');
+
+    if (type === 'add_group_members') {
+      // 添加群成员模式：cbMsg 为 { conversationId, existingMemberIds }
+      const data = typeof cbMsg === 'string' ? JSON.parse(cbMsg) : cbMsg;
+      pickerConversationId = data.conversationId;
+      pickerInMeetingUserIds = data.existingMemberIds || [];
+      titleEl.textContent = '添加群成员';
+      document.title = '添加群成员';
+      inviteBtn.textContent = '确认添加';
     } else {
-      titleEl.textContent = '邀请成员';
-      document.title = '邀请成员';
+      // 会中邀请模式：cbMsg 为 SDK 回调 JSON
+      const cb = JSON.parse(cbMsg);
+      if (type === 'invite_users' && cb.param) {
+        let data = typeof cb.param === 'string' ? JSON.parse(cb.param) : cb.param;
+        pickerInMeetingUserIds = data.users || [];
+      } else {
+        pickerInMeetingUserIds = [];
+      }
+      if (type === 'invite_meeting') {
+        titleEl.textContent = '邀请参会';
+        document.title = '邀请参会';
+      } else {
+        titleEl.textContent = '邀请成员';
+        document.title = '邀请成员';
+      }
+      inviteBtn.textContent = '确认邀请';
     }
 
     // 加载数据
@@ -263,6 +275,7 @@ function renderPickerUserItems(users) {
     const isInMeeting = pickerInMeetingUserIds.includes(user.id);
     const disabledClass = isInMeeting ? ' disabled' : '';
     const selectedClass = isSelected ? ' selected' : '';
+    const disabledTag = pickerCallbackType === 'add_group_members' ? '已在群聊中' : '已在会议中';
 
     return `
       <div class="picker-user-item${disabledClass}${selectedClass}" data-user-id="${user.id}" data-username="${user.username || ''}" data-dept="${user.departmentName || ''}">
@@ -274,7 +287,7 @@ function renderPickerUserItems(users) {
           <div class="contact-name">${user.username || '-'}</div>
           <div class="contact-dept">${user.departmentName || '-'}</div>
         </div>
-        ${isInMeeting ? '<span class="in-meeting-tag">已在会议中</span>' : ''}
+        ${isInMeeting ? `<span class="in-meeting-tag">${disabledTag}</span>` : ''}
       </div>
     `;
   }).join('');
@@ -291,6 +304,8 @@ function renderPickerSearchResults(users) {
     container.innerHTML = `<div class="meeting-empty" style="padding:30px 0;">未找到匹配的用户</div>`;
     return;
   }
+
+  const disabledTag = pickerCallbackType === 'add_group_members' ? '已在群聊中' : '已在会议中';
 
   container.innerHTML = users.map((user) => {
     const initial = (user.username || '?').charAt(0).toUpperCase();
@@ -309,7 +324,7 @@ function renderPickerSearchResults(users) {
           <div class="contact-name">${user.username || '-'}</div>
           <div class="contact-dept">${user.departmentName || '-'}</div>
         </div>
-        ${isInMeeting ? '<span class="in-meeting-tag">已在会议中</span>' : ''}
+        ${isInMeeting ? `<span class="in-meeting-tag">${disabledTag}</span>` : ''}
       </div>
     `;
   }).join('');
@@ -346,7 +361,8 @@ function renderPickerSelectedUsers() {
   inviteBtn.disabled = count === 0;
 
   if (count === 0) {
-    container.innerHTML = `<div class="picker-empty-hint">从右侧通讯录中选择要邀请的人员</div>`;
+    const hintText = pickerCallbackType === 'add_group_members' ? '从右侧通讯录中选择要添加的成员' : '从右侧通讯录中选择要邀请的人员';
+    container.innerHTML = `<div class="picker-empty-hint">${hintText}</div>`;
     return;
   }
 
@@ -389,9 +405,39 @@ async function confirmInviteUsers() {
 
   const inviteBtn = document.getElementById('userPickerInviteBtn');
   inviteBtn.disabled = true;
-  inviteBtn.textContent = '邀请中...';
 
   const userIds = Array.from(pickerSelectedUsers.keys());
+
+  // ---- 添加群成员模式：逐个调用 imAddMember ----
+  if (pickerCallbackType === 'add_group_members') {
+    inviteBtn.textContent = '添加中...';
+    let failCount = 0;
+    for (const userId of userIds) {
+      try {
+        const result = await window.electronAPI.imAddMember(pickerConversationId, userId);
+        if (!result.success) {
+          console.warn('[选人组件] 添加成员失败:', userId, result.message);
+          failCount++;
+        }
+      } catch (err) {
+        console.error('[选人组件] 添加成员异常:', userId, err);
+        failCount++;
+      }
+    }
+    if (failCount > 0) {
+      alert(`部分成员添加失败（${failCount}/${userIds.length}），请重试`);
+      inviteBtn.disabled = false;
+      inviteBtn.textContent = '确认添加';
+      return;
+    }
+    // 通知主窗口刷新成员列表
+    window.electronAPI.notifyAddMemberDone();
+    window.electronAPI.closeUserPickerWindow();
+    return;
+  }
+
+  // ---- 会中邀请模式：调用 SDK AddUsersWithParam ----
+  inviteBtn.textContent = '邀请中...';
   const jsonParam = JSON.stringify({
     users: userIds,
     user_type: 3, // 会中邀请入会

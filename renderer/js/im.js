@@ -186,6 +186,30 @@ function handleWSMessage(msg) {
       refreshConversationsFromServer();
       break;
 
+    case 'conversation_updated': {
+      // 群信息更新（群名/群头像）
+      handleConversationUpdated(msg.data);
+      break;
+    }
+
+    case 'conversation_dissolved': {
+      // 群已解散
+      handleConversationDissolved(msg.data);
+      break;
+    }
+
+    case 'ownership_transferred': {
+      // 群主转让
+      handleOwnershipTransferred(msg.data);
+      break;
+    }
+
+    case 'role_changed': {
+      // 角色变更（设置/取消管理员）
+      handleRoleChanged(msg.data);
+      break;
+    }
+
     case 'message_update': {
       handleMessageUpdate(msg.data);
       break;
@@ -228,6 +252,116 @@ function handleMessageUpdate(data) {
   if (conv && conv.lastMessage && conv.lastMessage.id === data.id) {
     conv.lastMessage.content = data.content;
     renderConversationList();
+  }
+}
+
+/**
+ * 处理群信息更新事件（群名/群头像变更）
+ * 文档 7.4.10 / 8.9
+ */
+function handleConversationUpdated(data) {
+  if (!data || !data.conversationId) return;
+  const conv = imConversations.find((c) => c.id === data.conversationId);
+  if (conv) {
+    if (data.name !== null && data.name !== undefined) conv.name = data.name;
+    if (data.avatar !== null && data.avatar !== undefined) conv.avatar = data.avatar;
+    renderConversationList();
+    // 如果当前正在查看该会话，更新头部
+    if (data.conversationId === imActiveConversationId) {
+      renderChatHeader(conv);
+    }
+    // 同步更新本地缓存
+    if (window.IMCache) {
+      window.IMCache.updateCachedConversation(conv).catch(() => {});
+    }
+  }
+}
+
+/**
+ * 处理群已解散事件
+ * 文档 7.4.11 / 8.9
+ */
+function handleConversationDissolved(data) {
+  if (!data || !data.conversationId) return;
+  // 从会话列表中移除
+  imConversations = imConversations.filter((c) => c.id !== data.conversationId);
+  // 关闭对应聊天窗口
+  if (data.conversationId === imActiveConversationId) {
+    imActiveConversationId = null;
+    renderChatEmpty();
+  }
+  renderConversationList();
+  updateTotalUnreadBadge();
+  // 清理本地消息缓存
+  if (window.IMCache) {
+    window.IMCache.clearConversationCache(data.conversationId).catch(() => {});
+  }
+}
+
+/**
+ * 处理群主转让事件
+ * 文档 7.4.12 / 8.9
+ */
+function handleOwnershipTransferred(data) {
+  if (!data || !data.conversationId || !data.newOwnerId) return;
+  const conv = imConversations.find((c) => c.id === data.conversationId);
+  if (!conv) return;
+
+  // 更新成员列表角色：原群主降为 member，新群主升为 owner
+  if (conv.members) {
+    const oldOwner = conv.members.find((m) => m.role === 'owner');
+    if (oldOwner) oldOwner.role = 'member';
+    const newOwner = conv.members.find((m) => m.userId === data.newOwnerId);
+    if (newOwner) newOwner.role = 'owner';
+  }
+  // 更新会话的 createdBy
+  conv.createdBy = data.newOwnerId;
+
+  // 若当前用户是当事人，更新自身角色
+  if (imCurrentUserId === data.newOwnerId) {
+    conv.role = 'owner';
+  } else if (conv.role === 'owner') {
+    conv.role = 'member';
+  }
+
+  renderConversationList();
+  // 如果当前正在查看该会话，刷新头部和群信息弹窗
+  if (data.conversationId === imActiveConversationId) {
+    renderChatHeader(conv);
+    // 如果群信息弹窗打开，刷新成员列表
+    const groupInfoModal = document.getElementById('imGroupInfoModal');
+    if (groupInfoModal && groupInfoModal.classList.contains('show')) {
+      loadGroupInfoMembers(data.conversationId);
+    }
+  }
+  if (window.IMCache) {
+    window.IMCache.updateCachedConversation(conv).catch(() => {});
+  }
+}
+
+/**
+ * 处理角色变更事件（设置/取消管理员）
+ * 文档 7.4.13 / 8.9
+ */
+function handleRoleChanged(data) {
+  if (!data || !data.conversationId || !data.role) return;
+  const conv = imConversations.find((c) => c.id === data.conversationId);
+  if (!conv) return;
+
+  // 更新当前用户在该会话中的 role
+  conv.role = data.role;
+
+  renderConversationList();
+  // 如果当前正在查看该会话，刷新头部和群信息弹窗
+  if (data.conversationId === imActiveConversationId) {
+    renderChatHeader(conv);
+    const groupInfoModal = document.getElementById('imGroupInfoModal');
+    if (groupInfoModal && groupInfoModal.classList.contains('show')) {
+      loadGroupInfoMembers(data.conversationId);
+    }
+  }
+  if (window.IMCache) {
+    window.IMCache.updateCachedConversation(conv).catch(() => {});
   }
 }
 
@@ -805,8 +939,8 @@ function renderChatHeader(conv) {
       ${subtitle ? `<div class="im-chat-subtitle">${escapeHtml(subtitle)}</div>` : ''}
     </div>
     <div class="im-chat-actions">
-      ${isGroup ? `<button class="im-icon-btn" id="imShowMembersBtn" title="成员列表">
-        <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      ${isGroup ? `<button class="im-icon-btn" id="imGroupInfoBtn" title="群信息">
+        <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
       </button>` : ''}
     </div>
   `;
@@ -815,10 +949,10 @@ function renderChatHeader(conv) {
   document.getElementById('imChatEmpty').style.display = 'none';
   document.getElementById('imChatContent').style.display = 'flex';
 
-  // 绑定成员列表按钮
-  const membersBtn = document.getElementById('imShowMembersBtn');
-  if (membersBtn) {
-    membersBtn.addEventListener('click', () => showMembersModal(conv.id));
+  // 绑定群信息按钮（所有群成员可见，弹窗内根据角色显示/隐藏管理功能）
+  const groupInfoBtn = document.getElementById('imGroupInfoBtn');
+  if (groupInfoBtn) {
+    groupInfoBtn.addEventListener('click', () => showGroupInfoModal(conv));
   }
 }
 
@@ -1262,14 +1396,68 @@ async function createNewChat() {
   }
 }
 
-// ---------- 成员列表弹窗 ----------
+// ---------- 群信息弹窗（合并成员列表+群管理） ----------
 
-async function showMembersModal(convId) {
-  const modal = document.getElementById('imMembersModal');
-  const listEl = document.getElementById('imMembersList');
-  const titleEl = document.getElementById('imMembersTitle');
+// 群成员状态（用于选人组件过滤已有成员）
+let groupExistingMemberIds = [];
+// 当前选中的群成员（用于底部"设为管理员"/"转让群主"操作）
+let groupSelectedMember = null;
+
+/**
+ * 打开群信息弹窗，所有群成员可查看；群主/管理员可见编辑区和添加成员区
+ */
+async function showGroupInfoModal(conv) {
+  const modal = document.getElementById('imGroupInfoModal');
+  const titleEl = document.getElementById('imGroupInfoTitle');
+  const editSection = document.getElementById('imGroupInfoEditSection');
+  const addSection = document.getElementById('imGroupInfoAddSection');
+  const dissolveBtn = document.getElementById('imGroupInfoDissolve');
+  const setRoleBtn = document.getElementById('imGroupInfoSetRoleBtn');
+  const transferBtn = document.getElementById('imGroupInfoTransferBtn');
+  const nameInput = document.getElementById('imGroupInfoName');
+  const memberTitleEl = document.getElementById('imGroupInfoMemberTitle');
+
+  const isOwner = conv.role === 'owner';
+  const canManage = conv.role === 'owner' || conv.role === 'admin';
+
+  // 标题
+  titleEl.textContent = conv.name || '群信息';
+
+  // 编辑区：仅管理员可见
+  editSection.style.display = canManage ? '' : 'none';
+  if (canManage) {
+    nameInput.value = conv.name || '';
+    nameInput.setAttribute('data-original', conv.name || '');
+  }
+
+  // 添加成员区：仅管理员可见
+  addSection.style.display = canManage ? '' : 'none';
+
+  // 底部按钮可见性：解散群聊仅群主可见，设为管理员/转让群主仅群主可见
+  dissolveBtn.style.display = isOwner ? '' : 'none';
+  setRoleBtn.style.display = isOwner ? '' : 'none';
+  transferBtn.style.display = isOwner ? '' : 'none';
+  // 初始状态禁用（需先选中成员）
+  setRoleBtn.disabled = true;
+  transferBtn.disabled = true;
+
+  // 存储当前会话ID
+  modal.setAttribute('data-conv-id', conv.id);
+
+  // 加载成员列表
+  memberTitleEl.textContent = '群成员';
+  await loadGroupInfoMembers(conv.id);
 
   modal.classList.add('show');
+}
+
+/**
+ * 加载群成员列表并渲染到弹窗中
+ */
+async function loadGroupInfoMembers(convId) {
+  const listEl = document.getElementById('imGroupInfoMembers');
+  const memberTitleEl = document.getElementById('imGroupInfoMemberTitle');
+
   listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#bbb;">加载中...</div>';
 
   try {
@@ -1277,24 +1465,43 @@ async function showMembersModal(convId) {
     if (result.success && result.data) {
       const members = result.data;
       const conv = imConversations.find((c) => c.id === convId);
-      titleEl.textContent = `${conv ? conv.name : '群聊'} (${members.length} 人)`;
+      memberTitleEl.textContent = `群成员 (${members.length})`;
+
+      // 更新已有成员集合（供选人组件过滤使用）
+      groupExistingMemberIds = members.map((m) => m.userId);
+
+      const myRole = conv ? conv.role : 'member';
+      const isOwner = myRole === 'owner';
+
+      // 重置选中状态
+      groupSelectedMember = null;
+      updateGroupFooterButtons(conv);
 
       listEl.innerHTML = members.map((member) => {
         const initial = (member.username || '?').charAt(0).toUpperCase();
         const roleTag = member.role === 'owner' ? '<span class="im-member-role-tag">群主</span>' :
                        member.role === 'admin' ? '<span class="im-member-role-tag">管理员</span>' : '';
-        const canRemove = conv && (conv.role === 'owner' || conv.role === 'admin') && member.userId !== imCurrentUserId;
+        const canRemove = conv && (conv.role === 'owner' || conv.role === 'admin') && member.userId !== imCurrentUserId && member.role !== 'owner';
         const isSelf = member.userId === imCurrentUserId;
+        // 是否可被选中（群主可选非自己、非群主的成员）
+        const isSelectable = isOwner && !isSelf && member.role !== 'owner';
+
+        let actionBtns = '';
+        if (canRemove) {
+          actionBtns += `<button class="im-member-remove-btn" data-conv-id="${escapeHtml(convId)}" data-user-id="${escapeHtml(member.userId)}" data-username="${escapeHtml(member.username)}">移除</button>`;
+        }
+        if (isSelf && conv && conv.role !== 'owner') {
+          actionBtns += `<button class="im-member-remove-btn" data-conv-id="${escapeHtml(convId)}" data-user-id="${escapeHtml(member.userId)}" data-self-exit="true">退出群聊</button>`;
+        }
 
         return `
-          <div class="im-member-item">
+          <div class="im-member-item${isSelectable ? ' selectable' : ''}" data-user-id="${escapeHtml(member.userId)}" data-username="${escapeHtml(member.username)}" data-role="${escapeHtml(member.role)}" data-selectable="${isSelectable ? 'true' : 'false'}">
             <div class="im-member-avatar">${escapeHtml(initial)}</div>
             <div class="im-member-info">
               <div class="im-member-name">${escapeHtml(member.username)}${isSelf ? ' (我)' : ''} ${roleTag}</div>
               <div class="im-member-role">${escapeHtml(member.role)}</div>
             </div>
-            ${canRemove ? `<button class="im-member-remove-btn" data-conv-id="${escapeHtml(convId)}" data-user-id="${escapeHtml(member.userId)}" data-username="${escapeHtml(member.username)}">移除</button>` : ''}
-            ${isSelf && conv && conv.role !== 'owner' ? `<button class="im-member-remove-btn" data-conv-id="${escapeHtml(convId)}" data-user-id="${escapeHtml(member.userId)}" data-self-exit="true">退出群聊</button>` : ''}
+            <div class="im-member-actions">${actionBtns}</div>
           </div>
         `;
       }).join('');
@@ -1303,6 +1510,201 @@ async function showMembersModal(convId) {
     }
   } catch (err) {
     listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#bbb;">获取成员失败</div>';
+  }
+}
+
+/**
+ * 选中/取消选中群成员（点击成员项触发）
+ */
+function selectGroupMember(item) {
+  const isSelectable = item.getAttribute('data-selectable') === 'true';
+  if (!isSelectable) return;
+
+  const userId = item.getAttribute('data-user-id');
+  const username = item.getAttribute('data-username');
+  const role = item.getAttribute('data-role');
+
+  // 已选中同一成员 → 取消
+  if (groupSelectedMember && groupSelectedMember.userId === userId) {
+    groupSelectedMember = null;
+    item.classList.remove('selected');
+  } else {
+    // 取消之前的选中
+    document.querySelectorAll('#imGroupInfoMembers .im-member-item.selected').forEach((el) => el.classList.remove('selected'));
+    // 选中当前
+    groupSelectedMember = { userId, username, role };
+    item.classList.add('selected');
+  }
+
+  updateGroupFooterButtons(null);
+}
+
+/**
+ * 根据选中成员更新底部"设为管理员"/"转让群主"按钮状态
+ */
+function updateGroupFooterButtons(conv) {
+  const setRoleBtn = document.getElementById('imGroupInfoSetRoleBtn');
+  const transferBtn = document.getElementById('imGroupInfoTransferBtn');
+  if (!setRoleBtn || !transferBtn) return;
+
+  const isOwner = conv ? conv.role === 'owner' : true;
+
+  if (!isOwner) {
+    setRoleBtn.style.display = 'none';
+    transferBtn.style.display = 'none';
+    return;
+  }
+
+  setRoleBtn.style.display = '';
+  transferBtn.style.display = '';
+
+  if (groupSelectedMember) {
+    transferBtn.disabled = false;
+    // 设为管理员：不能对群主操作
+    if (groupSelectedMember.role === 'owner') {
+      setRoleBtn.disabled = true;
+    } else {
+      setRoleBtn.disabled = false;
+      setRoleBtn.textContent = groupSelectedMember.role === 'admin' ? '取消管理员' : '设为管理员';
+    }
+  } else {
+    setRoleBtn.disabled = true;
+    transferBtn.disabled = true;
+    setRoleBtn.textContent = '设为管理员';
+  }
+}
+
+/**
+ * 打开选人组件添加群成员
+ */
+async function openAddMemberPicker() {
+  const modal = document.getElementById('imGroupInfoModal');
+  const convId = modal.getAttribute('data-conv-id');
+  if (!convId) return;
+
+  const result = await window.electronAPI.imOpenAddMemberPicker(convId, groupExistingMemberIds);
+  if (!result.success) {
+    alert(result.message || '打开选人组件失败');
+  }
+}
+
+/**
+ * 自动保存群名（输入框失焦或回车时触发，名称未变化时跳过）
+ */
+async function autoSaveGroupName() {
+  const nameInput = document.getElementById('imGroupInfoName');
+  const name = nameInput.value.trim();
+  const original = nameInput.getAttribute('data-original') || '';
+
+  // 名称未变化，跳过
+  if (name === original.trim()) return;
+
+  if (!name) {
+    nameInput.value = original;
+    alert('群名不能为空');
+    return;
+  }
+  if (name.length > 64) {
+    alert('群名不能超过64个字符');
+    nameInput.value = original;
+    return;
+  }
+
+  const modal = document.getElementById('imGroupInfoModal');
+  const convId = modal.getAttribute('data-conv-id');
+
+  nameInput.disabled = true;
+
+  try {
+    const result = await window.electronAPI.imUpdateConversation(convId, name, undefined);
+    if (result.success) {
+      nameInput.setAttribute('data-original', name);
+      const conv = imConversations.find((c) => c.id === convId);
+      if (conv) {
+        conv.name = name;
+        renderConversationList();
+        if (convId === imActiveConversationId) renderChatHeader(conv);
+        document.getElementById('imGroupInfoTitle').textContent = name;
+        if (window.IMCache) window.IMCache.updateCachedConversation(conv).catch(() => {});
+      }
+    } else {
+      alert(result.message || '修改失败');
+      nameInput.value = original;
+    }
+  } catch (err) {
+    alert(err.message || '修改失败');
+    nameInput.value = original;
+  } finally {
+    nameInput.disabled = false;
+  }
+}
+
+/**
+ * 解散群聊
+ */
+async function dissolveGroup() {
+  const modal = document.getElementById('imGroupInfoModal');
+  const convId = modal.getAttribute('data-conv-id');
+  const errorEl = document.getElementById('imGroupInfoError');
+
+  if (!confirm('确定解散该群聊？解散后会话、成员关系、消息全部删除，不可恢复。')) return;
+
+  try {
+    const result = await window.electronAPI.imDissolveConversation(convId);
+    if (result.success) {
+      modal.classList.remove('show');
+      imConversations = imConversations.filter((c) => c.id !== convId);
+      if (convId === imActiveConversationId) {
+        imActiveConversationId = null;
+        renderChatEmpty();
+      }
+      renderConversationList();
+      updateTotalUnreadBadge();
+      if (window.IMCache) window.IMCache.clearConversationCache(convId).catch(() => {});
+    } else {
+      errorEl.textContent = result.message || '解散失败';
+    }
+  } catch (err) {
+    errorEl.textContent = err.message || '解散失败';
+  }
+}
+
+/**
+ * 转让群主
+ */
+async function transferOwnership(convId, userId, username) {
+  if (!confirm(`确定将群主转让给 ${username}？转让后您将降为普通成员。`)) return;
+
+  try {
+    const result = await window.electronAPI.imTransferOwnership(convId, userId);
+    if (result.success) {
+      // WebSocket 事件会处理 UI 更新，关闭弹窗即可
+      document.getElementById('imGroupInfoModal').classList.remove('show');
+    } else {
+      alert(result.message || '转让失败');
+    }
+  } catch (err) {
+    alert('转让失败: ' + err.message);
+  }
+}
+
+/**
+ * 设置/取消管理员
+ */
+async function setMemberRole(convId, userId, role, username) {
+  const actionText = role === 'admin' ? `设 ${username} 为管理员` : `取消 ${username} 的管理员`;
+  if (!confirm(`确定${actionText}？`)) return;
+
+  try {
+    const result = await window.electronAPI.imSetMemberRole(convId, userId, role);
+    if (result.success) {
+      // 刷新成员列表
+      await loadGroupInfoMembers(convId);
+    } else {
+      alert(result.message || '操作失败');
+    }
+  } catch (err) {
+    alert('操作失败: ' + err.message);
   }
 }
 
@@ -1607,42 +2009,96 @@ function bindIMEvents() {
   // 创建会话
   document.getElementById('imNewChatSubmit').addEventListener('click', createNewChat);
 
-  // ---- 成员列表弹窗 ----
-  document.getElementById('imMembersClose').addEventListener('click', () => {
-    document.getElementById('imMembersModal').classList.remove('show');
+  // ---- 群信息弹窗（合并成员列表+群管理） ----
+  document.getElementById('imGroupInfoClose').addEventListener('click', () => {
+    document.getElementById('imGroupInfoModal').classList.remove('show');
   });
 
-  document.getElementById('imMembersModal').addEventListener('click', (e) => {
-    if (e.target.id === 'imMembersModal') {
-      document.getElementById('imMembersModal').classList.remove('show');
+  document.getElementById('imGroupInfoModal').addEventListener('click', (e) => {
+    if (e.target.id === 'imGroupInfoModal') {
+      document.getElementById('imGroupInfoModal').classList.remove('show');
     }
   });
 
-  // 成员移除（事件委托）
-  document.getElementById('imMembersList').addEventListener('click', async (e) => {
-    const btn = e.target.closest('.im-member-remove-btn');
-    if (!btn) return;
+  // 群名自动保存（失焦或回车时触发）
+  const groupNameInput = document.getElementById('imGroupInfoName');
+  groupNameInput.addEventListener('blur', autoSaveGroupName);
+  groupNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      groupNameInput.blur();
+    }
+  });
 
-    const convId = btn.getAttribute('data-conv-id');
-    const userId = btn.getAttribute('data-user-id');
-    const isExit = btn.getAttribute('data-self-exit') === 'true';
-    const username = btn.getAttribute('data-username');
+  // 解散群聊
+  document.getElementById('imGroupInfoDissolve').addEventListener('click', dissolveGroup);
 
-    const confirmMsg = isExit ? '确定退出该群聊？' : `确定移除 ${username}？`;
-    if (!confirm(confirmMsg)) return;
+  // 添加成员按钮 — 打开选人组件
+  document.getElementById('imGroupInfoAddMemberBtn').addEventListener('click', openAddMemberPicker);
 
-    try {
-      const result = await window.electronAPI.imRemoveMember(convId, userId);
-      if (result.success) {
-        showMembersModal(convId); // 刷新成员列表
-        // 成员变动后强制刷新（成员元数据变化，本地缓存已失效）
-        await loadConversations(true);
-      } else {
-        alert(result.message || '操作失败');
+  // 选人组件添加群成员完成通知 → 刷新成员列表和会话列表
+  window.electronAPI.onAddMemberDone(async () => {
+    const modal = document.getElementById('imGroupInfoModal');
+    const convId = modal.getAttribute('data-conv-id');
+    if (convId) {
+      await loadGroupInfoMembers(convId);
+      await loadConversations(true);
+    }
+  });
+
+  // 成员列表操作（移除/退出 + 点击选中成员）
+  document.getElementById('imGroupInfoMembers').addEventListener('click', async (e) => {
+    // 移除成员 / 退出群聊
+    const removeBtn = e.target.closest('.im-member-remove-btn');
+    if (removeBtn) {
+      const convId = removeBtn.getAttribute('data-conv-id');
+      const userId = removeBtn.getAttribute('data-user-id');
+      const isExit = removeBtn.getAttribute('data-self-exit') === 'true';
+      const username = removeBtn.getAttribute('data-username');
+
+      const confirmMsg = isExit ? '确定退出该群聊？' : `确定移除 ${username}？`;
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const result = await window.electronAPI.imRemoveMember(convId, userId);
+        if (result.success) {
+          if (isExit) {
+            document.getElementById('imGroupInfoModal').classList.remove('show');
+          } else {
+            await loadGroupInfoMembers(convId);
+          }
+          await loadConversations(true);
+        } else {
+          alert(result.message || '操作失败');
+        }
+      } catch (err) {
+        alert('操作失败: ' + err.message);
       }
-    } catch (err) {
-      alert('操作失败: ' + err.message);
+      return;
     }
+
+    // 点击成员项 → 选中/取消选中
+    const item = e.target.closest('.im-member-item');
+    if (item) {
+      selectGroupMember(item);
+    }
+  });
+
+  // 底部"设为管理员"/"取消管理员"按钮
+  document.getElementById('imGroupInfoSetRoleBtn').addEventListener('click', async () => {
+    if (!groupSelectedMember) return;
+    const modal = document.getElementById('imGroupInfoModal');
+    const convId = modal.getAttribute('data-conv-id');
+    const role = groupSelectedMember.role === 'admin' ? 'member' : 'admin';
+    await setMemberRole(convId, groupSelectedMember.userId, role, groupSelectedMember.username);
+  });
+
+  // 底部"转让群主"按钮
+  document.getElementById('imGroupInfoTransferBtn').addEventListener('click', async () => {
+    if (!groupSelectedMember) return;
+    const modal = document.getElementById('imGroupInfoModal');
+    const convId = modal.getAttribute('data-conv-id');
+    await transferOwnership(convId, groupSelectedMember.userId, groupSelectedMember.username);
   });
 
   // 定时刷新会话列表（每 60 秒）

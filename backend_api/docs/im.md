@@ -98,11 +98,15 @@
 | POST | `/api/chat/conversations` | 创建会话 | JWT |
 | GET | `/api/chat/conversations` | 会话列表（含未读数） | JWT |
 | GET | `/api/chat/conversations/:id` | 会话详情 | JWT |
+| PUT | `/api/chat/conversations/:id` | 修改群聊信息（群名/头像） | JWT |
+| DELETE | `/api/chat/conversations/:id` | 解散群聊 | JWT |
+| POST | `/api/chat/conversations/:id/transfer` | 转让群主 | JWT |
 | GET | `/api/chat/conversations/:id/messages` | 历史消息（分页/增量同步） | JWT |
 | POST | `/api/chat/conversations/:id/messages` | 发送消息（HTTP 备用通道） | JWT |
 | POST | `/api/chat/conversations/:id/read` | 标记已读 | JWT |
 | POST | `/api/chat/conversations/:id/members` | 添加成员（群聊） | JWT |
 | DELETE | `/api/chat/conversations/:id/members/:userId` | 移除成员（群聊） | JWT |
+| PUT | `/api/chat/conversations/:id/members/:userId/role` | 设置/取消管理员 | JWT |
 | GET | `/api/chat/conversations/:id/members` | 成员列表 | JWT |
 | GET | `/api/chat/unread/count` | 总未读消息数 | JWT |
 | GET | `/api/chat/online` | 在线用户列表 | JWT |
@@ -393,7 +397,7 @@ IM 功能**不维护独立的登录认证**，完全复用 `interface.md` 中已
 
 | 文件 | 作用 | 大模型依赖程度 |
 |------|------|---------------|
-| `im-interface.md` | API 契约层：统一响应格式、13 个 REST 接口的完整请求/响应 JSON、5 个数据模型 TypeScript 定义、8 种 WebSocket 事件完整 JSON 示例、认证加密流程、错误码表 | 必需，生成代码的核心依据 |
+| `im-interface.md` | API 契约层：统一响应格式、17 个 REST 接口的完整请求/响应 JSON、5 个数据模型 TypeScript 定义、13 种 WebSocket 服务端事件完整 JSON 示例、认证加密流程、错误码表 | 必需，生成代码的核心依据 |
 | `im.md` | 架构背景层：技术选型理由、心跳/重连策略、离线消息同步流程、安全约束、Docker 部署信息、配置参数 | 补充，帮助理解约束和边界条件 |
 
 ### 已覆盖的关键信息
@@ -401,8 +405,8 @@ IM 功能**不维护独立的登录认证**，完全复用 `interface.md` 中已
 1. 统一响应格式 — `{ code: 0, data }` 成功 / `{ code, message }` 错误
 2. 认证完整流程 — 获取公钥 → RSA+AES 混合加密登录 → Token 刷新 → Token 过期重连
 3. 5 个数据模型 — Message、ConversationListItem、ConversationDetail、User、UploadFile
-4. 13 个 REST API — 每个都有请求体示例、字段说明、响应 JSON、错误码表
-5. WebSocket 协议 — 4 种客户端消息 + 9 种服务端事件（含 `message_update` 消息更新），完整 JSON 示例
+4. 17 个 REST API — 每个都有请求体示例、字段说明、响应 JSON、错误码表
+5. WebSocket 协议 — 4 种客户端消息 + 13 种服务端事件（含 `message_update` 消息更新、群管理事件），完整 JSON 示例
 6. WebSocket 关闭码 — 4001（认证失败）、4002（连接超限）
 7. 心跳保活 — ping/pong 机制，30 秒间隔
 8. 离线消息同步 — 用 `after` 参数增量拉取

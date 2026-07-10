@@ -147,6 +147,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('im-add-member', { conversationId, userId }),
   imRemoveMember: (conversationId, userId) =>
     ipcRenderer.invoke('im-remove-member', { conversationId, userId }),
+  imUpdateConversation: (conversationId, name, avatar) =>
+    ipcRenderer.invoke('im-update-conversation', { conversationId, name, avatar }),
+  imDissolveConversation: (conversationId) =>
+    ipcRenderer.invoke('im-dissolve-conversation', { conversationId }),
+  imTransferOwnership: (conversationId, userId) =>
+    ipcRenderer.invoke('im-transfer-ownership', { conversationId, userId }),
+  imSetMemberRole: (conversationId, userId, role) =>
+    ipcRenderer.invoke('im-set-member-role', { conversationId, userId, role }),
+  imOpenAddMemberPicker: (conversationId, existingMemberIds) =>
+    ipcRenderer.invoke('im-open-add-member-picker', { conversationId, existingMemberIds }),
+  notifyAddMemberDone: () => ipcRenderer.send('im-add-member-done'),
+  onAddMemberDone: (callback) => {
+    ipcRenderer.on('im-add-member-done', () => callback());
+  },
   imGetUnreadCount: () => ipcRenderer.invoke('im-get-unread-count'),
   imGetOnlineUsers: () => ipcRenderer.invoke('im-get-online-users'),
   imUploadFile: (filePath, filename, mimetype, fileData) =>

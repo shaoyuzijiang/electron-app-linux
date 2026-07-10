@@ -759,6 +759,175 @@ GET /api/user-picker/search?q=<关键词>
 
 ---
 
+### 5.14 修改群聊信息
+
+```
+PUT /api/chat/conversations/:id
+```
+
+**仅群主或管理员可操作，仅适用于群聊。**
+
+**请求体：**
+
+```json
+{
+  "name": "新群名",
+  "avatar": "https://example.com/avatar.png"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 否 | 群名（1-64字符），至少传一项 |
+| avatar | string | 否 | 群头像URL，传空字符串清除头像 |
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Conversation updated"
+  }
+}
+```
+
+> 所有在线成员会通过 WebSocket 收到 `conversation_updated` 事件。
+
+**错误：**
+
+| HTTP | message | 说明 |
+|------|---------|------|
+| 400 | Can only update group chat | 非群聊会话 |
+| 400 | Group name cannot be empty | 群名为空 |
+| 400 | Group name must be 64 characters or less | 群名超长 |
+| 400 | No fields to update | 未传任何可修改字段 |
+| 403 | Only owner or admin can update group info | 权限不足 |
+| 404 | Conversation not found or access denied | 会话不存在 |
+
+### 5.15 解散群聊
+
+```
+DELETE /api/chat/conversations/:id
+```
+
+**仅群主可操作，仅适用于群聊。解散后会话、成员关系、消息全部删除，不可恢复。**
+
+**无请求体**
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Group dissolved"
+  }
+}
+```
+
+> 所有前成员会通过 WebSocket 收到 `conversation_dissolved` 事件。
+
+**错误：**
+
+| HTTP | message | 说明 |
+|------|---------|------|
+| 400 | Can only dissolve group chat | 非群聊会话 |
+| 403 | Only owner can dissolve the group | 权限不足 |
+| 404 | Conversation not found or access denied | 会话不存在 |
+
+### 5.16 转让群主
+
+```
+POST /api/chat/conversations/:id/transfer
+```
+
+**仅群主可操作，仅适用于群聊。转让后原群主降为普通成员。**
+
+**请求体：**
+
+```json
+{
+  "userId": "lisi@example.com"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| userId | string | 是 | 新群主的用户ID（必须是当前群成员） |
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Ownership transferred"
+  }
+}
+```
+
+> 所有在线成员会通过 WebSocket 收到 `ownership_transferred` 事件。
+
+**错误：**
+
+| HTTP | message | 说明 |
+|------|---------|------|
+| 400 | Can only transfer ownership in group chat | 非群聊会话 |
+| 400 | Cannot transfer ownership to yourself | 不能转让给自己 |
+| 400 | userId is required | 缺少 userId |
+| 403 | Only owner can transfer ownership | 权限不足 |
+| 404 | Conversation not found or access denied | 会话不存在 |
+| 404 | Target user is not a member | 目标用户非群成员 |
+
+### 5.17 设置/取消管理员
+
+```
+PUT /api/chat/conversations/:id/members/:userId/role
+```
+
+**仅群主可操作，仅适用于群聊。不能修改自己的角色或群主的角色。**
+
+**请求体：**
+
+```json
+{
+  "role": "admin"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| role | string | 是 | `"admin"`（设为管理员）或 `"member"`（取消管理员） |
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message": "Role updated"
+  }
+}
+```
+
+> 被调整角色的用户会通过 WebSocket 收到 `role_changed` 事件。
+
+**错误：**
+
+| HTTP | message | 说明 |
+|------|---------|------|
+| 400 | Can only set roles in group chat | 非群聊会话 |
+| 400 | Cannot change your own role | 不能修改自己的角色 |
+| 400 | Role must be "admin" or "member" | role 值无效 |
+| 400 | role is required | 缺少 role |
+| 403 | Only owner can manage roles | 权限不足 |
+| 403 | Cannot change the owner's role | 不能修改群主角色 |
+| 404 | Conversation not found or access denied | 会话不存在 |
+| 404 | Target user is not a member | 目标用户非群成员 |
+
+---
+
 ## 六、文件访问
 
 上传的文件通过 HTTP 静态服务访问，无需认证。
@@ -1001,6 +1170,86 @@ WebSocket 连接建立后，服务端立即发送：
 
 > 客户端收到此事件后，应根据 `id` 在本地消息列表中找到对应消息，用新的 `content` 替换，并触发 UI 重新渲染。对于卡片消息，`disabled: true` 会使卡片以灰色不可点击状态显示。
 
+#### 7.4.10 群信息更新 `conversation_updated`
+
+当群主或管理员修改群名/群头像时，所有在线成员收到：
+
+```json
+{
+  "action": "conversation_updated",
+  "data": {
+    "conversationId": "conv-uuid-1",
+    "name": "新群名",
+    "avatar": "https://example.com/avatar.png"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| conversationId | string | 会话ID |
+| name | string \| null | 新群名（未修改时为 null） |
+| avatar | string \| null | 新头像URL（未修改时为 null） |
+
+> 客户端应更新本地会话列表中对应会话的 `name`/`avatar` 字段并刷新 UI。
+
+#### 7.4.11 群已解散 `conversation_dissolved`
+
+当群主解散群聊时，所有前成员收到：
+
+```json
+{
+  "action": "conversation_dissolved",
+  "data": {
+    "conversationId": "conv-uuid-1"
+  }
+}
+```
+
+> 客户端应从本地会话列表中移除该会话，关闭对应的聊天窗口。
+
+#### 7.4.12 群主转让 `ownership_transferred`
+
+当群主将群转让给其他成员时，所有在线成员收到：
+
+```json
+{
+  "action": "ownership_transferred",
+  "data": {
+    "conversationId": "conv-uuid-1",
+    "newOwnerId": "lisi@example.com"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| conversationId | string | 会话ID |
+| newOwnerId | string | 新群主的用户ID |
+
+> 客户端应更新成员列表中的角色：新群主为 `owner`，原群主为 `member`。如果当前用户是新群主或原群主，需更新自身的 `role` 字段以反映新的权限。
+
+#### 7.4.13 角色变更 `role_changed`
+
+当群主设置/取消管理员时，被调整角色的用户收到：
+
+```json
+{
+  "action": "role_changed",
+  "data": {
+    "conversationId": "conv-uuid-1",
+    "role": "admin"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| conversationId | string | 会话ID |
+| role | string | 新角色 `"admin"` 或 `"member"` |
+
+> 客户端应更新当前用户在该会话中的 `role` 字段，并相应调整 UI（如显示/隐藏群管理按钮）。
+
 ## 八、客户端开发指南
 
 ### 8.1 认证流程
@@ -1169,6 +1418,101 @@ function handleMessageUpdate(data) {
 - WebSocket 消息发送频率限制：每秒最多 10 条
 - 超限时收到 `{"action":"error","message":"Message rate limit exceeded"}`
 - REST API 登录/刷新有独立的速率限制，失败次数过多会临时锁定账户
+
+### 8.9 群聊管理事件处理
+
+客户端需处理以下群管理 WebSocket 事件，实时更新本地状态：
+
+**事件处理流程：**
+
+```
+收到 WebSocket 事件
+    │
+    ├── conversation_updated（群信息变更）
+    │   └── 更新本地会话列表中对应会话的 name/avatar，刷新 UI
+    │
+    ├── conversation_dissolved（群已解散）
+    │   └── 从本地会话列表移除该会话，关闭对应聊天窗口
+    │
+    ├── ownership_transferred（群主转让）
+    │   ├── 更新成员列表：新群主 role='owner'，原群主 role='member'
+    │   └── 若当前用户是新群主或原群主，更新自身 role 以反映新权限
+    │
+    └── role_changed（角色变更）
+        └── 若当前用户是被调整者，更新自身在该会话的 role
+            ├── role='admin' → 显示群管理入口
+            └── role='member' → 隐藏仅管理员可见的入口
+```
+
+**伪代码示例：**
+
+```javascript
+function handleGroupEvent(event) {
+  const { action, data } = event;
+
+  switch (action) {
+    case 'conversation_updated': {
+      const conv = conversations.find(c => c.id === data.conversationId);
+      if (conv) {
+        if (data.name !== null && data.name !== undefined) conv.name = data.name;
+        if (data.avatar !== null && data.avatar !== undefined) conv.avatar = data.avatar;
+        renderConversations();
+      }
+      break;
+    }
+
+    case 'conversation_dissolved': {
+      // 从列表中移除
+      conversations = conversations.filter(c => c.id !== data.conversationId);
+      // 关闭聊天窗口（如正在查看该会话）
+      if (currentConvId === data.conversationId) {
+        closeChatWindow();
+      }
+      renderConversations();
+      break;
+    }
+
+    case 'ownership_transferred': {
+      const conv = conversations.find(c => c.id === data.conversationId);
+      if (conv) {
+        // 更新成员角色
+        if (conv.members) {
+          const oldOwner = conv.members.find(m => m.role === 'owner');
+          if (oldOwner) oldOwner.role = 'member';
+          const newOwner = conv.members.find(m => m.userId === data.newOwnerId);
+          if (newOwner) newOwner.role = 'owner';
+        }
+        // 若当前用户是当事人，更新自身角色
+        if (currentUser.id === data.newOwnerId) conv.role = 'owner';
+        else if (currentUser.id === conv.createdBy) conv.role = 'member';
+      }
+      break;
+    }
+
+    case 'role_changed': {
+      const conv = conversations.find(c => c.id === data.conversationId);
+      if (conv && currentUser.id === /* 被调整者 */) {
+        conv.role = data.role;
+        // 根据新角色显示/隐藏管理入口
+        updateAdminUI(conv);
+      }
+      break;
+    }
+  }
+}
+```
+
+**离线补偿：**
+
+群管理事件为实时推送，离线用户无需特殊处理。下次上线时：
+- `GET /api/chat/conversations` 返回的会话列表已反映最新的群名、群头像
+- 已解散的群不再出现在会话列表中
+- `GET /api/chat/conversations/:id` 返回的 `role` 字段已反映最新的角色
+- 成员列表（`members`）已反映最新的角色分配
+
+**群主退出限制：**
+
+群主不能直接退出群聊（`DELETE /api/chat/conversations/:id/members/:userId` 会返回 403）。群主须先通过 `POST /api/chat/conversations/:id/transfer` 转让群主，或通过 `DELETE /api/chat/conversations/:id` 解散群聊。
 
 ---
 

@@ -61,9 +61,9 @@ function getMeetingWindowInfo() {
 }
 
 /**
- * 打开选人组件独立窗口，定位到会中窗口上方
- * @param {string} type - 'invite_users' 或 'invite_meeting'
- * @param {string} cbMsg - SDK 回调原始 JSON 消息
+ * 打开选人组件独立窗口
+ * @param {string} type - 'invite_users' | 'invite_meeting' | 'add_group_members'
+ * @param {string} cbMsg - SDK 回调原始 JSON 消息（invite 模式），或 JSON 字符串 { conversationId, existingMemberIds }（add_group_members 模式）
  */
 function openUserPickerWindow(type, cbMsg) {
   if (userPickerWindow && !userPickerWindow.isDestroyed()) {
@@ -71,7 +71,8 @@ function openUserPickerWindow(type, cbMsg) {
     userPickerWindow = null;
   }
 
-  const meetingWinInfo = getMeetingWindowInfo();
+  // 添加群成员模式始终基于主窗口定位（不在会中场景）
+  const meetingWinInfo = type === 'add_group_members' ? null : getMeetingWindowInfo();
   console.log('[选人组件] 会中窗口信息:', JSON.stringify(meetingWinInfo));
 
   const pickerWidth = 800;
@@ -94,6 +95,12 @@ function openUserPickerWindow(type, cbMsg) {
     }
   }
 
+  const titleMap = {
+    invite_meeting: '邀请参会',
+    invite_users: '邀请成员',
+    add_group_members: '添加群成员',
+  };
+
   userPickerWindow = new BrowserWindow({
     width: pickerWidth,
     height: pickerHeight,
@@ -101,7 +108,7 @@ function openUserPickerWindow(type, cbMsg) {
     minHeight: 480,
     x: posX,
     y: posY,
-    title: type === 'invite_meeting' ? '邀请参会' : '邀请成员',
+    title: titleMap[type] || '选人',
     resizable: true,
     minimizable: false,
     maximizable: false,

@@ -736,12 +736,7 @@
   fill: #1e6fff;
 }
 
-/* ---- 成员列表弹窗 ---- */
-.im-members-modal .modal-card {
-  width: 400px;
-  max-height: 80vh;
-  overflow-y: auto;
-}
+/* ---- 成员列表项（用于群信息弹窗内） ---- */
 
 .im-member-item {
   display: flex;
@@ -806,6 +801,162 @@
 }
 
 .im-member-remove-btn:hover {
+  background: #fff1f0;
+}
+
+/* 成员操作按钮容器 */
+.im-member-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+/* 成员操作按钮（底部栏使用） */
+.im-member-action-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #1e6fff;
+  background: transparent;
+  border: 1px solid #91d5ff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.im-member-action-btn:hover:not(:disabled) {
+  background: #e3f0ff;
+}
+
+.im-member-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.im-member-action-btn.transfer {
+  color: #fa8c16;
+  border-color: #ffd591;
+}
+
+.im-member-action-btn.transfer:hover:not(:disabled) {
+  background: #fff7e6;
+}
+
+/* ---- 群信息弹窗（合并成员列表+群管理） ---- */
+.im-group-info-modal .modal-card {
+  width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.im-group-info-modal .modal-card::-webkit-scrollbar {
+  width: 5px;
+}
+
+.im-group-info-modal .modal-card::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.im-group-info-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+  margin-top: 4px;
+}
+
+/* 底部操作栏 */
+.im-group-info-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.im-group-info-footer-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 成员项可选中状态 */
+.im-member-item.selectable {
+  cursor: pointer;
+}
+
+.im-member-item.selectable:hover {
+  background: #f5f9ff;
+}
+
+.im-member-item.selected {
+  background: #e3f0ff;
+}
+
+/* 添加成员按钮 */
+.im-add-member-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  color: #fff;
+  background: #1e6fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.im-add-member-btn:hover {
+  opacity: 0.88;
+}
+
+/* 添加成员 — 打开选人组件按钮 */
+.im-add-member-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  color: #1e6fff;
+  background: #e3f0ff;
+  border: 1px dashed #91d5ff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 14px;
+}
+
+.im-add-member-open-btn:hover {
+  background: #d0e8ff;
+}
+
+.im-add-member-open-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: #1e6fff;
+}
+
+/* 危险操作按钮 */
+.im-danger-btn {
+  padding: 8px 24px;
+  font-size: 13px;
+  color: #ff4d4f;
+  background: transparent;
+  border: 1px solid #ffa39e;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.im-danger-btn:hover {
   background: #fff1f0;
 }
 

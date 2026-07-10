@@ -1173,6 +1173,76 @@ function register(ipcMain, deps) {
     }
   });
 
+  // 修改群聊信息（群名/群头像）
+  ipcMain.handle('im-update-conversation', async (_event, { conversationId, name, avatar }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const params = {};
+      if (name !== undefined && name !== null) params.name = name;
+      if (avatar !== undefined && avatar !== null) params.avatar = avatar;
+      const data = await api.updateConversation(accessToken, conversationId, params);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 解散群聊
+  ipcMain.handle('im-dissolve-conversation', async (_event, { conversationId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.dissolveConversation(accessToken, conversationId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 转让群主
+  ipcMain.handle('im-transfer-ownership', async (_event, { conversationId, userId }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.transferOwnership(accessToken, conversationId, userId);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 设置/取消管理员
+  ipcMain.handle('im-set-member-role', async (_event, { conversationId, userId, role }) => {
+    try {
+      const accessToken = await getValidAccessToken();
+      const data = await api.setMemberRole(accessToken, conversationId, userId, role);
+      return { success: true, data };
+    } catch (err) {
+      if (err.message === '未登录') return { success: false, message: '未登录，请重新登录' };
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 打开选人组件添加群成员
+  ipcMain.handle('im-open-add-member-picker', async (_event, { conversationId, existingMemberIds }) => {
+    try {
+      const cbMsg = JSON.stringify({ conversationId, existingMemberIds: existingMemberIds || [] });
+      openUserPickerWindow('add_group_members', cbMsg);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 选人组件添加群成员完成通知 → 转发给主窗口刷新
+  ipcMain.on('im-add-member-done', () => {
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('im-add-member-done');
+    }
+  });
+
   // 获取总未读数
   ipcMain.handle('im-get-unread-count', async () => {
     try {

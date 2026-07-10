@@ -204,16 +204,43 @@
     </div>
   </div>
 
-  <!-- 成员列表弹窗 -->
-  <div class="modal-overlay im-members-modal" id="imMembersModal">
+  <!-- 群信息弹窗（合并成员列表+群管理） -->
+  <div class="modal-overlay im-group-info-modal" id="imGroupInfoModal">
     <div class="modal-card">
-      <h2 id="imMembersTitle">群成员</h2>
-      <p class="modal-desc">群聊成员列表</p>
-      <div id="imMembersList" style="max-height:400px;overflow-y:auto;">
+      <h2 id="imGroupInfoTitle">群信息</h2>
+      <p class="modal-desc">群聊信息与成员管理</p>
+
+      <!-- 群信息编辑区（仅群主/管理员可见） -->
+      <div id="imGroupInfoEditSection" style="display:none;">
+        <div class="form-group">
+          <label>群聊名称</label>
+          <input type="text" id="imGroupInfoName" placeholder="请输入群聊名称（≤64字符）" maxlength="64" />
+        </div>
+      </div>
+
+      <!-- 添加成员区（仅群主/管理员可见） -->
+      <div id="imGroupInfoAddSection" style="display:none;">
+        <div class="im-group-info-section-title">添加成员</div>
+        <button class="im-add-member-open-btn" id="imGroupInfoAddMemberBtn">
+          <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          <span>从通讯录添加</span>
+        </button>
+      </div>
+
+      <!-- 成员列表区 -->
+      <div class="im-group-info-section-title" id="imGroupInfoMemberTitle">群成员</div>
+      <div id="imGroupInfoMembers" style="max-height:300px;overflow-y:auto;">
         <!-- 成员列表动态渲染 -->
       </div>
-      <div class="modal-actions">
-        <button class="btn-submit" id="imMembersClose">关闭</button>
+
+      <!-- 底部操作栏 -->
+      <div class="im-group-info-footer">
+        <button class="im-member-action-btn" id="imGroupInfoSetRoleBtn" disabled>设为管理员</button>
+        <button class="im-member-action-btn transfer" id="imGroupInfoTransferBtn" disabled>转让群主</button>
+        <div class="im-group-info-footer-right">
+          <button class="im-danger-btn" id="imGroupInfoDissolve" style="display:none;">解散群聊</button>
+          <button class="im-member-action-btn" id="imGroupInfoClose">关闭</button>
+        </div>
       </div>
     </div>
   </div>
