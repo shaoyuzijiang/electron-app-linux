@@ -14,7 +14,7 @@
     "pack": "node bootstrap/build.js --dir",
     "dist": "node bootstrap/build.js",
     "dist:mac:arm64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --arm64",
-    "dist:mac:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --x64",
+    "dist:mac:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/x64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --x64",
     "dist:win:x64": "node bootstrap/build.js --x64",
     "create-universal-node": "lipo -create output/mac/wemeet_electron_sdk.arm64.node output/mac/wemeet_electron_sdk.x64.node -output output/mac/wemeet_electron_sdk.node",
     "create-universal-framework": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && lipo -create wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework/Versions/A/TMSDK wemeet_sdk/mac/Frameworks/x64/TMSDK.framework/Versions/A/TMSDK -output output/mac/TMSDK.framework/Versions/A/TMSDK && cp output/mac/TMSDK.framework/Versions/A/TMSDK output/mac/TMSDK.framework/TMSDK",
