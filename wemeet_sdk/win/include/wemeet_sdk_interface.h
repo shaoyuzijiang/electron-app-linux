@@ -36,7 +36,6 @@ class IPreMeetingCallback {
 public:
   virtual ~IPreMeetingCallback() {}
   virtual void OnJoinMeeting(int code, const char* msg, const char* meeting_code) = 0;
-  virtual void OnShowScreenCastViewResult(int code, const char* msg) = 0;
   virtual void OnActionResult(int action_type, int code, const char* msg) = 0;
   virtual void OnShowAddressBook(int user_type, const char* msg) {}
   virtual void OnRingInvitationEvent(int ring_state, const char* msg) = 0;

@@ -29,10 +29,6 @@ public:
   virtual void SetCallback(IAuthenticationCallback* callback) = 0;
 
   virtual void Login(const char* sso_url) = 0;
-    
-  virtual void LoginByAccountPassword(const char* login_url, const char* user_name, const char* passwd) = 0;
-
-  virtual void LoginByCode(const char* auth_code, const char* user_id, int login_type) = 0;
 
   virtual void LoginByJSON(const char* login_json) = 0;
   
@@ -330,22 +326,6 @@ public:
   */
   virtual void ShowLogs() = 0;
 
-
-/**
-  * 显示SDK界面
-  *
-  * @param params json字符串
-  *
-  * @note 显示SDK界面
-  */
-  virtual void ShowSDKView(const char* params) = 0;
-  /**
-  * 将SDK窗口置顶
-  *
-  * @note SDK如果没有窗口，则不做任何操作
-  */
-  virtual void BringViewTop() = 0;
-
   /**
   * 根据开始和结束时间，返回会议SDK的日志文件路径
   *
@@ -416,6 +396,23 @@ public:
   * @note
   */
   virtual void AddUsersWithParam(const char* json_param) = 0;
+
+  /**
+   * 设置外观模式
+   *  
+   * @param mode 外观模式: 1-浅色模式，2-深色模式
+   * @note
+  */
+  virtual void SetAppearanceMode(SDKAppearanceMode mode, CompleteHandler handler, void* user_data) = 0;
+
+  /**
+   * 获取外观模式
+   *
+   * @param 
+   * @note
+  */
+  virtual void GetAppearanceMode(CompleteHandlerWithValue complete, void* user_data) = 0;
+
   /**
 
   * @note 获取SDKAccountService的对象实例

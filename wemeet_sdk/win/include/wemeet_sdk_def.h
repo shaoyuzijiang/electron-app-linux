@@ -130,6 +130,8 @@ enum WemeetSDKErrCode {
   kTMSDKScreenShareUpStreamServerError = -5016,
   kTMSDKCaptionSourceLangServerError = -5017,
   kTMSDKCaptionTargetLangServerError = -5018,
+
+  kTMSDKErrorAudioDeviceFailed = -7001,              // 会中音频设备异常
 };
 
 enum WemeetSDKActionType {
@@ -195,6 +197,11 @@ enum InMeetingLeaveCastRoomActionType {
   kInMeetingLeaveCastRoomDefaultShowDialog  = 0,             // 弹框
   kInMeetingLeaveCastRoomLeaveMeeting = 1,       // 结束投屏后退会
   kInMeetingLeaveCastRoomStayInMeeting = 2,       // 结束投屏后留在会中
+};
+
+enum SDKAppearanceMode {
+  kSDKAppearanceModeLight = 1,
+  kSDKAppearanceModeDark = 2,
 };
 
 typedef struct tagInitParams {

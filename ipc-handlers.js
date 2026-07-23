@@ -484,7 +484,7 @@ function register(ipcMain, deps) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
     try {
-      wemeetSdk.ShowScheduleMeetingView(meetingType || 0);
+      wemeetSdk.ShowScheduleMeetingView(Boolean(meetingType));
       return { success: true };
     } catch (err) {
       return { success: false, message: err.message };
@@ -680,9 +680,9 @@ function register(ipcMain, deps) {
     }
     try {
       if (startTime !== undefined && isHistory !== undefined) {
-        wemeetSdk.ShowMeetingDetailView(meetingId, subMeetingId, startTime, isHistory);
+        wemeetSdk.ShowMeetingDetailView(String(meetingId), String(subMeetingId), String(startTime), Boolean(isHistory));
       } else {
-        wemeetSdk.ShowMeetingDetailView(meetingId, subMeetingId);
+        wemeetSdk.ShowMeetingDetailView(String(meetingId), String(subMeetingId));
       }
       return { success: true };
     } catch (err) {
@@ -767,7 +767,7 @@ function register(ipcMain, deps) {
       return { success: false, message: 'SDK 未初始化' };
     }
     try {
-      wemeetSdk.EnableAddressBookCallback(enable, show);
+      wemeetSdk.EnableAddressBookCallback(Boolean(enable), Boolean(show));
       return { success: true };
     } catch (err) {
       return { success: false, message: err.message };
@@ -779,7 +779,7 @@ function register(ipcMain, deps) {
       return { success: false, message: 'SDK 未初始化' };
     }
     try {
-      wemeetSdk.SetNeedMeetingInfoCallback(enable, show);
+      wemeetSdk.SetNeedMeetingInfoCallback(Boolean(enable), Boolean(show));
       return { success: true };
     } catch (err) {
       return { success: false, message: err.message };
@@ -793,7 +793,7 @@ function register(ipcMain, deps) {
     try {
       const result = wemeetSdk.SubscribeInMeetingActionEvent(
         String(actionType),
-        subscribe,
+        Boolean(subscribe),
         subscriptionJson || ''
       );
       return { success: true, data: result };
@@ -831,7 +831,7 @@ function register(ipcMain, deps) {
       return { success: false, message: 'SDK 未加载' };
     }
     try {
-      wemeetSdk.HandleRingInvitation(accept, inviteId);
+      wemeetSdk.HandleRingInvitation(Boolean(accept), String(inviteId));
       return { success: true };
     } catch (err) {
       return { success: false, message: err.message };

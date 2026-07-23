@@ -15,6 +15,7 @@
           "include_dirs": [
             "wemeet_sdk/win/include",
             "./include",
+            "./include/json",
             "<!@(node -p \"require('node-addon-api').include\")"
           ],
           "msvs_settings": {
@@ -44,6 +45,7 @@
           "include_dirs": [
             "wemeet_sdk/win/include",
             "./include",
+            "./include/json",
             "<!@(node -p \"require('node-addon-api').include\")"
           ],
           "msvs_settings": {
@@ -88,6 +90,7 @@
           "include_dirs" : [
             'wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework/Headers',
             "include",
+            "include/json",
             "wemeet_sdk/mac",
            ],
         }
@@ -123,6 +126,7 @@
           "include_dirs" : [
             'wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework/Headers',
             "include",
+            "include/json",
             "wemeet_sdk/mac",
            ],
         }

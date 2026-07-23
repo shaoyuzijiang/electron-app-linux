@@ -241,7 +241,7 @@ copy.bat
 `copy.bat` 会从 `SDK_SRC` 路径拷贝以下内容：
 - `*.dll` — SDK 运行时 DLL（`wemeetsdk_x64.dll`、`wemeet_base.dll`、VC 运行时等）
 - `wemeetsdk_x64.lib` — 链接库（同步到 `wemeet_sdk/win/lib/x64/release/`）
-- `Release\` — SDK 模块、插件、资源等目录
+- `Release\` — SDK 业务 DLL（`wemeet.dll`、`Qt6Core.dll` 等）、模块、插件、资源等
 - `wemeet_electron_sdk.node` — 编译后的原生模块
 
 > 使用前需修改 `copy.bat` 中的 `SDK_SRC` 变量指向实际的 SDK 分发包路径。
@@ -325,8 +325,8 @@ npm run build:native:win-x64 && npm run dist:win:x64
 
 ### Windows
 
-- SDK 运行时 DLL（`wemeetsdk_x64.dll` 等）需放置在 `wemeet_sdk/win/x64/` 目录中，主进程会自动将该目录加入 `PATH` 环境变量
-- SDK 的 `Release` 目录（含 modules、plugins、resources 等）需放置在 `wemeet_sdk/win/x64/Release/`，与 `wemeet_electron_sdk.node` 同级
+- SDK 核心运行时 DLL（`wemeetsdk_x64.dll`、`wemeet_base.dll`、VC 运行时等）需放置在 `wemeet_sdk/win/x64/` 目录中，主进程会自动将该目录加入 `PATH` 环境变量
+- SDK 的 `Release` 目录（含业务 DLL `wemeet.dll`/`Qt6Core.dll` 等，以及 modules、plugins、resources 等资源）需放置在 `wemeet_sdk/win/x64/Release/`，与 `wemeet_electron_sdk.node` 同级；业务 DLL 由 SDK 内部自动从 `Release/` 加载，无需加入 `PATH`
 - 可使用 `wemeet_sdk/win/x64/copy.bat` 一键拷贝 SDK 运行时文件
 - 打包时通过 `build.win.extraResources` 自动将 `wemeet_sdk/win/x64/` 目录下所有文件包含到安装包中（无 filter 限制，确保 SDK 资源完整）
 - 编译原生模块需要 Visual Studio Build Tools（C++ 桌面开发工作负载）
@@ -340,9 +340,28 @@ npm run build:native:win-x64 && npm run dist:win:x64
 
 1. **替换 SDK 文件**：
    - macOS：将新 SDK 的 `wemeet_sdk/mac/` 目录替换
-   - Windows：将新 SDK 的头文件复制到 `wemeet_sdk/win/include/`，`.lib` 文件复制到 `wemeet_sdk/win/lib/x64/release/`，运行时 DLL 和 `Release` 目录复制到 `wemeet_sdk/win/x64/`（可使用 `wemeet_sdk/win/x64/copy.bat`，修改其中的 `SDK_SRC` 路径后执行）
-2. **替换 C++ 封装**：将新 SDK Electron Demo 的 `wemeet_sdk/wemeet.cpp` 和 `wemeet_sdk/jsoncpp.cpp` 替换到项目（注意 `binding.gyp` 中 `jsoncpp.cpp` 需作为独立编译源，新版不再内联 `#include "jsoncpp.cpp"`）
-3. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
+   - Windows：新 SDK 分发包结构为 `SDK/x64/`（含核心 DLL、`Release/` 子目录、`include/`、`.lib`）。先修改 `wemeet_sdk/win/x64/copy.bat` 中的 `SDK_SRC` 指向新 SDK 的 `SDK/x64` 路径并执行，会自动拷贝核心 `*.dll`、`Release\` 目录、`wemeetsdk_x64.lib`（同步到 `wemeet_sdk/win/lib/x64/release/`）和编译后的 `.node`；再手动将 `SDK/x64/include/*.h` 复制到 `wemeet_sdk/win/include/`
+   - 清理旧版残留：升级前删除 `wemeet_sdk/win/x64/` 下的旧版二进制（`*.dll`、`*.exe`、`*.lib`）和冗余子目录（modules、nxui、plugins、resources 等，新版统一在 `Release/` 下），避免新旧 DLL 混用（如 Qt5 与 Qt6 共存导致冲突）
+2. **替换 C++ 封装**：将新 SDK Electron Demo（`tmsdk-node-addon/src/`）的以下文件替换到项目：
+   - `wemeet.cpp` → `wemeet_sdk/wemeet.cpp`
+   - `json/jsoncpp.cpp` → `wemeet_sdk/jsoncpp.cpp`
+   - `json/json.h`、`json/json-forwards.h` → `include/json/`
+   
+   > 注意：新版 `wemeet.cpp` 使用 `#include "json/json.h"` 和 `#include "json/json-forwards.h"`，不再 `#include "jsoncpp.cpp"` 直接包含源文件，因此 `jsoncpp.cpp` 需作为独立编译单元。
+3. **更新 binding.gyp**：
+   - 三个 target（win-ia32、win-x64、mac）的 `sources` 中加入 `"wemeet_sdk/jsoncpp.cpp"`
+   - 三个 target 的 `include_dirs` 中加入 `"./include/json"`（mac 为 `"include/json"`），使 `jsoncpp.cpp` 中的 `#include "json.h"` 能定位到 `include/json/json.h`
+4. **检查 macOS 符号链接**：确保 `wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 是**相对符号链接**，而非绝对路径符号链接。替换后执行以下命令检查和修复：
+   ```bash
+   readlink wemeet_sdk/mac/Frameworks/x64/TMSDK.framework
+   
+   # 如果输出是绝对路径（以 / 开头），需修复为相对路径：
+   cd wemeet_sdk/mac/Frameworks/x64
+   rm TMSDK.framework
+   ln -s ../arm64/TMSDK.framework TMSDK.framework
+   cd -
+   ```
+5. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
    ```bash
    # macOS
    npm run build:native:mac
@@ -350,7 +369,7 @@ npm run build:native:win-x64 && npm run dist:win:x64
    # Windows
    npm run build:native:win-x64
    ```
-5. **验证**：运行 `npm run dev` 确认 SDK 加载正常后再打包
+6. **验证**：运行 `npm run dev` 确认 SDK 加载正常后再打包
 
 ## SDK API 列表
 
@@ -417,6 +436,13 @@ npm run build:native:win-x64 && npm run dist:win:x64
 | `GetUserConfiguration(userKey)` | 获取用户配置 |
 | `SetProxyInfo(proxyInfo)` | 设置代理 |
 | `GetProxyInfo()` | 获取代理信息 |
+
+### 外观模式
+
+| API | 说明 |
+|-----|------|
+| `SetAppearanceMode(mode)` | 设置 SDK 外观模式（1=浅色，2=深色） |
+| `GetAppearanceMode()` | 获取当前 SDK 外观模式 |
 
 ### 回调控制
 
