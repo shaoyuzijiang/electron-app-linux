@@ -10,8 +10,8 @@
 #include "wemeet_sdk.h"
 #include "wemeet_sdk_def.h"
 #include "json/json.h"
-#include "jsoncpp.cpp"
-#include <sstream>
+#include "json/json-forwards.h"
+
 #ifdef _WIN32
 #include <Windows.h>
 #endif // _WIN32
@@ -27,27 +27,18 @@
 #define CHECK_NAPI_TYPE(paramDesc, function) \
   {paramDesc, std::bind(function, std::placeholders::_1, std::placeholders::_2)}
 
-static const char* kUninitInfo = "{"
-                 "\"force\": true,"
-                 "}";
+static const char *kUninitInfo = "{"
+                                 "\"force\": true,"
+                                 "}";
 
-bool inline JudgeMsgJson(const char* msg) {
+bool inline JudgeMsgJson(const char *msg) {
   Json::Value root;
   Json::Reader reader;
   bool parsingSuccessful = reader.parse(msg, root);
   if (!parsingSuccessful) {
-      return false;
+    return false;
   }
   return true;
-}
-
-// 使用 parseFromStream 函数
-bool ParseJsonStringWithStream(const char* jsonStr, Json::Value& root) {
-  Json::CharReaderBuilder builder;
-  std::string errs;
-  std::stringstream ss(jsonStr);
-
-  return Json::parseFromStream(builder, ss, &root, &errs);
 }
 
 std::map<std::string, std::function<bool(napi_env, napi_value)>> check_napi_type;
@@ -58,18 +49,19 @@ std::string log_name = "/Global/Logs/wemeet_electron_demo.log";
 #else
 std::string log_name = "\\Logs\\wemeet_electron_demo.log";
 #endif
+
 void logHandle(std::string log, int tid) {
-    std::ofstream ofs;
-    time_t t = time(0);
-    char tmp[64] = { 0 };
-    strftime(tmp, sizeof(tmp), "[%Y-%m-%d %X]", localtime(&t));
-    if(log_path.empty()) {
-      ofs.open("wemeet_electron_demo.log", std::ofstream::app);
-    } else {
-      ofs.open(log_path, std::ofstream::app);
-    }
-    ofs << tmp << " - " << "[tid:" << tid << "] - " << log << std::endl;
-    ofs.close();
+  std::ofstream ofs;
+  time_t t = time(0);
+  char tmp[64] = {0};
+  strftime(tmp, sizeof(tmp), "[%Y-%m-%d %X]", localtime(&t));
+  if (log_path.empty()) {
+    ofs.open("wemeet_electron_demo.log", std::ofstream::app);
+  } else {
+    ofs.open(log_path, std::ofstream::app);
+  }
+  ofs << tmp << " - " << "[tid:" << tid << "] - " << log << std::endl;
+  ofs.close();
 }
 
 void log(std::string log) {
@@ -87,7 +79,7 @@ void log(std::string log) {
 }
 
 
-std::string UTF82Ansi(const std::string& strUtf8) {
+std::string UTF82Ansi(const std::string &strUtf8) {
 #ifdef _WIN32
   int nWide = ::MultiByteToWideChar(CP_UTF8, 0, strUtf8.c_str(), strUtf8.size(), nullptr, 0);
   WCHAR* wbuffer = new WCHAR[nWide + 1];
@@ -114,15 +106,15 @@ std::string UTF82Ansi(const std::string& strUtf8) {
 #endif
 }
 
-bool createFlagFile(const std::string& directory) {
-    std::string fullPath = directory + "/flagFile";
-    std::ofstream flagFile(fullPath);
-    if(flagFile.is_open()) {
-        flagFile.close();
-        return true;
-    } else {
-        return false;
-    }
+bool createFlagFile(const std::string &directory) {
+  std::string fullPath = directory + "/flagFile";
+  std::ofstream flagFile(fullPath);
+  if (flagFile.is_open()) {
+    flagFile.close();
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void callJsLog(napi_env env, napi_value js_cb, void* context, void* data) {
@@ -139,38 +131,48 @@ void callJsLog(napi_env env, napi_value js_cb, void* context, void* data) {
 }
 
 class QtPreMeetingCallback : public IPreMeetingCallback {
-  void OnJoinMeeting(int code, const char* msg, const char* meeting_code) override;
-  void OnShowScreenCastViewResult(int code, const char* msg) override;
-  void OnActionResult(int action_type, int code, const char* msg) override;
-  void OnShowAddressBook(int user_type, const char* msg) override;
-  void OnRingInvitationEvent(int ring_state, const char* json_data) override;
+  void OnJoinMeeting(int code, const char *msg, const char *meeting_code) override;
+
+  void OnActionResult(int action_type, int code, const char *msg) override;
+
+  void OnShowAddressBook(int user_type, const char *msg) override;
+
+  void OnRingInvitationEvent(int ring_state, const char *json_data) override;
+
   void OnVoiceRecordStatusChange(int ring_state, const char* msg) override;
 };
 
 class QtInMeetingCallback : public IInMeetingCallback {
-  virtual void OnLeaveMeeting(int type, int code, const char* msg, const char* meeting_code) override;
-  virtual void OnInviteMeeting(const char* invite_info) override;
-  virtual void OnShowMeetingInfo(const char* meeting_info) override;
-  virtual void OnQueryCustomOrgInfo(const char* json_data) override;
-  virtual void OnInviteUsers(const char* json_data) override;
-  virtual void OnActionResult(int action_type, int code, const char* msg) override;
-  virtual void OnCaptionSwitchChanged(bool is_open) override;
-  virtual void OnCaptionSettingChanged(const char* json_data) override;
-  virtual void OnAudioStatusChanged(int audio_status) override;
-  virtual void OnVideoStatusChanged(int video_status) override;
+  virtual void OnLeaveMeeting(int type, int code, const char *msg, const char *meeting_code);
+
+  virtual void OnInviteMeeting(const char *invite_info);
+
+  virtual void OnShowMeetingInfo(const char *meeting_info);
+
+  virtual void OnQueryCustomOrgInfo(const char *json_data);
+
+  virtual void OnInviteUsers(const char *json_data);
+
+  virtual void OnActionResult(int action_type, int code, const char *msg);
+
+  virtual void OnCaptionSwitchChanged(bool is_open);
+
+  virtual void OnCaptionSettingChanged(const char *json_data);
+
+  virtual void OnAudioStatusChanged(int audio_status);
+
+  virtual void OnVideoStatusChanged(int video_status);
 };
 
 
 class WemmetElectronWrapper
-  : public ISDKCallback
-  , public IAuthenticationCallback 
-  , public QtPreMeetingCallback
-  , public QtInMeetingCallback {
+    : public ISDKCallback, public IAuthenticationCallback, public QtPreMeetingCallback, public QtInMeetingCallback {
 public:
   WemmetElectronWrapper() {
   }
-  static WemmetElectronWrapper& GetElectronInstance() {
-    static WemmetElectronWrapper* instance = nullptr;
+
+  static WemmetElectronWrapper &GetElectronInstance() {
+    static WemmetElectronWrapper *instance = nullptr;
     static std::once_flag token;
     if (instance != nullptr) {
       return *instance;
@@ -181,6 +183,7 @@ public:
     });
     return *instance;
   }
+
   virtual ~WemmetElectronWrapper() {
 //    if (wemeet_instance_) {
 //      Uninitialize();
@@ -188,11 +191,11 @@ public:
   }
 
 public:
-  void GetSDKVersion(char* buf, int buf_len) {
+  void GetSDKVersion(char *buf, int buf_len) {
     GetWemeetSDKVersion(buf, buf_len);
   }
 
-  bool Initialize(const InitParams& params) {
+  bool Initialize(const InitParams &params) {
     if (wemeet_instance_) {
       auto code = wemeet_instance_->IsInitialized() ? kTMSDKErrorDuplicateInitCallAlreadyInitialized : kTMSDKErrorDuplicateInitCallWhenInitializing;
       ProcessCallbackMsg(std::string("OnSDKInitializeResult"), std::string("CommonService"), code, false, std::string("duplicate init call"), "");
@@ -211,7 +214,7 @@ public:
     return true;
   }
 
-  void Uninitialize(const char* params) {
+  void Uninitialize(const char *params) {
     log(params);
     if (wemeet_instance_) {
       wemeet_instance_->Uninitialize(params);
@@ -224,37 +227,37 @@ public:
     }
   }
 
-  void JumpUrlWithLoginStatus(const char* params) {
+  void JumpUrlWithLoginStatus(const char *params) {
     if (wemeet_instance_) {
       wemeet_instance_->GetAccountService()->JumpUrlWithLoginStatus(params);
     }
   }
 
-  void HandleSchema(const char* params) {
+  void HandleSchema(const char *params) {
     if (wemeet_instance_) {
       wemeet_instance_->HandleSchema(params);
     }
   }
 
-  void ParseMeetingInfoUrl(const char* params) {
+  void ParseMeetingInfoUrl(const char *params) {
     if (wemeet_instance_) {
       wemeet_instance_->ParseMeetingInfoUrl(params);
     }
   }
 
-  void GetUrlWithLoginStatus(const char* params, char* buf, int buf_len) {
+  void GetUrlWithLoginStatus(const char *params, char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetAccountService()->GetUrlWithLoginStatus(params, buf, buf_len);
     }
   }
 
-  void GetCurrentSDKToken(char* buf, int buf_len) {
+  void GetCurrentSDKToken(char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetCurrentSDKToken(buf, buf_len);
     }
   }
 
-  int RefreshSDKToken(const char* params) {
+  int RefreshSDKToken(const char *params) {
     if (wemeet_instance_) {
       return wemeet_instance_->RefreshSDKToken(params);
     }
@@ -275,13 +278,17 @@ public:
 
   void ShowMeetingDetailView(std::string meeting_id, std::string current_sub_meeting_id) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetPreMeetingService()->ShowMeetingDetailView(meeting_id.c_str(), current_sub_meeting_id.c_str());
+      wemeet_instance_->GetPreMeetingService()->ShowMeetingDetailView(meeting_id.c_str(),
+                                                                      current_sub_meeting_id.c_str());
     }
   }
-  
-  void ShowMeetingDetailView(std::string meeting_id, std::string current_sub_meeting_id, std::string start_time, bool is_history ) {
+
+  void ShowMeetingDetailView(std::string meeting_id, std::string current_sub_meeting_id, std::string start_time,
+                             bool is_history) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetPreMeetingService()->ShowMeetingDetailView(meeting_id.c_str(), current_sub_meeting_id.c_str(), start_time.c_str(), is_history);
+      wemeet_instance_->GetPreMeetingService()->ShowMeetingDetailView(meeting_id.c_str(),
+                                                                      current_sub_meeting_id.c_str(),
+                                                                      start_time.c_str(), is_history);
     }
   }
 
@@ -303,7 +310,7 @@ public:
     }
   }
 
-  void EnableCustomOrgInfo(bool enable) {
+  void EnableCustomOrgInfo(bool enable, bool show) {
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->EnableCustomOrgInfo(enable);
     }
@@ -358,26 +365,26 @@ public:
     }
   }
 
-  void SetProxyInfo(const char* proxy_info) {
+  void SetProxyInfo(const char *proxy_info) {
     if (wemeet_instance_) {
       wemeet_instance_->SetProxyInfo(UTF82Ansi(proxy_info).c_str());
     }
   }
 
-  void GetProxyInfo(char* buf, int buf_len) {
+  void GetProxyInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetProxyInfo(buf, buf_len);
     }
   }
 
 
-  void JoinMeetingByJSON(const char* join_meeting_json) {
+  void JoinMeetingByJSON(const char *join_meeting_json) {
     if (wemeet_instance_) {
       wemeet_instance_->GetPreMeetingService()->JoinMeetingByJSON(UTF82Ansi(join_meeting_json).c_str());
     }
   }
 
-  void QuickMeetingByJSON(const char* quick_meeting_json) {
+  void QuickMeetingByJSON(const char *quick_meeting_json) {
     if (wemeet_instance_) {
       wemeet_instance_->GetPreMeetingService()->QuickMeetingByJSON(UTF82Ansi(quick_meeting_json).c_str());
     }
@@ -400,25 +407,34 @@ public:
       wemeet_instance_->GetPreMeetingService()->ShowScheduleMeetingView(meeting_type);
     }
   }
-  
+
   void ShowMeetingSettingView() {
     if (wemeet_instance_) {
       wemeet_instance_->GetPreMeetingService()->ShowMeetingSettingView();
     }
   }
 
-  void GetCurrentMeetingInfo(char* buf, int buf_len) {
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+  void GetUserInfo(char *buf, int buf_len) {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetAccountService()->GetUserInfo(buf, buf_len);
+    }
+  }
+// *** Debug Code End, These Code should only exist on dev_release ***
+
+  void GetCurrentMeetingInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->GetCurrentMeetingInfo(buf, buf_len);
     }
   }
 
-  void GetScreenShareInfo(char* buf, int buf_len) {
+  void GetScreenShareInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->GetScreenShareInfo(buf, buf_len);
     }
   }
-   void GetMeetingWindowInfo(char* buf, int buf_len) {
+
+  void GetMeetingWindowInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->GetMeetingWindowInfo(buf, buf_len);
     }
@@ -473,10 +489,10 @@ public:
     }
   }
 
-  uint64_t CollectLogFiles(std::string begin_time, std::string end_time, char* buf, int buf_len) {
+  uint64_t CollectLogFiles(std::string begin_time, std::string end_time, char *buf, int buf_len) {
     if (wemeet_instance_) {
-      uint64_t  beginTime = std::strtoull(begin_time.c_str(), nullptr, 10);
-      uint64_t  endTime = std::strtoull(end_time.c_str(), nullptr, 10);
+      uint64_t beginTime = std::strtoull(begin_time.c_str(), nullptr, 10);
+      uint64_t endTime = std::strtoull(end_time.c_str(), nullptr, 10);
       return wemeet_instance_->CollectLogFiles(beginTime, endTime, buf, buf_len);
     }
     return 0;
@@ -484,8 +500,8 @@ public:
 
   void ActiveUploadLogs(std::string begin_time, std::string end_time, std::string description) {
     if (wemeet_instance_) {
-      uint64_t  beginTime = std::strtoull(begin_time.c_str(), nullptr, 10);
-      uint64_t  endTime = std::strtoull(end_time.c_str(), nullptr, 10);
+      uint64_t beginTime = std::strtoull(begin_time.c_str(), nullptr, 10);
+      uint64_t endTime = std::strtoull(end_time.c_str(), nullptr, 10);
       wemeet_instance_->ActiveUploadLogs(beginTime, endTime, description.c_str());
     }
   }
@@ -518,18 +534,53 @@ public:
 
   void SetUserConfiguration(std::string user_key, std::string user_config) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetUserConfigService()->SetUserConfiguration(user_key.c_str(), user_config.c_str(), [](int code, const char* msg, void* user_data) {
+      wemeet_instance_->GetUserConfigService()->SetUserConfiguration(user_key.c_str(), user_config.c_str(),
+      [](int code, const char* msg, void* user_data) {
         log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("SetUserConfiguration"), std::string("UserConfigService"), code, false, std::string(msg), "");
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+          std::string("SetUserConfiguration"), std::string("UserConfigService"),
+          code, false, std::string(msg), ""
+        );
       }, nullptr);
     }
   }
 
   void GetUserConfiguration(std::string user_key) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetUserConfigService()->GetUserConfiguration(user_key.c_str(), [](int code, const char* msg, const char* config_value, void* user_data) {
+      wemeet_instance_->GetUserConfigService()->GetUserConfiguration(user_key.c_str(),
+      [](int code, const char* msg, const char* config_value, void* user_data) {
         log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("GetUserConfiguration"), std::string("UserConfigService"), code, false, std::string(config_value), "");
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+          std::string("GetUserConfiguration"), std::string("UserConfigService"),
+          code, false, std::string(config_value), ""
+        );
+      }, nullptr);
+    }
+  }
+  
+  void SetAppearanceMode(int mode) {
+    if (wemeet_instance_) {
+      wemeet_instance_->SetAppearanceMode(
+          (SDKAppearanceMode)mode,
+          [](int code, const char* msg, void* user_data) {
+        log(__FUNCTION__);
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+            std::string("SetAppearanceMode"), std::string("CommonService"),
+            code, false, std::string(msg), "");
+      }, nullptr);
+    }
+  }
+
+  void GetAppearanceMode() {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetAppearanceMode(
+          [](int code, const char* msg, const char* config_value,
+             void* user_data) {
+        log(__FUNCTION__);
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+            std::string("GetAppearanceMode"),
+            std::string("CommonService"),
+            code, false, std::string(config_value), "");
       }, nullptr);
     }
   }
@@ -539,25 +590,38 @@ public:
       action_type = kInMeetingLeaveCastRoomDefaultShowDialog;
     }
     if (wemeet_instance_) {
-      wemeet_instance_->GetInMeetingService()->SetLeaveCastRoomActionType((InMeetingLeaveCastRoomActionType)action_type);
+      wemeet_instance_->GetInMeetingService()->SetLeaveCastRoomActionType(
+          (InMeetingLeaveCastRoomActionType) action_type);
     }
   }
 
   void SwitchCaption(bool open) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetInMeetingService()->SwitchCaption(open, [](int code, const char* msg, void* user_data) {
+      wemeet_instance_->GetInMeetingService()->SwitchCaption(open, [](int code, const char *msg, void *user_data) {
         log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("SwitchCaption"), std::string("InMeetingService"), code, false, std::string(msg), "");
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+            std::string("SwitchCaption"),
+            std::string("InMeetingService"),
+            code,
+            false,
+            std::string(msg),
+            ""
+        );
       }, nullptr);
     }
   }
 
-  void UpdateCaptionSettings(const char* settings_json) {
+  void UpdateCaptionSettings(const char *settings_json) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetInMeetingService()->UpdateCaptionSettings(UTF82Ansi(settings_json).c_str(), [](int code, const char* msg, void* user_data) {
-        log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("UpdateCaptionSettings"), std::string("InMeetingService"), code, false, std::string(msg), "");
-      }, nullptr);
+      wemeet_instance_->GetInMeetingService()->UpdateCaptionSettings(UTF82Ansi(settings_json).c_str(),
+                                                                     [](int code, const char *msg, void *user_data) {
+                                                                       log(__FUNCTION__);
+                                                                       WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+                                                                           std::string("UpdateCaptionSettings"),
+                                                                           std::string("InMeetingService"),
+                                                                           code, false, std::string(msg), ""
+                                                                       );
+                                                                     }, nullptr);
     }
   }
 
@@ -565,7 +629,9 @@ public:
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->ShowScreenShareView([](int code, const char* msg, void* user_data) {
         log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowScreenShareView"), std::string("InMeetingService"), code, false, std::string(msg), "");
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+          std::string("OnShowScreenShareView"), std::string("InMeetingService"), code, false, std::string(msg), ""
+        );
       }, nullptr);
     }
   }
@@ -596,25 +662,34 @@ public:
 
   void HandleRingInvitation(bool accept, std::string invite_id) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetPreMeetingService()->HandleRingInvitation(accept, invite_id.c_str(), [](int code, const char* msg, void* user_data) {
-        log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("HandleRingInvitation"), std::string("PreMeetingService"), code, false, std::string(msg), "");
-      }, nullptr);
+      wemeet_instance_->GetPreMeetingService()->HandleRingInvitation(accept, invite_id.c_str(),
+                                                                     [](int code, const char *msg, void *user_data) {
+                                                                       log(__FUNCTION__);
+                                                                       WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+                                                                           std::string("HandleRingInvitation"),
+                                                                           std::string("PreMeetingService"), code,
+                                                                           false, std::string(msg), "");
+                                                                     }, nullptr);
     }
   }
 
-  void SwitchLayout(const char* layout_json) {
+  void SwitchLayout(const char *layout_json) {
     if (wemeet_instance_) {
-      wemeet_instance_->GetInMeetingService()->SwitchLayout(UTF82Ansi(layout_json).c_str(), [](int code, const char* msg, void* user_data) {
-        log(__FUNCTION__);
-        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("SwitchLayout"), std::string("InMeetingService"), code, false, std::string(msg), "");
-      }, nullptr);
+      wemeet_instance_->GetInMeetingService()->SwitchLayout(UTF82Ansi(layout_json).c_str(),
+                                                            [](int code, const char *msg, void *user_data) {
+                                                              log(__FUNCTION__);
+                                                              WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+                                                                  std::string("SwitchLayout"),
+                                                                  std::string("InMeetingService"), code, false,
+                                                                  std::string(msg), "");
+                                                            }, nullptr);
     }
   }
 
-  int SubscribeInMeetingActionEvent(int action_type, bool subscribe, const char* subscription_json) {
+  int SubscribeInMeetingActionEvent(int action_type, bool subscribe, const char *subscription_json) {
     if (wemeet_instance_) {
-      return wemeet_instance_->GetInMeetingService()->SubscribeInMeetingActionEvent((WM_ActionType)action_type, subscribe, subscription_json);
+      return wemeet_instance_->GetInMeetingService()->SubscribeInMeetingActionEvent((WM_ActionType) action_type,
+                                                                                    subscribe, subscription_json);
     }
     return kTMSDKErrorSdkNotInitialized;
   }
@@ -647,66 +722,76 @@ public:
     ProcessCallbackMsg(std::string("IsInitialized"), std::string("CommonService"), is_initialized, false, "", param);
   }
 
-  void OnSDKInitializeResult(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnSDKInitializeResult"), std::string("CommonService"), code, false, std::string(msg), "");
+  void OnSDKInitializeResult(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnSDKInitializeResult"), std::string("CommonService"), code, false,
+                       std::string(msg), "");
   }
 
-  void OnSDKUninitializeResult(int code, const char* msg) override {
+  void OnSDKUninitializeResult(int code, const char *msg) override {
     if (code == kTMSDKErrorSuccess) {
       wemeet_instance_ = nullptr;
       ReleaseWemeetSDKInstance();
     }
-    ProcessCallbackMsg(std::string("OnSDKUninitializeResult"), std::string("CommonService"), code, false, std::string(msg), "");
+    ProcessCallbackMsg(std::string("OnSDKUninitializeResult"), std::string("CommonService"), code, false,
+                       std::string(msg), "");
   }
 
-  void OnParseMeetingInfoUrl(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnParseMeetingInfoUrl"), std::string("CommonService"), code, true, std::string(msg), "");
+  void OnParseMeetingInfoUrl(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnParseMeetingInfoUrl"), std::string("CommonService"), code, true, std::string(msg),
+                       "");
   }
 
-  void OnSDKError(int code, const char* msg) override {
-    wemeet_instance_ = nullptr;
+  void OnSDKError(int code, const char *msg) override {
+    if (code < kTMSDKErrorAudioDeviceFailed) {
+      wemeet_instance_ = nullptr;
+    }
     ProcessCallbackMsg(std::string("OnSDKError"), std::string("CommonService"), code, false, std::string(msg), "");
   }
 
-  void OnSDKTokenExpired(const char* sdk_token) override {
+  void OnSDKTokenExpired(const char *sdk_token) override {
   }
-  
-  void OnResetSDKState(int code, const char* msg) override {
+
+  void OnResetSDKState(int code, const char *msg) override {
     if (code == kTMSDKErrorChildProcessCrash) {
       wemeet_instance_ = nullptr;
     }
     ProcessCallbackMsg(std::string("OnResetSDKState"), std::string("CommonService"), code, false, std::string(msg), "");
   }
 
-  void OnShowLogsResult(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnShowLogsResult"), std::string("CommonService"), code, false,  std::string(msg), "");
+  void OnShowLogsResult(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnShowLogsResult"), std::string("CommonService"), code, false, std::string(msg),
+                       "");
   }
 
-  void OnSetProxyResult(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnSetProxyResult"), std::string("CommonService"), code, false, std::string(msg), "");
+  void OnSetProxyResult(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnSetProxyResult"), std::string("CommonService"), code, false, std::string(msg),
+                       "");
   }
 
-  void OnActiveUploadLogsResult(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnActiveUploadLogsResult"), std::string("CommonService"), code, false, std::string(msg), "");
+  void OnActiveUploadLogsResult(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnActiveUploadLogsResult"), std::string("CommonService"), code, false,
+                       std::string(msg), "");
   }
 
-  void OnAddUsersResult(int user_type, int code, const char* msg) override {
+  void OnAddUsersResult(int user_type, int code, const char *msg) override {
     std::string param;
     param.append("{\"user_type\":\"");
     param.append(std::to_string(user_type));
     param.append("\"}");
-    ProcessCallbackMsg(std::string("OnAddUsersResult"), std::string("CommonService"), code, false, std::string(msg), param);
+    ProcessCallbackMsg(std::string("OnAddUsersResult"), std::string("CommonService"), code, false, std::string(msg),
+                       param);
   }
 
-  void OnHandleSchemaResult(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnHandleSchemaResult"), std::string("CommonService"), code, false, std::string(msg), "");
+  void OnHandleSchemaResult(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnHandleSchemaResult"), std::string("CommonService"), code, false, std::string(msg),
+                       "");
   }
-  
-  void OnLogin(int code, const char* msg) override {
+
+  void OnLogin(int code, const char *msg) override {
     ProcessCallbackMsg(std::string("OnLogin"), std::string("AccountService"), code, false, std::string(msg), "");
   }
 
-  void OnLogout(int type, int code, const char* msg) override {
+  void OnLogout(int type, int code, const char *msg) override {
     std::string param;
     param.append("{\"type\":\"");
     param.append(std::to_string(type));
@@ -714,8 +799,9 @@ public:
     ProcessCallbackMsg(std::string("OnLogout"), std::string("AccountService"), code, false, std::string(msg), param);
   }
 
-  void OnJumpUrlWithLoginStatus(int code, const char* msg) override {
-    ProcessCallbackMsg(std::string("OnJumpUrlWithLoginStatus"), std::string("AccountService"), code, false,  std::string(msg), "");
+  void OnJumpUrlWithLoginStatus(int code, const char *msg) override {
+    ProcessCallbackMsg(std::string("OnJumpUrlWithLoginStatus"), std::string("AccountService"), code, false,
+                       std::string(msg), "");
   }
 
 
@@ -724,24 +810,25 @@ public:
     napi_value js_cb, work_name;
     napi_get_cb_info(env, info, &argc, &js_cb, nullptr, nullptr);
     napi_create_string_utf8(env,
-      "log callback",
-      NAPI_AUTO_LENGTH,
-      &work_name);
+                            "log callback",
+                            NAPI_AUTO_LENGTH,
+                            &work_name);
     napi_create_threadsafe_function(env,
-      js_cb,
-      nullptr,
-      work_name,
-      0,
-      1,
-      nullptr,
-      nullptr,
-      nullptr,
-      callJsLog,
-      &js_cb_);
+                                    js_cb,
+                                    nullptr,
+                                    work_name,
+                                    0,
+                                    1,
+                                    nullptr,
+                                    nullptr,
+                                    nullptr,
+                                    callJsLog,
+                                    &js_cb_);
   }
 
   //msg should be normal string, param should be json string
- void ProcessCallbackMsg(std::string func, std::string service, int code, bool json, std::string msg, std::string param) {
+  void
+  ProcessCallbackMsg(std::string func, std::string service, int code, bool json, std::string msg, std::string param) {
     std::string *jsonBody = new std::string();
     jsonBody->append("{\"func\":\"");
     jsonBody->append(func);
@@ -751,24 +838,24 @@ public:
     jsonBody->append(service);
     jsonBody->append("\"");
     if (code != 0 || !msg.empty()) {
-        jsonBody->append(",");
-        jsonBody->append("\"code\":\"");
-        jsonBody->append(std::to_string(code));
-        jsonBody->append("\",");
-        if (JudgeMsgJson(msg.c_str())) {
-          jsonBody->append("\"msg\":");
-          jsonBody->append(msg);
-          jsonBody->append("");
-        } else {
-          jsonBody->append("\"msg\":\"");
-          jsonBody->append(msg);
-          jsonBody->append("\"");
-        }
+      jsonBody->append(",");
+      jsonBody->append("\"code\":\"");
+      jsonBody->append(std::to_string(code));
+      jsonBody->append("\",");
+      if (JudgeMsgJson(msg.c_str())) {
+        jsonBody->append("\"msg\":");
+        jsonBody->append(msg);
+        jsonBody->append("");
+      } else {
+        jsonBody->append("\"msg\":\"");
+        jsonBody->append(msg);
+        jsonBody->append("\"");
+      }
     }
     if (!param.empty()) {
-        jsonBody->append(",");
-        jsonBody->append("\"param\":");
-        jsonBody->append(param);
+      jsonBody->append(",");
+      jsonBody->append("\"param\":");
+      jsonBody->append(param);
     }
     jsonBody->append("}");
     log(*jsonBody);
@@ -780,103 +867,119 @@ public:
 
 private:
   napi_threadsafe_function js_cb_ = nullptr;
-  IWemeetSDK* wemeet_instance_ = nullptr;
+  IWemeetSDK *wemeet_instance_ = nullptr;
   std::string sso_url_;
   std::string id_token_;
 };
 
 
-void QtInMeetingCallback::OnLeaveMeeting(int type, int code, const char* msg, const char* meeting_code) {
-    std::string param;
-    param.append("{\"type\":\"");
-    param.append(std::to_string(type));
-    param.append("\"");
-    param.append(",\"meeting_code\":\"");
-    param.append(meeting_code);
-    param.append("\"}");
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnLeaveMeeting"), "InMeetingService",  code, false, std::string(msg), param);
+void QtInMeetingCallback::OnLeaveMeeting(int type, int code, const char *msg, const char *meeting_code) {
+  std::string param;
+  param.append("{\"type\":\"");
+  param.append(std::to_string(type));
+  param.append("\"");
+  param.append(",\"meeting_code\":\"");
+  param.append(meeting_code);
+  param.append("\"}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnLeaveMeeting"), "InMeetingService",
+                                                                  code, false, std::string(msg), param);
 }
 
-void QtInMeetingCallback::OnInviteMeeting(const char* invite_info) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnInviteMeeting"), "InMeetingService", 0, false, "", std::string(invite_info));
+void QtInMeetingCallback::OnInviteMeeting(const char *invite_info) {
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnInviteMeeting"), "InMeetingService", 0,
+                                                                  false, "", std::string(invite_info));
 }
 
-void QtInMeetingCallback::OnShowMeetingInfo(const char* meeting_info) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowMeetingInfo"), "InMeetingService", 0, false, "", std::string(meeting_info));
+void QtInMeetingCallback::OnShowMeetingInfo(const char *meeting_info) {
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowMeetingInfo"), "InMeetingService",
+                                                                  0, false, "", std::string(meeting_info));
 }
 
-void QtInMeetingCallback::OnActionResult(int action_type, int code, const char* msg) {
-    std::string param;
-    param.append("{\"action_type\":\"");
-    param.append(std::to_string(action_type));
-    param.append("\"}");
-    if(action_type == 1000) {
-      WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "InMeetingService",  code, true, std::string(msg), param);
-    } else {
-      WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "InMeetingService",  code, false, std::string(msg), param);
-    }
+void QtInMeetingCallback::OnActionResult(int action_type, int code, const char *msg) {
+  std::string param;
+  param.append("{\"action_type\":\"");
+  param.append(std::to_string(action_type));
+  param.append("\"}");
+  if (action_type == 1000) {
+    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "InMeetingService",
+                                                                    code, true, std::string(msg), param);
+  } else {
+    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "InMeetingService",
+                                                                    code, false, std::string(msg), param);
+  }
 }
 
 void QtInMeetingCallback::OnCaptionSwitchChanged(bool is_open) {
-    std::string param;
-    param.append("{\"is_open\":\"");
-    param.append(std::to_string(is_open));
-    param.append("\"}");
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnCaptionSwitchChanged"), "InMeetingService", 0, false, "", param);
+  std::string param;
+  param.append("{\"is_open\":\"");
+  param.append(std::to_string(is_open));
+  param.append("\"}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+    std::string("OnCaptionSwitchChanged"), "InMeetingService", 0, false, "", param);
 }
 
-void QtInMeetingCallback::OnCaptionSettingChanged(const char* json_data) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnCaptionSettingChanged"), "InMeetingService", 0, true, std::string(json_data), "");
+void QtInMeetingCallback::OnCaptionSettingChanged(const char *json_data) {
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnCaptionSettingChanged"),
+                                                                  "InMeetingService", 0, true, std::string(json_data),
+                                                                  "");
 }
 
-void QtInMeetingCallback::OnQueryCustomOrgInfo(const char* msg) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnQueryCustomOrgInfo"), "InMeetingService",  0, true, std::string(msg), "");
+void QtInMeetingCallback::OnQueryCustomOrgInfo(const char *msg) {
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnQueryCustomOrgInfo"),
+                                                                  "InMeetingService", 0, true, std::string(msg), "");
 }
 
-void QtInMeetingCallback::OnInviteUsers(const char* msg) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnInviteUsers"), "InMeetingService",  0, true, std::string(msg), "");
+void QtInMeetingCallback::OnInviteUsers(const char *msg) {
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+    std::string("OnInviteUsers"), "InMeetingService", 0, true, std::string(msg), "");
 }
 
 void QtInMeetingCallback::OnAudioStatusChanged(int audio_status) {
-    std::string param;
-    param.append("{\"audio_status\":\"");
-    param.append(std::to_string(audio_status));
-    param.append("\"}");
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnAudioStatusChanged"), "InMeetingService", 0, false, "", param);
+  std::string param;
+  param.append("{\"audio_status\":\"");
+  param.append(std::to_string(audio_status));
+  param.append("\"}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnAudioStatusChanged"),
+                                                                  "InMeetingService", 0, false, "", param);
 }
 
 void QtInMeetingCallback::OnVideoStatusChanged(int video_status) {
-    std::string param;
-    param.append("{\"video_status\":\"");
-    param.append(std::to_string(video_status));
-    param.append("\"}");
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnVideoStatusChanged"), "InMeetingService", 0, false, "", param);
+  std::string param;
+  param.append("{\"video_status\":\"");
+  param.append(std::to_string(video_status));
+  param.append("\"}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnVideoStatusChanged"),
+                                                                  "InMeetingService", 0, false, "", param);
 }
 
-void QtPreMeetingCallback::OnJoinMeeting(int code, const char* msg, const char* meeting_code) {
+void QtPreMeetingCallback::OnJoinMeeting(int code, const char *msg, const char *meeting_code) {
   std::string param;
   param.append("{\"meeting_code\":\"");
   param.append(meeting_code);
   param.append("\"}");
-  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnJoinMeeting"), "PreMeetingService", code, false, std::string(msg), param);
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnJoinMeeting"), "PreMeetingService",
+                                                                  code, false, std::string(msg), param);
 }
 
-void QtPreMeetingCallback::OnShowAddressBook(int user_type, const char* json_data) {
-  Json::Value root;
-  ParseJsonStringWithStream(json_data, root);
-  root["user_type"] = user_type;
-  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowAddressBook"),"PreMeetingService", 0, false, "", root.toStyledString());
+void QtPreMeetingCallback::OnShowAddressBook(int user_type, const char *json_data) {
+  std::string param;
+  param.append("{\"user_type\":\"");
+  param.append(std::to_string(user_type));
+  param.append("\"}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowAddressBook"), "PreMeetingService",
+                                                                  0, true, std::string(json_data), param);
 }
 
-void QtPreMeetingCallback::OnRingInvitationEvent(int ring_state, const char* json_data) {
-    std::string param;
-    param.append("{\"ring_state\":\"");
-    param.append(std::to_string(ring_state));
-    param.append("\",");
-    param.append("\"ring_info\":");
-    param.append(json_data);
-    param.append("}");
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnRingInvitationEvent"), "PreMeetingService", 0, false, "", param);
+void QtPreMeetingCallback::OnRingInvitationEvent(int ring_state, const char *json_data) {
+  std::string param;
+  param.append("{\"ring_state\":\"");
+  param.append(std::to_string(ring_state));
+  param.append("\",");
+  param.append("\"ring_info\":");
+  param.append(json_data);
+  param.append("}");
+  WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnRingInvitationEvent"),
+                                                                  "PreMeetingService", 0, false, "", param);
 }
 
 void QtPreMeetingCallback::OnVoiceRecordStatusChange(int voice_record_status, const char* json_data) {
@@ -893,29 +996,29 @@ void QtPreMeetingCallback::OnVoiceRecordStatusChange(int voice_record_status, co
       param.append(json_data);
       param.append("\"}");
     }
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnVoiceRecordStatusChange"), "PreMeetingService", 0, false, "", param);
+    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+      std::string("OnVoiceRecordStatusChange"), "PreMeetingService", 0, false, "", param
+    );
 }
 
-void QtPreMeetingCallback::OnShowScreenCastViewResult(int code, const char* msg) {
-    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowScreenCastViewResult"), "PreMeetingService", code, false, std::string(msg), "");
-}
-
-void QtPreMeetingCallback::OnActionResult(int action_type, int code, const char* msg) {
-    std::string param;
-    param.append("{\"action_type\":\"");
-    param.append(std::to_string(action_type));
-    param.append("\"}");
-	 if(action_type == 10) {
-      WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "PreMeetingService",  code, true, std::string(msg), param);
-    } else {
-      WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "PreMeetingService",  code, false, std::string(msg), param);
-    }
+void QtPreMeetingCallback::OnActionResult(int action_type, int code, const char *msg) {
+  std::string param;
+  param.append("{\"action_type\":\"");
+  param.append(std::to_string(action_type));
+  param.append("\"}");
+  if (action_type == 10) {
+    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+        std::string("OnActionResult"), "PreMeetingService", code, true, std::string(msg), param);
+  } else {
+    WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+        std::string("OnActionResult"), "PreMeetingService", code, false, std::string(msg), param);
+  }
 }
 
 napi_value GetSDKVersion(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetSDKVersion(buf, 4096);
 
   napi_create_string_utf8(env, buf, strlen(buf), &word);
@@ -951,7 +1054,7 @@ bool CheckNapiBool(napi_env env, napi_value value) {
 
 std::string GetNapiString(napi_env env, napi_value value) {
   napi_status status;
-  char buf[512] = { 0 };
+  char buf[512] = {0};
   size_t len = 0;
   status = napi_get_value_string_utf8(env, value, buf, sizeof(buf), &len);
   Assert(status);
@@ -993,12 +1096,17 @@ napi_value InitWemeetSDK(napi_env env, napi_callback_info info) {
   }
   argc = argc > kSDKMaxInitParamsNumbers ? kSDKMaxInitParamsNumbers : argc;
 
+  log("Args:");
   std::vector<std::string> vec_args(kSDKMaxInitParamsNumbers);
   for (size_t i = 0; i < argc; i++) {
     napi_valuetype type;
     status = napi_typeof(env, args[i], &type);
+    if (type != napi_string) {
+      napi_throw_type_error(env, nullptr, "Wrong arguments");
+      return nullptr;
+    }
 
-    char buf[4096] = { 0 };
+    char buf[4096] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[i], buf, sizeof(buf), &len);
     vec_args[i] = buf;
@@ -1009,76 +1117,100 @@ napi_value InitWemeetSDK(napi_env env, napi_callback_info info) {
   params.sdk_id = vec_args[0].c_str();
   params.sdk_token = vec_args[1].c_str();
   params.data_path = vec_args[2].c_str();
-#ifdef __APPLE__
-  log_path = GetSandboxLibraryPath();
-#else
-  log_path = params.data_path;
-#endif
-  log_path = log_path + log_name;
-  log(log_path);
-  log(__FUNCTION__);
+
+  log("sdk_id:");
+  log(params.sdk_id);
+  log("sdk_token:");
+  log(params.sdk_token);
+  log("data_path:");
+  log(params.data_path);
+
   size_t arg_index = 3;
   if (argc > arg_index) {
     params.app_name = vec_args[arg_index].c_str();
-    arg_index ++;
+    arg_index++;
+    log("app_name:");
+    log(params.app_name);
   }
   if (argc > arg_index) {
     params.app_icon = vec_args[arg_index].c_str();
-    arg_index ++;
+    arg_index++;
+    log("app_icon:");
+    log(params.app_icon);
   }
   if (argc > arg_index) {
     params.language = vec_args[arg_index].c_str();
-    arg_index ++;
+    arg_index++;
+    log("language:");
+    log(params.language);
   }
   if (argc > arg_index) {
     params.proxy_info = vec_args[arg_index].c_str();
-    arg_index ++;
-  }  
+    arg_index++;
+    log("proxy_info:");
+    log(params.proxy_info);
+  }
   if (argc > arg_index) {
-    params.allow_home_view = GetNapiBool(env, args[arg_index]); 
-    arg_index ++;
+    params.allow_home_view = (vec_args[arg_index] == "true");
+    arg_index++;
+    log("allow_home_view:");
+    log(params.allow_home_view);
   }
 #ifdef ENABLE_DEBUG_ABILITY
   if (argc > arg_index) {
     params.env_id = vec_args[arg_index].c_str();
-    arg_index ++;
+    arg_index++;
+    log("env_id:");
+    log(params.env_id);
   }
   if (argc > arg_index) {
     params.env_name = vec_args[arg_index].c_str();
-    arg_index ++;
-    log("env_name");
+    arg_index++;
+    log("env_name:");
     log(params.env_name);
   }
   if (argc > arg_index) {
-  params.env_domain = vec_args[arg_index].c_str();
-  log(params.env_domain);
-  arg_index++;
+    params.env_domain = vec_args[arg_index].c_str();
+    arg_index++;
+    log("env_domain:");
+    log(params.env_domain);
+  }
   if (argc > arg_index) {
     params.env_debug_mode = vec_args[arg_index].c_str();
-    arg_index ++;
-   }
-   log("env_debug_mode");
-   log(params.env_debug_mode);
+    arg_index++;
+    log("env_debug_mode:");
+    log(params.env_debug_mode);
   }
 
   if (argc > arg_index) {
     params.env = vec_args[arg_index].c_str();
-    log("env");
+    log("env:");
     log(params.env);
   }
 #endif
-  log(params.data_path);
+
+  #ifdef __APPLE__
+    log_path = GetSandboxLibraryPath();
+  #else
+    log_path = params.data_path;
+  #endif
+  log_path = log_path + log_name;
+  log("log_path:");
+  log(log_path);
+
   if (createFlagFile(log_path)) {
-      log("Flag file created successfully.");
+    log("Flag file created successfully.");
   } else {
-      log("Failed to create the flag file.");
+    log("Failed to create the flag file.");
   }
+
   auto code = kTMSDKErrorSuccess;
+  log("start init sdk...");
   if (!WemmetElectronWrapper::GetElectronInstance().Initialize(params)) {
     log("init failed");
     code = kTMSDKErrorSdkNotInitialized;
   }
-
+  log("init success");
   napi_value res;
   napi_create_uint32(env, code, &res);
   return res;
@@ -1104,11 +1236,11 @@ napi_value UninitWemeetSDK(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[0], &type);
 
     if (type != napi_string) {
-      napi_throw_type_error(env, nullptr, "Wrong argumentsxx");
+      napi_throw_type_error(env, nullptr, "Wrong argument type");
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     uninit_param = buf;
@@ -1121,6 +1253,7 @@ napi_value UninitWemeetSDK(napi_env env, napi_callback_info info) {
 }
 
 static const size_t kSDKGoToHome = 2;
+
 napi_value ShowPreMeetingView(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_status status;
@@ -1128,33 +1261,43 @@ napi_value ShowPreMeetingView(napi_env env, napi_callback_info info) {
   napi_value args[kSDKGoToHome];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
+  if (argc < kSDKGoToHome) {
+    napi_throw_type_error(env, nullptr, "Wrong number of arguments");
+    return nullptr;
+  }
 
   std::string ui_style = "0";
   {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type == napi_string) {
-      char buf[512] = { 0 };
-      size_t len = 0;
-      status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
-      ui_style = buf;
+    if (type != napi_string) {
+      log("type");
+      napi_throw_type_error(env, nullptr, "Wrong arguments");
+      return nullptr;
     }
+    char buf[512] = {0};
+    size_t len = 0;
+    status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
+    ui_style = buf;
   }
 
-  std::string tab_id = "0";
+  std::string tab_id;
   {
     napi_valuetype type;
     status = napi_typeof(env, args[1], &type);
+    Assert(status);
 
-    if (type == napi_string)
-    {
-      char buf[512] = {0};
-      size_t len = 0;
-      status = napi_get_value_string_utf8(env, args[1], buf, sizeof(buf), &len);
-      Assert(status);
-      tab_id = buf;
+    if (type != napi_string) {
+      napi_throw_type_error(env, nullptr, "Wrong arguments");
+      return nullptr;
     }
+
+    char buf[512] = {0};
+    size_t len = 0;
+    status = napi_get_value_string_utf8(env, args[1], buf, sizeof(buf), &len);
+    Assert(status);
+    tab_id = buf;
   }
   WemmetElectronWrapper::GetElectronInstance().ShowPreMeetingView(atoi(ui_style.c_str()), atoi(tab_id.c_str()));
   napi_value res;
@@ -1184,7 +1327,7 @@ napi_value SubscribeInMeetingActionEvent(napi_env env, napi_callback_info info) 
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     action_type = buf;
@@ -1208,8 +1351,7 @@ napi_value SubscribeInMeetingActionEvent(napi_env env, napi_callback_info info) 
     napi_valuetype type;
     status = napi_typeof(env, args[2], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -1220,7 +1362,8 @@ napi_value SubscribeInMeetingActionEvent(napi_env env, napi_callback_info info) 
     subscription_json = buf;
   }
 
-  int ans = WemmetElectronWrapper::GetElectronInstance().SubscribeInMeetingActionEvent(atoi(action_type.c_str()), subscribe, subscription_json.c_str());
+  int ans = WemmetElectronWrapper::GetElectronInstance().SubscribeInMeetingActionEvent(
+      atoi(action_type.c_str()), subscribe, subscription_json.c_str());
   napi_value res;
   napi_create_int32(env, ans, &res);
   return res;
@@ -1244,6 +1387,7 @@ napi_value IsInitialized(napi_env env, napi_callback_info info) {
 
 //end_meeting
 static const size_t kSDKLeaveMeetingParamsNumbers = 1;
+
 napi_value LeaveMeeting(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
 
@@ -1276,7 +1420,6 @@ napi_value LeaveMeeting(napi_env env, napi_callback_info info) {
 }
 
 
-
 //meeting_code = "";
 //user_display_name = "";
 //password = "";
@@ -1285,18 +1428,19 @@ napi_value LeaveMeeting(napi_env env, napi_callback_info info) {
 //speaker_on = false;
 //face_beauty_on = true;
 static const size_t kSDKJoinMeetingParamsNumbers = 9;
+
 napi_value JoinMeeting(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   check_napi_type = {
-    CHECK_NAPI_TYPE("meeting_code", CheckNapiString),
-    CHECK_NAPI_TYPE("user_display_name", CheckNapiString),
-    CHECK_NAPI_TYPE("password", CheckNapiString),
-    CHECK_NAPI_TYPE("invite_url", CheckNapiString),
-    CHECK_NAPI_TYPE("mic_on", CheckNapiBool),
-    CHECK_NAPI_TYPE("camera_on", CheckNapiBool),
-    CHECK_NAPI_TYPE("speaker_on", CheckNapiBool),
-    CHECK_NAPI_TYPE("face_beauty_on", CheckNapiBool),
-    CHECK_NAPI_TYPE("meetingtitle", CheckNapiString)
+      CHECK_NAPI_TYPE("meeting_code", CheckNapiString),
+      CHECK_NAPI_TYPE("user_display_name", CheckNapiString),
+      CHECK_NAPI_TYPE("password", CheckNapiString),
+      CHECK_NAPI_TYPE("invite_url", CheckNapiString),
+      CHECK_NAPI_TYPE("mic_on", CheckNapiBool),
+      CHECK_NAPI_TYPE("camera_on", CheckNapiBool),
+      CHECK_NAPI_TYPE("speaker_on", CheckNapiBool),
+      CHECK_NAPI_TYPE("face_beauty_on", CheckNapiBool),
+      CHECK_NAPI_TYPE("meetingtitle", CheckNapiString)
   };
 
   napi_status status;
@@ -1312,23 +1456,23 @@ napi_value JoinMeeting(napi_env env, napi_callback_info info) {
   std::string meeting_code, user_display_name, password, invite_url, meetingtitle;
   bool mic_on = false, camera_on = false, speaker_on = false, face_beauty_on = false;
   if (check_napi_type["meeting_code"](env, args[0]))
-      meeting_code = GetNapiString(env, args[0]);
+    meeting_code = GetNapiString(env, args[0]);
   if (check_napi_type["user_display_name"](env, args[1]))
-      user_display_name = GetNapiString(env, args[1]);
+    user_display_name = GetNapiString(env, args[1]);
   if (check_napi_type["password"](env, args[2]))
-      password = GetNapiString(env, args[2]);
+    password = GetNapiString(env, args[2]);
   if (check_napi_type["invite_url"](env, args[3]))
-      invite_url = GetNapiString(env, args[3]);
+    invite_url = GetNapiString(env, args[3]);
   if (check_napi_type["mic_on"](env, args[4]))
-      mic_on = GetNapiBool(env, args[4]);
+    mic_on = GetNapiBool(env, args[4]);
   if (check_napi_type["camera_on"](env, args[5]))
-      camera_on = GetNapiBool(env, args[5]);
+    camera_on = GetNapiBool(env, args[5]);
   if (check_napi_type["speaker_on"](env, args[6]))
-      speaker_on = GetNapiBool(env, args[6]);
+    speaker_on = GetNapiBool(env, args[6]);
   if (check_napi_type["face_beauty_on"](env, args[7]))
-      face_beauty_on = GetNapiBool(env, args[7]);
+    face_beauty_on = GetNapiBool(env, args[7]);
   if (check_napi_type["meetingtitle"](env, args[8]))
-      meetingtitle = GetNapiString(env, args[8]);
+    meetingtitle = GetNapiString(env, args[8]);
   JoinMeetingParams params;
   params.meeting_code = meeting_code.c_str();
   params.camera_on = camera_on;
@@ -1370,7 +1514,7 @@ napi_value SetProxyInfo(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     proxy_info = buf;
@@ -1385,7 +1529,7 @@ napi_value SetProxyInfo(napi_env env, napi_callback_info info) {
 napi_value GetProxyInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetProxyInfo(buf, 4096);
   napi_create_string_utf8(env, buf, strlen(buf), &word);
   return word;
@@ -1416,7 +1560,7 @@ napi_value JoinMeetingByJSON(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1454,7 +1598,7 @@ napi_value QuickMeetingByJSON(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1492,7 +1636,7 @@ napi_value SwitchLayout(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1530,7 +1674,7 @@ napi_value LoginByJSON(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[1024] = { 0 };
+    char buf[1024] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1546,6 +1690,7 @@ napi_value LoginByJSON(napi_env env, napi_callback_info info) {
 //sso_url
 //id_token
 static const size_t kSDKLoginParamsNumbers = 1;
+
 napi_value Login(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
 
@@ -1571,7 +1716,7 @@ napi_value Login(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[4096] = { 0 };
+    char buf[4096] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1625,7 +1770,7 @@ napi_value JumpUrlWithLoginStatus(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1662,7 +1807,7 @@ napi_value HandleSchema(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1699,7 +1844,7 @@ napi_value ParseMeetingInfoUrl(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1735,14 +1880,14 @@ napi_value GetUrlWithLoginStatus(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     url_jump = buf;
   }
 
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetUrlWithLoginStatus(url_jump.c_str(), buf, 4096);
 
   napi_create_string_utf8(env, buf, strlen(buf), &word);
@@ -1754,7 +1899,7 @@ napi_value GetCurrentSDKToken(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
 
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetCurrentSDKToken(buf, 4096);
 
   napi_create_string_utf8(env, buf, strlen(buf), &word);
@@ -1786,7 +1931,7 @@ napi_value RefreshSDKToken(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -1824,7 +1969,7 @@ napi_value ShowMeetingDetailView(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     meeting_id = buf;
@@ -1841,7 +1986,7 @@ napi_value ShowMeetingDetailView(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[1], buf, sizeof(buf), &len);
     current_sub_meeting_id = buf;
@@ -1859,7 +2004,7 @@ napi_value ShowMeetingDetailView(napi_env env, napi_callback_info info) {
       }
       napi_get_value_bool(env, args[3], &is_history);
     }
-    
+
     std::string start_time;
     {
       napi_valuetype type;
@@ -1870,13 +2015,14 @@ napi_value ShowMeetingDetailView(napi_env env, napi_callback_info info) {
         return nullptr;
       }
 
-      char buf[512] = { 0 };
+      char buf[512] = {0};
       size_t len = 0;
       status = napi_get_value_string_utf8(env, args[2], buf, sizeof(buf), &len);
       start_time = buf;
     }
-    WemmetElectronWrapper::GetElectronInstance().ShowMeetingDetailView(meeting_id, current_sub_meeting_id, start_time, is_history);
-  }else {
+    WemmetElectronWrapper::GetElectronInstance().ShowMeetingDetailView(meeting_id, current_sub_meeting_id, start_time,
+                                                                       is_history);
+  } else {
     WemmetElectronWrapper::GetElectronInstance().ShowMeetingDetailView(meeting_id, current_sub_meeting_id);
   }
   napi_value res;
@@ -1887,9 +2033,9 @@ napi_value ShowMeetingDetailView(napi_env env, napi_callback_info info) {
 napi_value ActiveUploadLogs(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   check_napi_type = {
-    CHECK_NAPI_TYPE("begin_time", CheckNapiString),
-    CHECK_NAPI_TYPE("end_time", CheckNapiString),
-    CHECK_NAPI_TYPE("description", CheckNapiString),
+      CHECK_NAPI_TYPE("begin_time", CheckNapiString),
+      CHECK_NAPI_TYPE("end_time", CheckNapiString),
+      CHECK_NAPI_TYPE("description", CheckNapiString),
   };
   napi_status status;
   size_t argc = 3;
@@ -1903,11 +2049,11 @@ napi_value ActiveUploadLogs(napi_env env, napi_callback_info info) {
   }
   std::string begin_time, end_time, description;
   if (check_napi_type["begin_time"](env, args[0]))
-      begin_time = GetNapiString(env, args[0]);
+    begin_time = GetNapiString(env, args[0]);
   if (check_napi_type["end_time"](env, args[1]))
-      end_time = GetNapiString(env, args[1]);
+    end_time = GetNapiString(env, args[1]);
   if (check_napi_type["description"](env, args[2]))
-      description = GetNapiString(env, args[2]);
+    description = GetNapiString(env, args[2]);
   WemmetElectronWrapper::GetElectronInstance().ActiveUploadLogs(begin_time, end_time, description);
   napi_value res;
   napi_create_uint32(env, kTMSDKErrorSuccess, &res);
@@ -1930,37 +2076,37 @@ napi_value CollectLogFiles(napi_env env, napi_callback_info info) {
     if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
-      }
-      char buf[512] = { 0 };
-      size_t len = 0;
-      status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
-      begin_time = buf;
+    }
+    char buf[512] = {0};
+    size_t len = 0;
+    status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
+    begin_time = buf;
   }
 
   std::string end_time;
   {
     napi_valuetype type;
     status = napi_typeof(env, args[1], &type);
-     if (type != napi_string) {
-        napi_throw_type_error(env, nullptr, "Wrong arguments");
-         return nullptr;
-       }
+    if (type != napi_string) {
+      napi_throw_type_error(env, nullptr, "Wrong arguments");
+      return nullptr;
+    }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[1], buf, sizeof(buf), &len);
     end_time = buf;
   }
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   napi_value res;
-  int  buffer_size = WemmetElectronWrapper::GetElectronInstance().CollectLogFiles(begin_time, end_time, buf, 4096);
+  int buffer_size = WemmetElectronWrapper::GetElectronInstance().CollectLogFiles(begin_time, end_time, buf, 4096);
 
   if (buffer_size > 4096) {
-    char* buffer_out = (char*)malloc(buffer_size);
+    char *buffer_out = new char[buffer_size];
     memset(buffer_out, 0, buffer_size);
     WemmetElectronWrapper::GetElectronInstance().CollectLogFiles(begin_time, end_time, buffer_out, buffer_size);
     napi_create_string_utf8(env, buffer_out, buffer_size - 1, &res);
-    free(buffer_out);
+    delete[] buffer_out;
   } else {
     napi_create_string_utf8(env, buf, buffer_size - 1, &res);
   }
@@ -1999,7 +2145,7 @@ napi_value ShowScheduleMeetingView(napi_env env, napi_callback_info info) {
       return nullptr;
     }
     napi_get_value_bool(env, args[0], &schedule_meetint_type);
-    log(schedule_meetint_type?"1":"0");
+    log(schedule_meetint_type ? "1" : "0");
   }
 
   WemmetElectronWrapper::GetElectronInstance().ShowScheduleMeetingView(schedule_meetint_type);
@@ -2015,11 +2161,21 @@ napi_value ShowMeetingSettingView(napi_env env, napi_callback_info info) {
   return res;
 }
 
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+napi_value GetUserInfo(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value word;
+  char buf[4096] = {0};
+  WemmetElectronWrapper::GetElectronInstance().GetUserInfo(buf, 4096);
+  napi_create_string_utf8(env, buf, strlen(buf), &word);
+  return word;
+}
+// *** Debug Code End, These Code should only exist on dev_release ***
 
 napi_value GetCurrentMeetingInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetCurrentMeetingInfo(buf, 4096);
   napi_create_string_utf8(env, buf, strlen(buf), &word);
   return word;
@@ -2028,16 +2184,16 @@ napi_value GetCurrentMeetingInfo(napi_env env, napi_callback_info info) {
 napi_value GetScreenShareInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetScreenShareInfo(buf, 4096);
-    napi_create_string_utf8(env, buf, strlen(buf), &word);
+  napi_create_string_utf8(env, buf, strlen(buf), &word);
   return word;
 }
 
 napi_value GetMeetingWindowInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value word;
-  char buf[4096] = { 0 };
+  char buf[4096] = {0};
   WemmetElectronWrapper::GetElectronInstance().GetMeetingWindowInfo(buf, 4096);
   napi_create_string_utf8(env, buf, strlen(buf), &word);
   return word;
@@ -2060,8 +2216,7 @@ napi_value QueryMeetingInfo(napi_env env, napi_callback_info info) {
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2071,8 +2226,7 @@ napi_value QueryMeetingInfo(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2096,8 +2250,7 @@ napi_value SetCustomOrgInfo(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2107,8 +2260,7 @@ napi_value SetCustomOrgInfo(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2140,8 +2292,7 @@ napi_value DiscoverNearScreenCastCode(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2151,8 +2302,7 @@ napi_value DiscoverNearScreenCastCode(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2176,8 +2326,7 @@ napi_value StartScreenCast(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2187,8 +2336,7 @@ napi_value StartScreenCast(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2213,8 +2361,7 @@ napi_value SetUserConfiguration(napi_env env, napi_callback_info info) {
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
 
-  if (argc < 2)
-  {
+  if (argc < 2) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2225,8 +2372,7 @@ napi_value SetUserConfiguration(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[0], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2244,8 +2390,7 @@ napi_value SetUserConfiguration(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[1], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2271,8 +2416,7 @@ napi_value GetUserConfiguration(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2282,8 +2426,7 @@ napi_value GetUserConfiguration(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2299,6 +2442,44 @@ napi_value GetUserConfiguration(napi_env env, napi_callback_info info) {
   return res;
 }
 
+napi_value SetAppearanceMode(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_status status;
+  napi_value res;
+  size_t argc = 1;
+  napi_value args[1];
+  status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  Assert(status);
+  if (argc < 1) {
+    napi_throw_type_error(env, nullptr, "Wrong number of arguments");
+    return nullptr;
+  }
+  std::string mode;
+  {
+    napi_valuetype type;
+    status = napi_typeof(env, args[0], &type);
+    Assert(status);
+    if (type != napi_string) {
+      napi_throw_type_error(env, nullptr, "Wrong arguments");
+      return nullptr;
+    }
+    char buf[512] = {0};
+    size_t len = 0;
+    status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
+    Assert(status);
+    mode = buf;
+  }
+  WemmetElectronWrapper::GetElectronInstance().SetAppearanceMode(atoi(mode.c_str()));
+  napi_create_uint32(env, kTMSDKErrorSuccess, &res);
+  return res;
+}
+napi_value GetAppearanceMode(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value res;
+  WemmetElectronWrapper::GetElectronInstance().GetAppearanceMode();
+  napi_create_uint32(env, kTMSDKErrorSuccess, &res);
+  return res;
+}
 napi_value SetLeaveCastRoomActionType(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_status status;
@@ -2321,7 +2502,7 @@ napi_value SetLeaveCastRoomActionType(napi_env env, napi_callback_info info) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     action_type = buf;
@@ -2340,8 +2521,7 @@ napi_value SwitchCaption(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2390,7 +2570,7 @@ napi_value UpdateCaptionSettings(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-    char buf[512] = { 0 };
+    char buf[512] = {0};
     size_t len = 0;
     status = napi_get_value_string_utf8(env, args[0], buf, sizeof(buf), &len);
     Assert(status);
@@ -2444,8 +2624,7 @@ napi_value EnableRingInvitationView(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2476,8 +2655,7 @@ napi_value HandleRingInvitation(napi_env env, napi_callback_info info) {
   napi_value args[2];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 2)
-  {
+  if (argc < 2) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2500,8 +2678,7 @@ napi_value HandleRingInvitation(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[1], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2525,8 +2702,7 @@ napi_value AddUsersWithParam(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2536,8 +2712,7 @@ napi_value AddUsersWithParam(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2561,8 +2736,7 @@ napi_value ManipulateWindow(napi_env env, napi_callback_info info) {
   napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2572,8 +2746,7 @@ napi_value ManipulateWindow(napi_env env, napi_callback_info info) {
     napi_valuetype type;
     status = napi_typeof(env, args[0], &type);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2598,8 +2771,7 @@ napi_value QueryLocalRecordInfo(napi_env env, napi_callback_info info) {
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
 
-  if (argc < 2)
-  {
+  if (argc < 2) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2610,8 +2782,7 @@ napi_value QueryLocalRecordInfo(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[0], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2629,8 +2800,7 @@ napi_value QueryLocalRecordInfo(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[1], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2657,8 +2827,7 @@ napi_value ShowRecordFolder(napi_env env, napi_callback_info info) {
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2669,8 +2838,7 @@ napi_value ShowRecordFolder(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[0], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2696,8 +2864,7 @@ napi_value Transcode(napi_env env, napi_callback_info info) {
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   Assert(status);
 
-  if (argc < 1)
-  {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2708,8 +2875,7 @@ napi_value Transcode(napi_env env, napi_callback_info info) {
     status = napi_typeof(env, args[0], &type);
     Assert(status);
 
-    if (type != napi_string)
-    {
+    if (type != napi_string) {
       napi_throw_type_error(env, nullptr, "Wrong arguments");
       return nullptr;
     }
@@ -2897,11 +3063,11 @@ napi_value EnableCustomOrgInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
 
   napi_status status;
-  size_t argc = 1;
-  napi_value args[1];
+  size_t argc = 2;
+  napi_value args[2];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 1) {
+  if (argc < 2) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -2919,11 +3085,25 @@ napi_value EnableCustomOrgInfo(napi_env env, napi_callback_info info) {
     napi_get_value_bool(env, args[0], &enable);
   }
 
-  WemmetElectronWrapper::GetElectronInstance().EnableCustomOrgInfo(enable);
+  bool show = false;
+  {
+    napi_valuetype type;
+    status = napi_typeof(env, args[1], &type);
+
+    if (type != napi_boolean) {
+      napi_throw_type_error(env, nullptr, "Wrong arguments, need boolean type");
+      return nullptr;
+    }
+
+    napi_get_value_bool(env, args[1], &show);
+  }
+
+  WemmetElectronWrapper::GetElectronInstance().EnableCustomOrgInfo(enable, show);
   napi_value res;
   napi_create_uint32(env, kTMSDKErrorSuccess, &res);
   return res;
 }
+
 
 napi_value SetNeedMeetingInfoCallback(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
@@ -3036,7 +3216,7 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("QuickMeetingByJSON", QuickMeetingByJSON);
   status = napi_define_properties(env, exports, 1, &desc);
-  
+
   desc = DECLARE_NAPI_METHOD("ShowScreenCastView", ShowScreenCastView);
   status = napi_define_properties(env, exports, 1, &desc);
 
@@ -3051,7 +3231,7 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("IsAuthorized", IsAuthorized);
   status = napi_define_properties(env, exports, 1, &desc);
-  
+
   desc = DECLARE_NAPI_METHOD("JumpUrlWithLoginStatus", JumpUrlWithLoginStatus);
   status = napi_define_properties(env, exports, 1, &desc);
 
@@ -3063,7 +3243,7 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("RefreshSDKToken", RefreshSDKToken);
   status = napi_define_properties(env, exports, 1, &desc);
-  
+
   desc = DECLARE_NAPI_METHOD("ShowHistoricalMeetingView", ShowHistoricalMeetingView);
   status = napi_define_properties(env, exports, 1, &desc);
 
@@ -3087,13 +3267,17 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("ParseMeetingInfoUrl", ParseMeetingInfoUrl);
   status = napi_define_properties(env, exports, 1, &desc);
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+  desc = DECLARE_NAPI_METHOD("GetUserInfo", GetUserInfo);
+  status = napi_define_properties(env, exports, 1, &desc);
+// *** Debug Code End, These Code should only exist on dev_release ***
 
   desc = DECLARE_NAPI_METHOD("GetCurrentMeetingInfo", GetCurrentMeetingInfo);
   status = napi_define_properties(env, exports, 1, &desc);
 
   desc = DECLARE_NAPI_METHOD("GetScreenShareInfo", GetScreenShareInfo);
   status = napi_define_properties(env, exports, 1, &desc);
-  
+
   desc = DECLARE_NAPI_METHOD("GetMeetingWindowInfo", GetMeetingWindowInfo);
   status = napi_define_properties(env, exports, 1, &desc);
 
@@ -3169,6 +3353,10 @@ napi_value Init(napi_env env, napi_value exports) {
   desc = DECLARE_NAPI_METHOD("GetUserConfiguration", GetUserConfiguration);
   status = napi_define_properties(env, exports, 1, &desc);
 
+  desc = DECLARE_NAPI_METHOD("SetAppearanceMode", SetAppearanceMode);
+  status = napi_define_properties(env, exports, 1, &desc);
+  desc = DECLARE_NAPI_METHOD("GetAppearanceMode", GetAppearanceMode);
+  status = napi_define_properties(env, exports, 1, &desc);
   desc = DECLARE_NAPI_METHOD("ShowRoomsControllerView", ShowRoomsControllerView);
   status = napi_define_properties(env, exports, 1, &desc);
 

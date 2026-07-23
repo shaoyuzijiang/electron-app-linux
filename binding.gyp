@@ -5,7 +5,8 @@
         {
           "target_name": "wemeet_electron_sdk",
           "sources": [
-            "wemeet_sdk/wemeet.cpp"
+            "wemeet_sdk/wemeet.cpp",
+            "wemeet_sdk/jsoncpp.cpp"
           ],
           'link_settings': {
             "libraries": ["-lwemeetsdk_x86"],
@@ -33,7 +34,8 @@
         {
           "target_name": "wemeet_electron_sdk",
           "sources": [
-            "wemeet_sdk/wemeet.cpp"
+            "wemeet_sdk/wemeet.cpp",
+            "wemeet_sdk/jsoncpp.cpp"
           ],
           'link_settings': {
             "libraries": ["-lwemeetsdk_x64"],
@@ -60,7 +62,7 @@
       "targets": [
         {
           "target_name": "wemeet_electron_sdk",
-          "sources": [ "wemeet_sdk/wemeet.cpp", "wemeet_sdk/mac/utils/log_utils.mm" ],
+          "sources": [ "wemeet_sdk/wemeet.cpp", "wemeet_sdk/jsoncpp.cpp", "wemeet_sdk/mac/utils/log_utils.mm" ],
           "link_settings": {
             "libraries": [  
               "-framework TMSDK",
@@ -95,7 +97,7 @@
       "targets": [
         {
           "target_name": "wemeet_electron_sdk",
-          "sources": [ "wemeet_sdk/wemeet.cpp", "wemeet_sdk/mac/utils/log_utils.mm" ],
+          "sources": [ "wemeet_sdk/wemeet.cpp", "wemeet_sdk/jsoncpp.cpp", "wemeet_sdk/mac/utils/log_utils.mm" ],
           "link_settings": {
             "libraries": [  
               "-framework TMSDK",

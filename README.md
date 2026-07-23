@@ -341,7 +341,7 @@ npm run build:native:win-x64 && npm run dist:win:x64
 1. **替换 SDK 文件**：
    - macOS：将新 SDK 的 `wemeet_sdk/mac/` 目录替换
    - Windows：将新 SDK 的头文件复制到 `wemeet_sdk/win/include/`，`.lib` 文件复制到 `wemeet_sdk/win/lib/x64/release/`，运行时 DLL 和 `Release` 目录复制到 `wemeet_sdk/win/x64/`（可使用 `wemeet_sdk/win/x64/copy.bat`，修改其中的 `SDK_SRC` 路径后执行）
-2. **替换 C++ 封装**：将新 SDK Electron Demo 的 `wemeet_sdk/wemeet.cpp` 和 `wemeet_sdk/jsoncpp.cpp` 替换到项目
+2. **替换 C++ 封装**：将新 SDK Electron Demo 的 `wemeet_sdk/wemeet.cpp` 和 `wemeet_sdk/jsoncpp.cpp` 替换到项目（注意 `binding.gyp` 中 `jsoncpp.cpp` 需作为独立编译源，新版不再内联 `#include "jsoncpp.cpp"`）
 3. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
    ```bash
    # macOS
@@ -436,9 +436,11 @@ npm run build:native:win-x64 && npm run dist:win:x64
 |-----|------|
 | `AddUsersWithParam(jsonParam)` | 添加用户（邀请入会） |
 | `HandleSchema(schemaPath)` | 处理 scheme 唤起 URL，由 SDK 解析并入会 |
-| `EnableCustomOrgInfo(enable)` | 开启自定义组织信息 |
+| `EnableCustomOrgInfo(enable, show)` | 开启自定义组织信息（`enable` 是否启用，`show` 是否显示） |
 | `SetCustomOrgInfo(jsonParam)` | 设置自定义组织信息 |
 | `Login(ssoUrl)` | SSO URL 登录（非 JSON 方式） |
 | `JumpUrlWithLoginStatus(url)` | 带登录状态跳转 URL |
 | `GetUrlWithLoginStatus(url)` | 获取带登录状态的 URL |
 | `ShowUploadLogsView()` | 上传日志 |
+| `SetAppearanceMode(mode)` | 设置 SDK 外观模式（0=浅色，1=深色，2=跟随系统） |
+| `GetAppearanceMode()` | 获取 SDK 外观模式 |

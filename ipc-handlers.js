@@ -1325,13 +1325,40 @@ function register(ipcMain, deps) {
     }
   });
 
-  ipcMain.handle('enable-custom-org-info', async (_event, { enable }) => {
+  ipcMain.handle('enable-custom-org-info', async (_event, { enable, show }) => {
     if (!wemeetSdk || !isSdkInitialized()) {
       return { success: false, message: 'SDK 未初始化' };
     }
     try {
-      wemeetSdk.EnableCustomOrgInfo(enable);
+      wemeetSdk.EnableCustomOrgInfo(enable, show !== undefined ? show : true);
       return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 设置 SDK 外观模式（浅色/深色/跟随系统）
+  // mode: 0=浅色, 1=深色, 2=跟随系统
+  ipcMain.handle('set-appearance-mode', async (_event, { mode }) => {
+    if (!wemeetSdk || !isSdkInitialized()) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      wemeetSdk.SetAppearanceMode(Number(mode));
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 获取 SDK 外观模式（0=浅色, 1=深色, 2=跟随系统）
+  ipcMain.handle('get-appearance-mode', async () => {
+    if (!wemeetSdk || !isSdkInitialized()) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    try {
+      const mode = wemeetSdk.GetAppearanceMode();
+      return { success: true, data: mode };
     } catch (err) {
       return { success: false, message: err.message };
     }

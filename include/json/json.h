@@ -593,7 +593,7 @@ namespace Json {
  */
 class JSON_API Exception : public std::exception {
 public:
-  Exception(String msg);
+  explicit Exception(String msg);
   ~Exception() noexcept override;
   char const* what() const noexcept override;
 
@@ -609,7 +609,7 @@ protected:
  */
 class JSON_API RuntimeError : public Exception {
 public:
-  RuntimeError(String const& msg);
+  explicit RuntimeError(String const& msg);
 };
 
 /** Exceptions thrown by JSON_ASSERT/JSON_FAIL macros.
@@ -620,7 +620,7 @@ public:
  */
 class JSON_API LogicError : public Exception {
 public:
-  LogicError(String const& msg);
+  explicit LogicError(String const& msg);
 };
 #endif
 
@@ -778,9 +778,12 @@ public:
 // Workaround for bug in the NVIDIAs CUDA 9.1 nvcc compiler
 // when using gcc and clang backend compilers.  CZString
 // cannot be defined as private.  See issue #486
+
 #ifdef __NVCC__
+
 public:
 #else
+  
 private:
 #endif
 #ifndef JSONCPP_DOC_EXCLUDE_IMPLEMENTATION

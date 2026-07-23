@@ -26,7 +26,7 @@ const sso = require('./sso');
  * @param {string} email
  * @param {string} password
  * @param {object} [clientInfo] - 客户端信息，用于登录历史上报
- * @param {string} [clientInfo.clientVersion] - 客户端版本号（如 "3.30.308"）
+ * @param {string} [clientInfo.clientVersion] - 客户端版本号（如 "3.43.100"）
  * @param {string} [clientInfo.clientType] - 客户端类型（如 "desktop"）
  * @param {string} [clientInfo.clientOs] - 操作系统版本（如 "macOS 14.5"、"Windows 11"）
  * @returns {{ accessToken, refreshToken, expiresIn, tokenType }}

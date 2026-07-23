@@ -58,22 +58,34 @@ function getSdkBasePath() {
 
 /**
  * 加载 asar 外部的原生模块
+ * 打包后 .node 文件位于 app.asar.unpacked 目录下，
  * require() 无法直接加载 asar 外的 .node 文件，
- * 需要先将路径中的 app.asar 替换为 app.asar.unpacked（如果存在），
- * 或使用 process.resourcesPath 下的绝对路径
+ * 需要将路径从 app.asar 转换为 app.asar.unpacked
  */
 function requireNative(modulePath) {
-  try {
-    return require(modulePath);
-  } catch {
-    const unpackedPath = modulePath.replace('app.asar', 'app.asar.unpacked');
-    if (unpackedPath !== modulePath) {
-      try { return require(unpackedPath); } catch {}
-    }
-    const absPath = path.resolve(modulePath);
-    try { return require(absPath); } catch {}
-    throw new Error(`无法加载原生模块: ${modulePath}`);
+  // 将相对路径转为绝对路径，确保能正确匹配 app.asar 字符串
+  let absPath = path.resolve(modulePath);
+  const possiblePaths = [absPath];
+
+  // 打包后：app.asar -> app.asar.unpacked
+  if (absPath.includes('app.asar')) {
+    possiblePaths.push(absPath.replace('app.asar', 'app.asar.unpacked'));
+  } else if (app.isPackaged) {
+    // 打包后 __dirname 在 asar 内，但文件实际在 unpacked 目录
+    // 从 resourcesPath 出发构建路径
+    const unpackedBase = path.join(process.resourcesPath, 'app.asar.unpacked');
+    const relativeToSdk = path.relative(path.join(__dirname, '..'), absPath);
+    possiblePaths.push(path.join(unpackedBase, relativeToSdk));
   }
+
+  for (const p of possiblePaths) {
+    try {
+      return require(p);
+    } catch (e) {
+      // 继续尝试下一个路径
+    }
+  }
+  throw new Error(`无法加载原生模块: ${modulePath}（尝试过: ${possiblePaths.join(', ')}）`);
 }
 
 try {
@@ -266,7 +278,7 @@ async function initSDK() {
         appIconPath,
         'zh-cn',
         '',
-        false
+        'false'
       );
 
       await sdkInitPromise;

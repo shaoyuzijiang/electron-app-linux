@@ -62,10 +62,10 @@ if (process.platform === 'darwin') {
     if (filename.endsWith('.framework')) {
       const srcFramework = path.join(tmsdkPath, filename);
       const destFramework = path.join(frameworkDest, filename);
-      // 目标已存在则跳过拷贝
+      // 强制替换：先删除旧 framework 再拷贝新的，确保 SDK 版本一致
       if (fs.existsSync(destFramework)) {
-        console.log(`已存在，跳过: ${destFramework}`);
-        continue;
+        console.log(`删除旧 framework: ${destFramework}`);
+        fs.rmSync(destFramework, { recursive: true, force: true });
       }
       console.log(`拷贝 ${srcFramework} -> ${destFramework} ...`);
       copyDir(srcFramework, destFramework);
