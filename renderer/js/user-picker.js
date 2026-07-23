@@ -1,6 +1,50 @@
 // ========== 会中自定义通讯录选人组件（独立窗口模式） ==========
 
 let pickerInMeetingUserIds = []; // 已在会中/群中的用户ID列表（禁选）
+
+/**
+ * 从回调/会议信息数据中提取已在会中成员的 userId 列表
+ * 兼容多种字段名(users/in_meeting_users/attendees/members 等)和元素格式(字符串ID 或 对象)
+ * @param {object|string} data - OnInviteUsers 回调 param 或 GetCurrentMeetingInfo 返回数据
+ * @returns {string[]}
+ */
+function extractInMeetingUserIds(data) {
+  if (!data) return [];
+  const root = (typeof data === 'object' && data.data) ? data.data : data;
+  const fields = ['users', 'in_meeting_users', 'attendees', 'members', 'user_list', 'meeting_members'];
+  for (const field of fields) {
+    const arr = root[field];
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') return item.user_id || item.userid || item.userId || item.id || '';
+        return '';
+      }).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+/**
+ * 通过 GetCurrentMeetingInfo 获取当前会议在会成员，补充 pickerInMeetingUserIds
+ * OnInviteUsers 回调可能不携带完整在会成员列表，需主动查询补全后刷新禁选状态
+ */
+async function refreshInMeetingUserIds() {
+  try {
+    const result = await window.electronAPI.getCurrentMeetingInfo();
+    if (!result || !result.success || !result.data) return;
+    const info = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+    const ids = extractInMeetingUserIds(info);
+    if (!ids.length) return;
+    const before = pickerInMeetingUserIds.length;
+    pickerInMeetingUserIds = [...new Set([...pickerInMeetingUserIds, ...ids])];
+    if (pickerInMeetingUserIds.length !== before) {
+      updatePickerUserListCheckboxes();
+    }
+  } catch (err) {
+    console.warn('[选人组件] 获取在会成员失败:', err.message);
+  }
+}
 let pickerSelectedUsers = new Map(); // 已选中的用户 id -> { id, username, departmentName }
 let pickerDeptTreeRoot = null;
 let pickerExpandedDepts = new Set();
@@ -45,11 +89,16 @@ window.electronAPI.onPickerInitData(({ type, cbMsg }) => {
     } else {
       // 会中邀请模式：cbMsg 为 SDK 回调 JSON
       const cb = JSON.parse(cbMsg);
-      if (type === 'invite_users' && cb.param) {
-        let data = typeof cb.param === 'string' ? JSON.parse(cb.param) : cb.param;
-        pickerInMeetingUserIds = data.users || [];
+      if (type === 'invite_users' && cb.msg) {
+        let data = typeof cb.msg === 'string' ? JSON.parse(cb.msg) : cb.msg;
+        pickerInMeetingUserIds = extractInMeetingUserIds(data);
       } else {
         pickerInMeetingUserIds = [];
+      }
+      // invite_users 模式：OnInviteUsers 回调可能不携带完整在会成员列表，
+      // 主动通过 GetCurrentMeetingInfo 补全，确保已在会中成员被正确禁选
+      if (type === 'invite_users') {
+        refreshInMeetingUserIds();
       }
       if (type === 'invite_meeting') {
         titleEl.textContent = '邀请参会';
@@ -402,6 +451,7 @@ function updatePickerUserListCheckboxes() {
     const userId = item.getAttribute('data-user-id');
     const checkbox = item.querySelector('.picker-checkbox');
     const isInMeeting = pickerInMeetingUserIds.includes(userId);
+    const disabledTag = pickerCallbackType === 'add_group_members' ? '已在群聊中' : '已在会议中';
 
     if (pickerSelectedUsers.has(userId)) {
       item.classList.add('selected');
@@ -411,6 +461,23 @@ function updatePickerUserListCheckboxes() {
       item.classList.remove('selected');
       checkbox.classList.remove('checked');
       checkbox.innerHTML = '';
+    }
+
+    // 同步禁选（已在会中/群中）状态，支持异步补全在会成员后刷新
+    if (isInMeeting) {
+      item.classList.add('disabled');
+      checkbox.classList.add('disabled');
+      if (!item.querySelector('.in-meeting-tag')) {
+        const tag = document.createElement('span');
+        tag.className = 'in-meeting-tag';
+        tag.textContent = disabledTag;
+        item.appendChild(tag);
+      }
+    } else {
+      item.classList.remove('disabled');
+      checkbox.classList.remove('disabled');
+      const tag = item.querySelector('.in-meeting-tag');
+      if (tag) tag.remove();
     }
   });
 }
