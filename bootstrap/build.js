@@ -15,7 +15,7 @@ process.env.BUILD_DATE = date;
 
 // macOS 签名 identity（与 package.json build.mac.identity 一致）
 const SIGN_IDENTITY = 'Apple Development: liuqi92@foxmail.com (5Y6WN3D7WG)';
-const isMacBuild = process.argv.some(a => a.includes('mac') || a.includes('arm64') || a.includes('x64'));
+const isMacBuild = process.platform === 'darwin';
 const skipSign = process.env.SKIP_SIGN === '1' || !isMacBuild;
 
 // electron-builder 内置签名会因 TMSDK.framework 文件数过多（6000+）触发 EMFILE，
