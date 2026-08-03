@@ -16,20 +16,12 @@
 # 产物:
 #   dist/腾讯会议SDK Demo-<version>-<date>-arm64.dmg
 #   dist/腾讯会议SDK Demo-<version>-<date>-x64.dmg
-#   dist/symbols/                      ← 编译生成的原生模块符号表（每次构建更新）
-#     ├── arm64/
-#     │   └── wemeet_electron_sdk.arm64.dSYM
-#     └── x64/
-#         └── wemeet_electron_sdk.x64.dSYM
-#   dSYM/mac/                          ← 下载的 Electron 符号表（持久化，不重复下载）
-#     ├── arm64/
-#     │   ├── .version                          ← Electron 版本标记
-#     │   ├── Electron.app.dSYM                 ← Electron 主程序
-#     │   └── Electron Framework.framework.dSYM ← Electron 核心框架
-#     └── x64/
-#         ├── .version
-#         ├── Electron.app.dSYM
-#         └── Electron Framework.framework.dSYM
+#   dist/dSYM-mac-<version>-<date>.zip       ← 统一符号表（含 Electron + 原生模块）
+#   dSYM/mac/                                ← dSYM zip 下载缓存（持久化，不重复下载）
+#     ├── electron-v<version>-darwin-arm64-dsym.zip
+#     └── electron-v<version>-darwin-x64-dsym.zip
+#
+# 构建完成后自动清理: build/、dist/symbols/、dist/mac-arm64/、dist/mac/
 #===============================================================================
 set -euo pipefail
 
@@ -37,10 +29,10 @@ cd "$(dirname "$0")"
 
 PROJECT_DIR="$(pwd)"
 BUILD_DIR="${PROJECT_DIR}/build"
-# 编译生成的原生模块 dSYM（每次构建更新，放在 dist 下）
+# 所有解压后的 dSYM（Electron + 原生模块），每次构建重新生成
 SYMBOLS_DIR="${PROJECT_DIR}/dist/symbols"
-# 下载的 Electron dSYM 持久化存储（不重复下载，不被清理）
-DSYM_STORE_DIR="${PROJECT_DIR}/dSYM/mac"
+# dSYM zip 下载缓存（持久化，不删除，不重复下载）
+DSYM_ZIP_DIR="${PROJECT_DIR}/dSYM/mac"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -94,83 +86,62 @@ mkdir -p "${SYMBOLS_DIR}/x64"
 ok "已清理 build/ 和 dist/"
 
 #===============================================================================
-# 步骤 2: 下载 Electron dSYM（完整应用符号表）
+# 步骤 2: 下载/解压 Electron dSYM 符号表
 #===============================================================================
 if [[ "${SKIP_DSYM}" == "false" ]]; then
   log "步骤 2: 检查/下载 Electron dSYM 符号表..."
 
-  mkdir -p "${DSYM_STORE_DIR}/arm64"
-  mkdir -p "${DSYM_STORE_DIR}/x64"
+  mkdir -p "${DSYM_ZIP_DIR}"
+  mkdir -p "${SYMBOLS_DIR}/arm64/electron"
+  mkdir -p "${SYMBOLS_DIR}/x64/electron"
 
-  # 检查指定架构的 dSYM 是否已存在且版本匹配
-  # 匹配条件: .version 文件记录的版本 == 当前 Electron 版本，且 dSYM 文件存在
-  check_dsym_version() {
-    local arch="$1"
-    local arch_dir="${DSYM_STORE_DIR}/${arch}"
-    local version_file="${arch_dir}/.version"
-
-    if [[ ! -f "${version_file}" ]]; then
-      return 1  # 无版本文件，需下载
-    fi
-
-    local cached_version
-    cached_version=$(cat "${version_file}" 2>/dev/null | tr -d '[:space:]')
-    if [[ "${cached_version}" != "${ELECTRON_VERSION}" ]]; then
-      return 1  # 版本不匹配，需重新下载
-    fi
-
-    # 版本匹配，检查是否有 dSYM 文件
-    local dsym_count
-    dsym_count=$(find "${arch_dir}" -name "*.dSYM" -type d 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "${dsym_count}" -eq 0 ]]; then
-      return 1  # 无 dSYM 文件，需重新下载
-    fi
-
-    return 0  # 版本匹配且有 dSYM 文件，无需下载
-  }
-
-  # 下载并解压指定架构的 Electron dSYM
-  download_electron_dsym() {
-    local arch="$1"   # arm64 或 x64
-    local arch_dir="${DSYM_STORE_DIR}/${arch}"
-
-    # 检查版本是否匹配
-    if check_dsym_version "${arch}"; then
-      ok "  ${arch}: dSYM 已存在且版本匹配 (v${ELECTRON_VERSION})，跳过下载"
-      return 0
-    fi
+  # 处理指定架构的 dSYM
+  process_electron_dsym() {
+    local arch="$1"  # arm64 或 x64
 
     local dsym_zip="electron-v${ELECTRON_VERSION}-darwin-${arch}-dsym.zip"
     local dsym_url="https://github.com/electron/electron/releases/download/v${ELECTRON_VERSION}/${dsym_zip}"
-    local tmp_zip
-    tmp_zip=$(mktemp)
+    local zip_path="${DSYM_ZIP_DIR}/${dsym_zip}"
+    local extract_dir="${SYMBOLS_DIR}/${arch}/electron"
 
-    log "  ${arch}: 下载 ${dsym_url}"
-    curl -fSL --progress-bar -o "${tmp_zip}" "${dsym_url}" || {
-      warn "  ${arch}: 下载失败"
-      rm -f "${tmp_zip}"
-      return 1
-    }
+    # 1. 检查 zip 是否已存在（版本通过文件名保证）
+    if [[ -f "${zip_path}" ]]; then
+      ok "  ${arch}: zip 已存在，跳过下载 (${dsym_zip})"
+    else
+      # 下载 zip（旧的版本 zip 不匹配文件名，不会被命中）
+      log "  ${arch}: 下载 ${dsym_url}"
+      curl -fSL --progress-bar -o "${zip_path}" "${dsym_url}" || {
+        warn "  ${arch}: 下载失败"
+        rm -f "${zip_path}"
+        return 1
+      }
+      ok "  ${arch}: 下载完成 (${dsym_zip})"
+    fi
 
-    # 清理旧版本文件
-    rm -rf "${arch_dir}"
-    mkdir -p "${arch_dir}"
+    # 2. 每次先删除旧的解压目录，再重新解压
+    rm -rf "${extract_dir}"
+    mkdir -p "${extract_dir}"
+    unzip -q -o "${zip_path}" -d "${extract_dir}"
 
-    # 解压到目标目录
-    unzip -q -o "${tmp_zip}" -d "${arch_dir}"
-    rm -f "${tmp_zip}"
-
-    # 写入版本标记
-    echo "${ELECTRON_VERSION}" > "${arch_dir}/.version"
-
-    # 统计下载的 dSYM
+    # 3. 统计解压结果
     local count
-    count=$(find "${arch_dir}" -name "*.dSYM" -type d | wc -l | tr -d ' ')
-    ok "  ${arch}: 下载完成，共 ${count} 个 dSYM (v${ELECTRON_VERSION})"
+    count=$(find "${extract_dir}" -name "*.dSYM" -type d | wc -l | tr -d ' ')
+    ok "  ${arch}: 解压完成，${count} 个 dSYM"
   }
 
-  download_electron_dsym "arm64" || warn "arm64 Electron dSYM 下载失败，跳过"
-  download_electron_dsym "x64"   || warn "x64 Electron dSYM 下载失败，跳过"
+  process_electron_dsym "arm64" || warn "arm64 Electron dSYM 处理失败，跳过"
+  process_electron_dsym "x64"   || warn "x64 Electron dSYM 处理失败，跳过"
+
+  # 清理旧版本的 zip 文件（只保留当前版本的）
+  log "  清理旧版本 dSYM zip..."
+  find "${DSYM_ZIP_DIR}" -name "electron-v*-darwin-*-dsym.zip" -type f | while read -r old_zip; do
+    zip_name=$(basename "${old_zip}")
+    if [[ "${zip_name}" != "electron-v${ELECTRON_VERSION}-darwin-arm64-dsym.zip" ]] && \
+       [[ "${zip_name}" != "electron-v${ELECTRON_VERSION}-darwin-x64-dsym.zip" ]]; then
+      rm -f "${old_zip}"
+      log "  已删除旧版本: ${zip_name}"
+    fi
+  done
 else
   warn "跳过 Electron dSYM 下载（--skip-dsym）"
 fi
@@ -248,13 +219,7 @@ DSYM_ZIP="${PROJECT_DIR}/dist/dSYM-mac-${SDK_VERSION}-${BUILD_DATE}.zip"
 MERGE_DIR=$(mktemp -d)
 mkdir -p "${MERGE_DIR}/arm64" "${MERGE_DIR}/x64"
 
-# 拷贝下载的 Electron dSYM
-for arch in arm64 x64; do
-  if [[ -d "${DSYM_STORE_DIR}/${arch}" ]]; then
-    cp -R "${DSYM_STORE_DIR}/${arch}"/* "${MERGE_DIR}/${arch}/" 2>/dev/null || true
-  fi
-done
-# 拷贝编译的原生模块 dSYM
+# 拷贝所有解压后的 dSYM（Electron + 原生模块都在 dist/symbols 下）
 for arch in arm64 x64; do
   if [[ -d "${SYMBOLS_DIR}/${arch}" ]]; then
     cp -R "${SYMBOLS_DIR}/${arch}"/* "${MERGE_DIR}/${arch}/" 2>/dev/null || true
@@ -280,9 +245,43 @@ rm -rf "${MERGE_DIR}"
 ok "统一符号表已打包: dist/dSYM-mac-${SDK_VERSION}-${BUILD_DATE}.zip"
 
 #===============================================================================
-# 步骤 8: 汇总产物
+# 步骤 8: 清理中间文件，释放硬盘空间
 #===============================================================================
-log "步骤 8: 汇总打包产物..."
+log "步骤 8: 清理中间文件..."
+
+CLEAN_SIZE=0
+
+# 统计并删除 build/ 目录（node-gyp 编译中间产物）
+if [[ -d "${BUILD_DIR}" ]]; then
+  SIZE=$(du -sh "${BUILD_DIR}" | awk '{print $1}')
+  rm -rf "${BUILD_DIR}"
+  log "  已删除 build/ (${SIZE})"
+fi
+
+# 删除解压的 dSYM（已打包进统一符号表 zip，无需保留）
+if [[ -d "${SYMBOLS_DIR}" ]]; then
+  SIZE=$(du -sh "${SYMBOLS_DIR}" | awk '{print $1}')
+  rm -rf "${SYMBOLS_DIR}"
+  log "  已删除 dist/symbols/ (${SIZE})"
+fi
+
+# 删除解压的 .app 目录（DMG 已生成，.app 无需保留）
+APP_ARM64="${PROJECT_DIR}/dist/mac-arm64"
+APP_X64="${PROJECT_DIR}/dist/mac"
+for app_dir in "${APP_ARM64}" "${APP_X64}"; do
+  if [[ -d "${app_dir}" ]]; then
+    SIZE=$(du -sh "${app_dir}" | awk '{print $1}')
+    rm -rf "${app_dir}"
+    log "  已删除 ${app_dir#${PROJECT_DIR}/}/ (${SIZE})"
+  fi
+done
+
+ok "中间文件清理完成"
+
+#===============================================================================
+# 步骤 9: 汇总产物
+#===============================================================================
+log "步骤 9: 汇总打包产物..."
 
 echo ""
 echo "================================================================"
@@ -295,35 +294,14 @@ echo ""
 echo "📦 统一符号表 zip:"
 [[ -f "${DSYM_ZIP}" ]] && ls -lh "${DSYM_ZIP}" | awk '{printf "   %s   %s\n", $5, $NF}'
 echo ""
-echo "📋 符号表明细:"
-echo "   ── Electron dSYM (dSYM/mac/, 下载) ──"
-for arch in arm64 x64; do
-  sym_arch_dir="${DSYM_STORE_DIR}/${arch}"
-  if [[ -d "${sym_arch_dir}" ]]; then
-    echo "   ${arch}:"
-    find "${sym_arch_dir}" -name "*.dSYM" -type d 2>/dev/null | sort | while read -r dsym; do
-      SIZE=$(du -sh "$dsym" | awk '{print $1}')
-      NAME=$(basename "$dsym")
-      echo "      ${SIZE}   ${NAME}"
-    done
-  fi
-done
-echo "   ── 原生模块 dSYM (dist/symbols/, 编译) ──"
-for arch in arm64 x64; do
-  sym_arch_dir="${SYMBOLS_DIR}/${arch}"
-  if [[ -d "${sym_arch_dir}" ]]; then
-    echo "   ${arch}:"
-    find "${sym_arch_dir}" -name "*.dSYM" -type d 2>/dev/null | sort | while read -r dsym; do
-      SIZE=$(du -sh "$dsym" | awk '{print $1}')
-      NAME=$(basename "$dsym")
-      echo "      ${SIZE}   ${NAME}"
-    done
-  fi
+echo "💾 dSYM zip 缓存 (dSYM/mac/, 持久化):"
+find "${DSYM_ZIP_DIR}" -name "electron-v*-dsym.zip" -type f 2>/dev/null | sort | while read -r zip; do
+  SIZE=$(du -sh "$zip" | awk '{print $1}')
+  NAME=$(basename "$zip")
+  echo "      ${SIZE}   ${NAME}"
 done
 echo ""
-echo "📁 .app 产物:"
-[[ -d "${PROJECT_DIR}/dist/mac-arm64/腾讯会议SDK Demo.app" ]] && echo "   arm64: dist/mac-arm64/腾讯会议SDK Demo.app"
-[[ -d "${PROJECT_DIR}/dist/mac/腾讯会议SDK Demo.app" ]] && echo "   x64:   dist/mac/腾讯会议SDK Demo.app"
+echo "🗑️  已清理: build/、dist/symbols/、dist/mac-arm64/、dist/mac/"
 echo ""
 echo "版本: SDK ${SDK_VERSION} / Electron ${ELECTRON_VERSION}  日期: ${BUILD_DATE}"
 echo "================================================================"
