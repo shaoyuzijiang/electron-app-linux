@@ -23,7 +23,11 @@
               "AdditionalOptions": [
                 "/source-charset:utf-8",
                 "/execution-charset:utf-8"
-              ]
+              ],
+              "DebugInformationFormat": "3"
+            },
+            "VCLinkerTool": {
+              "GenerateDebugInformation": "true"
             }
           },
           #"defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ]
@@ -53,7 +57,11 @@
               "AdditionalOptions": [
                 "/source-charset:utf-8",
                 "/execution-charset:utf-8"
-              ]
+              ],
+              "DebugInformationFormat": "3"
+            },
+            "VCLinkerTool": {
+              "GenerateDebugInformation": "true"
             }
           },
           #"defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ]

@@ -9,6 +9,7 @@ default.profraw
 # 忽略打包暂存文件（framework 暂存、.node 产物等）
 output/mac/
 dSYM/
+pdb/
 
 # 保留 wemeet_sdk 目录结构，忽略 SDK 运行时文件
 wemeet_sdk/*
