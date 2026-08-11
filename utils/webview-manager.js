@@ -22,6 +22,20 @@ const ALLOWED_ORIGINS = [
   'https://wemeetapp.liuqi92.cn',
 ];
 
+/**
+ * 动态白名单：包含用户在设置中配置的服务端 URL
+ */
+function getDynamicOrigins() {
+  const origins = [...ALLOWED_ORIGINS];
+  try {
+    const appSettings = require('../utils/app-settings');
+    const baseUrl = appSettings.getBaseUrl();
+    const parsed = new URL(baseUrl);
+    origins.push(`${parsed.protocol}//${parsed.host}`);
+  } catch {}
+  return [...new Set(origins)]; // 去重
+}
+
 // 独立 session 分区，避免与主窗口共享 cookie / UA
 const WEBVIEW_PARTITION = 'webview-session';
 
@@ -80,7 +94,7 @@ function validateUrl(url) {
     return { ok: false, message: '仅支持 http/https 协议' };
   }
   const origin = `${parsed.protocol}//${parsed.host}`;
-  if (!ALLOWED_ORIGINS.includes(origin)) {
+  if (!getDynamicOrigins().includes(origin)) {
     return { ok: false, message: `不允许加载此域名: ${parsed.host}`, origin };
   }
   return { ok: true, origin };
