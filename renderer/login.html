@@ -324,6 +324,152 @@
       color: #ef4444;
     }
 
+    /* ========== 设置入口（齿轮按钮） ========== */
+    .settings-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      -webkit-app-region: no-drag;
+      z-index: 50;
+    }
+
+    .settings-btn:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .settings-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ========== 设置弹窗 ========== */
+    .settings-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .settings-modal-overlay.show {
+      display: flex;
+    }
+
+    .settings-modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 32px 24px;
+      width: 440px;
+      max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+
+    .settings-modal h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+
+    .settings-modal .settings-subtitle {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 20px;
+    }
+
+    .settings-modal .form-group {
+      margin-bottom: 16px;
+    }
+
+    .settings-modal .url-hint {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    .settings-modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .settings-modal-actions button {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #d1d5db;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+
+    .settings-modal-actions .btn-cancel {
+      background: #fff;
+      color: #374151;
+    }
+
+    .settings-modal-actions .btn-cancel:hover {
+      background: #f3f4f6;
+    }
+
+    .settings-modal-actions .btn-reset {
+      background: #fff;
+      color: #6b7280;
+      flex: 0 0 auto;
+      padding: 10px 14px;
+    }
+
+    .settings-modal-actions .btn-reset:hover {
+      background: #f3f4f6;
+      color: #ef4444;
+    }
+
+    .settings-modal-actions .btn-save {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+    }
+
+    .settings-modal-actions .btn-save:hover {
+      opacity: 0.92;
+    }
+
+    .settings-modal-actions .btn-save:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .settings-modal .settings-status {
+      font-size: 13px;
+      margin-top: 10px;
+      min-height: 18px;
+      text-align: center;
+    }
+
+    .settings-modal .settings-status.success {
+      color: #10b981;
+    }
+
+    .settings-modal .settings-status.error {
+      color: #ef4444;
+    }
+
     /* ========== 注册页（内嵌 webview） ========== */
     .register-page {
       position: fixed;
@@ -415,6 +561,35 @@
   </style>
 </head>
 <body>
+  <!-- 设置入口 -->
+  <button type="button" class="settings-btn" id="settingsBtn" title="服务端设置" aria-label="服务端设置">
+    <svg viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.225c.048.385.073.778.073 1.176 0 .399-.025.791-.073 1.176l1.267 1.225a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.225A7.035 7.035 0 0 1 3.668 10c0-.398.025-.791.073-1.176L2.474 7.6a1 1 0 0 1-.206-1.25L3.448 4.3a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 8.162 3.45l.331-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd" />
+    </svg>
+  </button>
+
+  <!-- 设置弹窗 -->
+  <div class="settings-modal-overlay" id="settingsModalOverlay">
+    <div class="settings-modal">
+      <h2>服务端设置</h2>
+      <p class="settings-subtitle">配置后端 API 服务地址，修改后立即生效</p>
+      <div class="form-group">
+        <label for="serverUrlInput">服务端 URL</label>
+        <input type="text" id="serverUrlInput" placeholder="https://example.com" autocomplete="off" />
+        <div class="url-hint">
+          默认: https://wemeetapp.liuqi92.cn<br />
+          请输入完整地址（含 http:// 或 https://），不要加末尾斜杠
+        </div>
+      </div>
+      <div class="settings-status" id="settingsStatus"></div>
+      <div class="settings-modal-actions">
+        <button type="button" class="btn-reset" id="settingsResetBtn">恢复默认</button>
+        <button type="button" class="btn-cancel" id="settingsCancelBtn">取消</button>
+        <button type="button" class="btn-save" id="settingsSaveBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
   <div class="login-card">
     <h1>欢迎登录</h1>
     <p class="subtitle">请输入您的邮箱和密码</p>
@@ -658,7 +833,8 @@
     // ========== 内嵌 webview 注册页 ==========
     const registerPage = document.getElementById('registerPage');
     const registerContainer = document.getElementById('registerContainer');
-    const REGISTER_URL = 'https://wemeetapp.liuqi92.cn/user-center/register';
+    // 注册页 URL 跟随服务端 URL 设置（由 settings.getServerUrl() 返回，登录前动态拉取）
+    let REGISTER_URL = '';
     let registerResizeTimer = null;
 
     function calculateRegisterBounds() {
@@ -674,7 +850,7 @@
     async function openRegisterPage() {
       if (!window.electronAPI || !window.electronAPI.webviewCreate) {
         // preload 未暴露 webview API：降级为原系统浏览器方案
-        window.electronAPI.openExternal(REGISTER_URL);
+        window.electronAPI.openExternal(await getRegisterUrl());
         return;
       }
       // 切换显示
@@ -683,11 +859,27 @@
       // 等下一帧让容器拿到正确尺寸后再创建 webview
       await new Promise((r) => requestAnimationFrame(r));
       const bounds = calculateRegisterBounds();
-      const result = await window.electronAPI.webviewCreate(REGISTER_URL, bounds);
+      const result = await window.electronAPI.webviewCreate(await getRegisterUrl(), bounds);
       if (!result.success) {
         alert('无法打开注册页: ' + (result.message || '未知错误'));
         await closeRegisterPage();
       }
+    }
+
+    // 动态获取注册页 URL（基于当前服务端 URL）
+    async function getRegisterUrl() {
+      if (REGISTER_URL) return REGISTER_URL;
+      try {
+        if (window.electronAPI && window.electronAPI.settings) {
+          const r = await window.electronAPI.settings.getServerUrl();
+          if (r && r.success && r.baseUrl) {
+            REGISTER_URL = r.baseUrl + '/user-center/register';
+            return REGISTER_URL;
+          }
+        }
+      } catch {}
+      REGISTER_URL = 'https://wemeetapp.liuqi92.cn/user-center/register';
+      return REGISTER_URL;
     }
 
     async function closeRegisterPage() {
@@ -755,6 +947,116 @@
         loginBtn.textContent = '登 录';
       }
     });
-  </script>
+
+    // ========== 服务端设置弹窗 ==========
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+    const serverUrlInput = document.getElementById('serverUrlInput');
+    const settingsStatus = document.getElementById('settingsStatus');
+    const settingsSaveBtn = document.getElementById('settingsSaveBtn');
+    const settingsCancelBtn = document.getElementById('settingsCancelBtn');
+    const settingsResetBtn = document.getElementById('settingsResetBtn');
+
+    async function openSettingsModal() {
+      settingsStatus.textContent = '';
+      settingsStatus.className = 'settings-status';
+        serverUrlInput.value = '';
+        serverUrlInput.placeholder = '加载中...';
+        settingsModalOverlay.classList.add('show');
+        // 拉取当前服务端 URL
+        try {
+          if (window.electronAPI && window.electronAPI.settings) {
+            const r = await window.electronAPI.settings.getServerUrl();
+            if (r && r.success && r.baseUrl) {
+              serverUrlInput.value = r.baseUrl;
+              serverUrlInput.placeholder = 'https://example.com';
+            }
+          }
+        } catch (err) {
+          settingsStatus.textContent = '获取当前设置失败';
+          settingsStatus.className = 'settings-status error';
+        }
+        setTimeout(() => serverUrlInput.focus(), 50);
+        }
+
+        function closeSettingsModal() {
+        settingsModalOverlay.classList.remove('show');
+        }
+
+        settingsBtn.addEventListener('click', openSettingsModal);
+
+        settingsCancelBtn.addEventListener('click', closeSettingsModal);
+
+        // 点击遮罩关闭
+        settingsModalOverlay.addEventListener('click', (e) => {
+        if (e.target === settingsModalOverlay) closeSettingsModal();
+        });
+
+        // ESC 关闭
+        document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && settingsModalOverlay.classList.contains('show')) {
+          closeSettingsModal();
+        }
+        });
+
+        // 回车保存
+        serverUrlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') settingsSaveBtn.click();
+        });
+
+        // 保存
+        settingsSaveBtn.addEventListener('click', async () => {
+        const url = serverUrlInput.value.trim();
+        if (!url) {
+          settingsStatus.textContent = 'URL 不能为空';
+          settingsStatus.className = 'settings-status error';
+          return;
+        }
+        settingsSaveBtn.disabled = true;
+        settingsStatus.textContent = '保存中...';
+        settingsStatus.className = 'settings-status';
+        try {
+          const r = await window.electronAPI.settings.setServerUrl(url);
+          if (r.success) {
+            settingsStatus.textContent = '保存成功，已生效';
+            settingsStatus.className = 'settings-status success';
+            // 清空注册页 URL 缓存，下次打开重新拉取
+            REGISTER_URL = '';
+            setTimeout(closeSettingsModal, 800);
+          } else {
+            settingsStatus.textContent = r.message || '保存失败';
+            settingsStatus.className = 'settings-status error';
+          }
+        } catch (err) {
+          settingsStatus.textContent = '保存失败: ' + err.message;
+          settingsStatus.className = 'settings-status error';
+        } finally {
+          settingsSaveBtn.disabled = false;
+        }
+        });
+
+        // 恢复默认
+        settingsResetBtn.addEventListener('click', async () => {
+        settingsResetBtn.disabled = true;
+        try {
+          const r = await window.electronAPI.settings.resetServerUrl();
+          if (r.success) {
+            serverUrlInput.value = r.baseUrl;
+            settingsStatus.textContent = '已恢复默认';
+            settingsStatus.className = 'settings-status success';
+            REGISTER_URL = '';
+            setTimeout(() => {
+              settingsStatus.textContent = '';
+              settingsStatus.className = 'settings-status';
+            }, 1500);
+          }
+        } catch (err) {
+          settingsStatus.textContent = '重置失败: ' + err.message;
+          settingsStatus.className = 'settings-status error';
+        } finally {
+          settingsResetBtn.disabled = false;
+        }
+        });
+        </script>
 </body>
 </html>

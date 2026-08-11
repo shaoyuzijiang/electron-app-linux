@@ -362,7 +362,11 @@ if (!gotSingleLock) {
 
 app.whenReady().then(() => {
   logger.install();
-  createWindow();
+
+  // 应用启动后从持久化设置加载服务端 URL（早期 require 时 app 未就绪，可能用了默认值）
+  const httpApi = require('./backend_api/httpClient');
+  const appSettings = require('./utils/app-settings');
+  httpApi.updateBaseUrl(appSettings.getBaseUrl());
 
   api.prefetchPublicKey();
 
@@ -376,7 +380,7 @@ app.whenReady().then(() => {
     console.error('SDK 初始化异常:', err.message);
   });
 
-  // 注册 IPC 接口
+  // 注册 IPC 接口（必须在 createWindow 之前，确保页面加载时 handler 已就绪）
   ipcHandlers.register(ipcMain, {
     wemeetSdk,
     getMainWindow,
@@ -424,6 +428,9 @@ app.whenReady().then(() => {
     // 头像菜单悬浮窗
     avatarMenuWindowAPI: avatarMenuWindow,
   });
+
+  // IPC 就绪后再创建窗口加载页面
+  createWindow();
 
   // 冷启动：检查 Windows 通过命令行参数传入的 scheme URL
   const coldStartUrl = getSchemeUrlFromArgv(process.argv);

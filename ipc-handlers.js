@@ -2,6 +2,8 @@ const { shell, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const api = require('./backend_api/api');
+const httpApi = require('./backend_api/httpClient');
+const appSettings = require('./utils/app-settings');
 const tokenStore = require('./utils/token-store');
 const accountStore = require('./utils/account-store');
 const logger = require('./utils/logger');
@@ -173,6 +175,30 @@ function register(ipcMain, deps) {
 
   ipcMain.handle('open-external', async (_event, { url }) => {
     await shell.openExternal(url);
+  });
+
+  // ========== 服务端 URL 设置 ==========
+  // 获取当前服务端 URL
+  ipcMain.handle('get-server-url', async () => {
+    return { success: true, baseUrl: appSettings.getBaseUrl() };
+  });
+
+  // 设置服务端 URL（运行时更新 httpClient 的 BASE_URL）
+  ipcMain.handle('set-server-url', async (_event, { url }) => {
+    const result = appSettings.setBaseUrl(url);
+    if (result.success) {
+      httpApi.updateBaseUrl(result.baseUrl);
+    }
+    return result;
+  });
+
+  // 重置为默认服务端 URL
+  ipcMain.handle('reset-server-url', async () => {
+    const result = appSettings.resetBaseUrl();
+    if (result.success) {
+      httpApi.updateBaseUrl(result.baseUrl);
+    }
+    return result;
   });
 
   // ========== 账号历史（多账号记住密码） ==========

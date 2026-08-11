@@ -265,4 +265,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     remove: (email) => ipcRenderer.invoke('accounts-remove', { email }),
     clear: () => ipcRenderer.invoke('accounts-clear'),
   },
+
+  // ========== 服务端 URL 设置 ==========
+  settings: {
+    getServerUrl: () => ipcRenderer.invoke('get-server-url'),
+    setServerUrl: (url) => ipcRenderer.invoke('set-server-url', { url }),
+    resetServerUrl: () => ipcRenderer.invoke('reset-server-url'),
+  },
 });

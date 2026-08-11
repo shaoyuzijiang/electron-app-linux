@@ -8,13 +8,13 @@
  * 现有代码 `const api = require('./backend_api/api'); api.xxx()` 无需改动。
  */
 
+const httpApi = require('./httpClient');
 const {
-  BASE_URL,
   request,
   getPublicKey,
   prefetchPublicKey,
   encryptRequest,
-} = require('./httpClient');
+} = httpApi;
 
 const im = require('./im');
 const meeting = require('./meeting');
@@ -39,7 +39,7 @@ async function login(email, password, clientInfo = {}) {
   if (clientInfo.clientOs) payload.clientOs = clientInfo.clientOs;
   const encrypted = encryptRequest(publicKey, payload);
 
-  return await request(`${BASE_URL}/api/auth/login`, {
+  return await request(`${httpApi.getBaseUrl()}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(encrypted),
@@ -56,7 +56,7 @@ async function refreshToken(refreshTokenValue) {
   const payload = { refreshToken: refreshTokenValue };
   const encrypted = encryptRequest(publicKey, payload);
 
-  return await request(`${BASE_URL}/api/auth/refresh`, {
+  return await request(`${httpApi.getBaseUrl()}/api/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(encrypted),
@@ -69,7 +69,7 @@ async function refreshToken(refreshTokenValue) {
  * @returns {{ id, username, role }}
  */
 async function getProfile(accessToken) {
-  return await request(`${BASE_URL}/api/auth/profile`, {
+  return await request(`${httpApi.getBaseUrl()}/api/auth/profile`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -79,7 +79,7 @@ async function getProfile(accessToken) {
  * @returns {{ sdkId, sdkToken, expiresIn }}
  */
 async function getSdkToken() {
-  return await request(`${BASE_URL}/api/auth/sdk-token`);
+  return await request(`${httpApi.getBaseUrl()}/api/auth/sdk-token`);
 }
 
 /**
@@ -88,7 +88,7 @@ async function getSdkToken() {
  * @returns {{ idToken, expiresIn, ssoUrl? }}
  */
 async function getIdToken(accessToken) {
-  return await request(`${BASE_URL}/api/auth/id-token`, {
+  return await request(`${httpApi.getBaseUrl()}/api/auth/id-token`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -101,7 +101,7 @@ async function getIdToken(accessToken) {
  * @returns {{ message: string }}
  */
 async function changePassword(accessToken, oldPassword, newPassword) {
-  return await request(`${BASE_URL}/api/auth/change-password`, {
+  return await request(`${httpApi.getBaseUrl()}/api/auth/change-password`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -117,7 +117,7 @@ async function changePassword(accessToken, oldPassword, newPassword) {
  * @returns {Array} 部门树形结构
  */
 async function getDepartmentTree(accessToken) {
-  return await request(`${BASE_URL}/api/user-picker/departments`, {
+  return await request(`${httpApi.getBaseUrl()}/api/user-picker/departments`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -138,7 +138,7 @@ async function getDepartmentUsers(accessToken, departmentId, options = {}) {
   if (recursive) params.append('recursive', 'true');
   if (page !== undefined) params.append('page', page);
   if (pageSize !== undefined) params.append('pageSize', pageSize);
-  return await request(`${BASE_URL}/api/user-picker/departments/${departmentId}/users${params.toString() ? '?' + params : ''}`, {
+  return await request(`${httpApi.getBaseUrl()}/api/user-picker/departments/${departmentId}/users${params.toString() ? '?' + params : ''}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -152,7 +152,7 @@ async function getDepartmentUsers(accessToken, departmentId, options = {}) {
 async function searchUsers(accessToken, query) {
   const params = new URLSearchParams();
   params.append('q', query);
-  return await request(`${BASE_URL}/api/user-picker/search?${params}`, {
+  return await request(`${httpApi.getBaseUrl()}/api/user-picker/search?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

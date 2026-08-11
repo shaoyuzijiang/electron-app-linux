@@ -7,8 +7,23 @@
  */
 
 const crypto = require('crypto');
+const appSettings = require('../utils/app-settings');
 
-const BASE_URL = 'https://wemeetapp.liuqi92.cn';
+/**
+ * 服务端 URL（运行时可更新）
+ * 初值从持久化设置读取，setBaseUrl() 修改后会同步更新
+ */
+let BASE_URL = appSettings.getBaseUrl();
+
+/**
+ * 更新服务端 URL（由主进程设置面板调用）
+ * 修改后会清空公钥缓存，下次请求自动从新 URL 拉取
+ */
+function updateBaseUrl(newUrl) {
+  BASE_URL = newUrl;
+  cachedPublicKey = null;
+  publicKeyPromise = null;
+}
 
 /**
  * RSA + AES 混合加密请求体
@@ -162,6 +177,8 @@ function prefetchPublicKey() {
 
 module.exports = {
   BASE_URL,
+  getBaseUrl: () => BASE_URL,
+  updateBaseUrl,
   request,
   encryptRequest,
   getPublicKey,
