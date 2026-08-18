@@ -62,8 +62,19 @@
     ORG: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   };
 
-  // 域名（与服务端 sso-interface.md 对齐；从 sso.js 同步过来）
-  const REDIRECT_BASE = 'https://wemeetapp.liuqi92.cn';
+  // 服务端 URL：跟随登录页设置动态读取（默认 https://wemeetapp.liuqi92.cn）
+  let REDIRECT_BASE = '';
+
+  // 初始化时从设置读取实际服务端 URL
+  async function ensureRedirectBase() {
+    try {
+      const r = await window.electronAPI.settings.getServerUrl();
+      if (r && r.success && r.baseUrl) {
+        REDIRECT_BASE = r.baseUrl.replace(/\/+$/, '');
+      }
+    } catch {}
+    return REDIRECT_BASE;
+  }
 
   // 当前用户信息
   let currentUser = null;
@@ -390,7 +401,8 @@
       return;
     }
 
-    // 4. 拼装跳转 URL
+    // 4. 拼装跳转 URL（动态读取服务端 URL）
+    await ensureRedirectBase();
     const redirectUrl = `${REDIRECT_BASE}/sso/redirect?ticket=${encodeURIComponent(ticketData.ticket)}`;
 
     // 5. 创建 webview 并立即激活
@@ -426,6 +438,7 @@
       if (!ticketData || !ticketData.ticket) return;
       const bounds = calculateWebviewBounds();
       if (!bounds) return;
+      await ensureRedirectBase();
       const redirectUrl = `${REDIRECT_BASE}/sso/redirect?ticket=${encodeURIComponent(ticketData.ticket)}`;
       // 重新打开前显示 loading
       setTabLoading(tabId, true);
