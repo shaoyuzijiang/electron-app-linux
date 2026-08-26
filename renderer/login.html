@@ -401,6 +401,42 @@
       line-height: 1.5;
     }
 
+    /* 环境选择下拉框 */
+    .settings-modal select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      font-family: inherit;
+      background: #fff;
+      color: #1a1a2e;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      padding-right: 36px;
+    }
+
+    .settings-modal select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
+
+    /* 自定义 URL 输入框（仅选择"自定义"时显示） */
+    .custom-url-group {
+      display: none;
+      margin-top: 12px;
+    }
+
+    .custom-url-group.show {
+      display: block;
+    }
+
     .settings-modal-actions {
       display: flex;
       gap: 10px;
@@ -572,18 +608,24 @@
   <div class="settings-modal-overlay" id="settingsModalOverlay">
     <div class="settings-modal">
       <h2>服务端设置</h2>
-      <p class="settings-subtitle">配置后端 API 服务地址，修改后立即生效</p>
+      <p class="settings-subtitle">配置后端 API 服务环境，修改后立即生效</p>
       <div class="form-group">
-        <label for="serverUrlInput">服务端 URL</label>
-        <input type="text" id="serverUrlInput" placeholder="https://example.com" autocomplete="off" />
-        <div class="url-hint">
-          默认: https://wemeetapp.liuqi92.cn<br />
-          请输入完整地址（含 http:// 或 https://），不要加末尾斜杠
+        <label for="envSelect">运行环境</label>
+        <select id="envSelect">
+          <option value="prod">生产环境</option>
+          <option value="uat">测试环境</option>
+          <option value="custom">自定义</option>
+        </select>
+        <div class="custom-url-group" id="customUrlGroup">
+          <label for="serverUrlInput" style="font-size: 13px;">服务端 URL</label>
+          <input type="text" id="serverUrlInput" placeholder="https://example.com:7443" autocomplete="off" />
+          <div class="url-hint">
+            请输入完整地址（含 http:// 或 https://），不要加末尾斜杠
+          </div>
         </div>
       </div>
       <div class="settings-status" id="settingsStatus"></div>
       <div class="settings-modal-actions">
-        <button type="button" class="btn-reset" id="settingsResetBtn">恢复默认</button>
         <button type="button" class="btn-cancel" id="settingsCancelBtn">取消</button>
         <button type="button" class="btn-save" id="settingsSaveBtn">保存</button>
       </div>
@@ -878,7 +920,7 @@
           }
         }
       } catch {}
-      REGISTER_URL = 'https://wemeetapp.liuqi92.cn/user-center/register';
+      REGISTER_URL = 'https://wemeetsdkdemo-prod.liuqi92.cn:7443/user-center/register';
       return REGISTER_URL;
     }
 
@@ -951,112 +993,127 @@
     // ========== 服务端设置弹窗 ==========
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+    const envSelect = document.getElementById('envSelect');
+    const customUrlGroup = document.getElementById('customUrlGroup');
     const serverUrlInput = document.getElementById('serverUrlInput');
     const settingsStatus = document.getElementById('settingsStatus');
     const settingsSaveBtn = document.getElementById('settingsSaveBtn');
     const settingsCancelBtn = document.getElementById('settingsCancelBtn');
-    const settingsResetBtn = document.getElementById('settingsResetBtn');
+
+    // 预置环境 URL 映射
+    const ENV_URLS = {
+      prod: 'https://wemeetsdkdemo-prod.liuqi92.cn:7443',
+      uat: 'https://wemeetsdkdemo-uat.liuqi92.cn:7443',
+    };
+
+    // 根据当前 baseUrl 判断所属环境
+    function detectEnv(baseUrl) {
+      if (!baseUrl) return 'prod';
+      for (const [env, url] of Object.entries(ENV_URLS)) {
+        if (baseUrl === url) return env;
+      }
+      return 'custom';
+    }
+
+    // 切换环境选项时更新输入框显示
+    function onEnvChange() {
+      const env = envSelect.value;
+      if (env === 'custom') {
+        customUrlGroup.classList.add('show');
+        setTimeout(() => serverUrlInput.focus(), 50);
+      } else {
+        customUrlGroup.classList.remove('show');
+      }
+      settingsStatus.textContent = '';
+      settingsStatus.className = 'settings-status';
+    }
+
+    envSelect.addEventListener('change', onEnvChange);
 
     async function openSettingsModal() {
       settingsStatus.textContent = '';
       settingsStatus.className = 'settings-status';
-        serverUrlInput.value = '';
-        serverUrlInput.placeholder = '加载中...';
-        settingsModalOverlay.classList.add('show');
-        // 拉取当前服务端 URL
-        try {
-          if (window.electronAPI && window.electronAPI.settings) {
-            const r = await window.electronAPI.settings.getServerUrl();
-            if (r && r.success && r.baseUrl) {
+      serverUrlInput.value = '';
+      settingsModalOverlay.classList.add('show');
+      // 拉取当前服务端 URL，判断所属环境
+      try {
+        if (window.electronAPI && window.electronAPI.settings) {
+          const r = await window.electronAPI.settings.getServerUrl();
+          if (r && r.success && r.baseUrl) {
+            const env = detectEnv(r.baseUrl);
+            envSelect.value = env;
+            if (env === 'custom') {
               serverUrlInput.value = r.baseUrl;
-              serverUrlInput.placeholder = 'https://example.com';
             }
+            onEnvChange();
           }
-        } catch (err) {
-          settingsStatus.textContent = '获取当前设置失败';
-          settingsStatus.className = 'settings-status error';
         }
-        setTimeout(() => serverUrlInput.focus(), 50);
-        }
+      } catch (err) {
+        settingsStatus.textContent = '获取当前设置失败';
+        settingsStatus.className = 'settings-status error';
+      }
+    }
 
-        function closeSettingsModal() {
-        settingsModalOverlay.classList.remove('show');
-        }
+    function closeSettingsModal() {
+      settingsModalOverlay.classList.remove('show');
+    }
 
-        settingsBtn.addEventListener('click', openSettingsModal);
+    settingsBtn.addEventListener('click', openSettingsModal);
+    settingsCancelBtn.addEventListener('click', closeSettingsModal);
 
-        settingsCancelBtn.addEventListener('click', closeSettingsModal);
+    // 点击遮罩关闭
+    settingsModalOverlay.addEventListener('click', (e) => {
+      if (e.target === settingsModalOverlay) closeSettingsModal();
+    });
 
-        // 点击遮罩关闭
-        settingsModalOverlay.addEventListener('click', (e) => {
-        if (e.target === settingsModalOverlay) closeSettingsModal();
-        });
+    // ESC 关闭
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && settingsModalOverlay.classList.contains('show')) {
+        closeSettingsModal();
+      }
+    });
 
-        // ESC 关闭
-        document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && settingsModalOverlay.classList.contains('show')) {
-          closeSettingsModal();
-        }
-        });
+    // 自定义输入框回车保存
+    serverUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') settingsSaveBtn.click();
+    });
 
-        // 回车保存
-        serverUrlInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') settingsSaveBtn.click();
-        });
-
-        // 保存
-        settingsSaveBtn.addEventListener('click', async () => {
-        const url = serverUrlInput.value.trim();
+    // 保存
+    settingsSaveBtn.addEventListener('click', async () => {
+      const env = envSelect.value;
+      let url;
+      if (env === 'custom') {
+        url = serverUrlInput.value.trim();
         if (!url) {
           settingsStatus.textContent = 'URL 不能为空';
           settingsStatus.className = 'settings-status error';
           return;
         }
-        settingsSaveBtn.disabled = true;
-        settingsStatus.textContent = '保存中...';
-        settingsStatus.className = 'settings-status';
-        try {
-          const r = await window.electronAPI.settings.setServerUrl(url);
-          if (r.success) {
-            settingsStatus.textContent = '保存成功，已生效';
-            settingsStatus.className = 'settings-status success';
-            // 清空注册页 URL 缓存，下次打开重新拉取
-            REGISTER_URL = '';
-            setTimeout(closeSettingsModal, 800);
-          } else {
-            settingsStatus.textContent = r.message || '保存失败';
-            settingsStatus.className = 'settings-status error';
-          }
-        } catch (err) {
-          settingsStatus.textContent = '保存失败: ' + err.message;
+      } else {
+        url = ENV_URLS[env];
+      }
+      settingsSaveBtn.disabled = true;
+      settingsStatus.textContent = '保存中...';
+      settingsStatus.className = 'settings-status';
+      try {
+        const r = await window.electronAPI.settings.setServerUrl(url);
+        if (r.success) {
+          settingsStatus.textContent = '保存成功，已生效';
+          settingsStatus.className = 'settings-status success';
+          // 清空注册页 URL 缓存，下次打开重新拉取
+          REGISTER_URL = '';
+          setTimeout(closeSettingsModal, 800);
+        } else {
+          settingsStatus.textContent = r.message || '保存失败';
           settingsStatus.className = 'settings-status error';
-        } finally {
-          settingsSaveBtn.disabled = false;
         }
-        });
-
-        // 恢复默认
-        settingsResetBtn.addEventListener('click', async () => {
-        settingsResetBtn.disabled = true;
-        try {
-          const r = await window.electronAPI.settings.resetServerUrl();
-          if (r.success) {
-            serverUrlInput.value = r.baseUrl;
-            settingsStatus.textContent = '已恢复默认';
-            settingsStatus.className = 'settings-status success';
-            REGISTER_URL = '';
-            setTimeout(() => {
-              settingsStatus.textContent = '';
-              settingsStatus.className = 'settings-status';
-            }, 1500);
-          }
-        } catch (err) {
-          settingsStatus.textContent = '重置失败: ' + err.message;
-          settingsStatus.className = 'settings-status error';
-        } finally {
-          settingsResetBtn.disabled = false;
-        }
-        });
+      } catch (err) {
+        settingsStatus.textContent = '保存失败: ' + err.message;
+        settingsStatus.className = 'settings-status error';
+      } finally {
+        settingsSaveBtn.disabled = false;
+      }
+    });
         </script>
 </body>
 </html>

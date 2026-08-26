@@ -19,7 +19,6 @@ const ALLOWED_ORIGINS = [
   'https://meeting.tencent.com',
   'https://www.tencent.com',
   'https://cloud.tencent.com',
-  'https://wemeetapp.liuqi92.cn',
 ];
 
 /**

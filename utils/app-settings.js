@@ -7,8 +7,8 @@ const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-// 默认服务端 URL
-const DEFAULT_BASE_URL = 'https://wemeetsdkdemo-uat.liuqi92.cn:7443';
+// 默认服务端 URL（生产环境）
+const DEFAULT_BASE_URL = 'https://wemeetsdkdemo-prod.liuqi92.cn:7443';
 
 let settings = null;
 let settingsPath = null;
