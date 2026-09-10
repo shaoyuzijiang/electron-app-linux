@@ -337,6 +337,15 @@ document.getElementById('btnScreen').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('btnVoiceRecord').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.showVoiceRecordView();
+    if (!result.success) alert(result.message || '无法打开录音笔界面');
+  } catch (err) {
+    alert('操作失败: ' + err.message);
+  }
+});
+
 // ========== 头像菜单 ==========
 // 头像菜单的 UI 渲染在独立悬浮子窗口中（见 renderer/avatar-menu-overlay.html +
 // utils/avatar-menu-window.js），本页面不再持有菜单 DOM。菜单项点击后主进程会把
