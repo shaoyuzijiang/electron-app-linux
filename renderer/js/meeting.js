@@ -346,6 +346,16 @@ document.getElementById('btnVoiceRecord').addEventListener('click', async () => 
   }
 });
 
+// 录制查看：调用 ShowPreMeetingView(type=2) 打开 SDK 会前界面的录制 Tab
+document.getElementById('btnRecordView').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.showPreMeetingView(0, 2);
+    if (!result.success) alert(result.message || '无法打开录制查看界面');
+  } catch (err) {
+    alert('操作失败: ' + err.message);
+  }
+});
+
 // ========== 头像菜单 ==========
 // 头像菜单的 UI 渲染在独立悬浮子窗口中（见 renderer/avatar-menu-overlay.html +
 // utils/avatar-menu-window.js），本页面不再持有菜单 DOM。菜单项点击后主进程会把

@@ -31,7 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('join-meeting-by-json', { meetingJson }),
   quickMeeting: () => ipcRenderer.invoke('quick-meeting'),
   leaveMeeting: (leaveType) => ipcRenderer.invoke('leave-meeting', { leaveType }),
-  showPreMeetingView: () => ipcRenderer.invoke('show-pre-meeting-view'),
+  showPreMeetingView: (uiStyle, tabId) =>
+    ipcRenderer.invoke('show-pre-meeting-view', { uiStyle, tabId }),
   showJoinMeetingView: () => ipcRenderer.invoke('show-join-meeting-view'),
   showScheduleMeetingView: (meetingType) =>
     ipcRenderer.invoke('show-schedule-meeting-view', { meetingType }),
