@@ -321,7 +321,7 @@ npm run build:native:win-x64 && npm run dist:win:x64
 ### macOS
 
 - 未签名/未公证的 `.dmg` 在其他 Mac 上打开时会被 Gatekeeper 拦截，需右键 → 打开，或执行 `xattr -cr <app路径>` 去除隔离属性
-- SDK Framework 在开发模式下通过 `bootstrap/start.js` 自动拷贝到 Electron.app 中，打包时通过 `extraResources` 自动处理
+- SDK Framework 在开发模式下通过 `bootstrap/start.js` 自动拷贝到 Electron.app 中，打包时通过 `afterPack` 钩子（`bootstrap/after-pack.js`）从 `wemeet_sdk/mac/Frameworks/<arch>/` 拷贝单架构 Framework 到 `.app/Contents/Frameworks/` 并完成签名（在 DMG 构建之前执行，DMG 内为已签名 .app）
 
 ### Windows
 
@@ -336,40 +336,41 @@ npm run build:native:win-x64 && npm run dist:win:x64
 
 ### 更新 SDK 包
 
-当需要替换新版腾讯会议 SDK 时，请按以下步骤操作：
+#### macOS（一键脚本）
 
-1. **替换 SDK 文件**：
-   - macOS：将新 SDK 的 `wemeet_sdk/mac/` 目录替换
-   - Windows：新 SDK 分发包结构为 `SDK/x64/`（含核心 DLL、`Release/` 子目录、`include/`、`.lib`）。先修改 `wemeet_sdk/win/x64/copy.bat` 中的 `SDK_SRC` 指向新 SDK 的 `SDK/x64` 路径并执行，会自动拷贝核心 `*.dll`、`Release\` 目录、`wemeetsdk_x64.lib`（同步到 `wemeet_sdk/win/lib/x64/release/`）和编译后的 `.node`；再手动将 `SDK/x64/include/*.h` 复制到 `wemeet_sdk/win/include/`
+将腾讯会议官方 SDK 分发包解压到项目根目录后执行：
+
+```bash
+./update-mac-sdk.sh TMSDK_MacOS_3.43.112.62_20260910_publish_release
+```
+
+脚本自动完成：
+1. 校验分发包版本（`metadata.json`）并对比当前版本
+2. 替换 `wemeet_sdk/wemeet.cpp`（C++ 封装层）
+3. 替换 `wemeet_sdk/mac/Frameworks/{arm64,x86_64}/TMSDK.framework`
+4. 更新 `package.json` / `package-lock.json` 版本号
+5. 清理 Electron.app 旧 framework + `build/` 编译缓存
+6. 重新编译原生模块（arm64 + x64）并同步无后缀 `.node`
+7. 验证 Framework 版本一致性
+
+> 注意：分发包目录需包含 `metadata.json`、`SDK/TMSDK.framework`、`tmsdk-node-addon/src/wemeet.cpp`。
+
+#### Windows（手动）
+
+1. **替换 SDK 文件**：新 SDK 分发包结构为 `SDK/x64/`（含核心 DLL、`Release/` 子目录、`include/`、`.lib`）。先修改 `wemeet_sdk/win/x64/copy.bat` 中的 `SDK_SRC` 指向新 SDK 的 `SDK/x64` 路径并执行，会自动拷贝核心 `*.dll`、`Release\` 目录、`wemeetsdk_x64.lib`（同步到 `wemeet_sdk/win/lib/x64/release/`）和编译后的 `.node`；再手动将 `SDK/x64/include/*.h` 复制到 `wemeet_sdk/win/include/`
    - 清理旧版残留：升级前删除 `wemeet_sdk/win/x64/` 下的旧版二进制（`*.dll`、`*.exe`、`*.lib`）和冗余子目录（modules、nxui、plugins、resources 等，新版统一在 `Release/` 下），避免新旧 DLL 混用（如 Qt5 与 Qt6 共存导致冲突）
 2. **替换 C++ 封装**：将新 SDK Electron Demo（`tmsdk-node-addon/src/`）的以下文件替换到项目：
    - `wemeet.cpp` → `wemeet_sdk/wemeet.cpp`
    - `json/jsoncpp.cpp` → `wemeet_sdk/jsoncpp.cpp`
    - `json/json.h`、`json/json-forwards.h` → `include/json/`
-   
-   > 注意：新版 `wemeet.cpp` 使用 `#include "json/json.h"` 和 `#include "json/json-forwards.h"`，不再 `#include "jsoncpp.cpp"` 直接包含源文件，因此 `jsoncpp.cpp` 需作为独立编译单元。
-3. **更新 binding.gyp**：
-   - 三个 target（win-ia32、win-x64、mac）的 `sources` 中加入 `"wemeet_sdk/jsoncpp.cpp"`
-   - 三个 target 的 `include_dirs` 中加入 `"./include/json"`（mac 为 `"include/json"`），使 `jsoncpp.cpp` 中的 `#include "json.h"` 能定位到 `include/json/json.h`
-4. **检查 macOS 符号链接**：确保 `wemeet_sdk/mac/Frameworks/x64/TMSDK.framework` 是**相对符号链接**，而非绝对路径符号链接。替换后执行以下命令检查和修复：
-   ```bash
-   readlink wemeet_sdk/mac/Frameworks/x64/TMSDK.framework
-   
-   # 如果输出是绝对路径（以 / 开头），需修复为相对路径：
-   cd wemeet_sdk/mac/Frameworks/x64
-   rm TMSDK.framework
-   ln -s ../arm64/TMSDK.framework TMSDK.framework
-   cd -
-   ```
-5. **重新编译原生模块**：SDK 更新后需要重新编译 `.node` 原生模块：
-   ```bash
-   # macOS
-   npm run build:native:mac
+3. **更新 binding.gyp**：三个 target（win-ia32、win-x64、mac）的 `sources` 中加入 `"wemeet_sdk/jsoncpp.cpp"`，`include_dirs` 中加入 `"./include/json"`
+4. **重新编译**：`npm run build:native:win-x64`
 
-   # Windows
-   npm run build:native:win-x64
-   ```
-6. **验证**：运行 `npm run dev` 确认 SDK 加载正常后再打包
+#### 验证
+
+更新完成后运行 `npm run dev` 确认 SDK 加载正常，再执行 `./build-all-mac.sh` 打包。
+
+> 职责分工：原生模块编译只在 `update-mac-sdk.sh` 中执行（编译产物 `.node` 输出到 `output/mac/`，符号表保存到 `dSYM/mac/native/`）；`build-all-mac.sh` 只做打包，不重复编译——若缺少 `.node` 产物会提示先运行 update 脚本。
 
 ## SDK API 列表
 

@@ -45,7 +45,8 @@ function copyDir(src, dest) {
 
 if (process.platform === 'darwin') {
   const arch = process.arch;
-  const tmsdkPath = path.join(__dirname, '..', 'wemeet_sdk', 'mac', 'Frameworks', arch === 'arm64' ? 'arm64' : 'x64');
+  // 目录名映射：x64 进程对应的源目录是 x86_64（与 update-mac-sdk.sh 的输出目录一致）
+  const tmsdkPath = path.join(__dirname, '..', 'wemeet_sdk', 'mac', 'Frameworks', arch === 'arm64' ? 'arm64' : 'x86_64');
   const frameworkDest = path.join(
     __dirname, '..', 'node_modules', 'electron', 'dist',
     'Electron.app', 'Contents', 'Frameworks'

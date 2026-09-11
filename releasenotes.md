@@ -169,7 +169,7 @@
 | 渲染进程日志转发 | 渲染进程 `console.log/warn/error` 通过 IPC 转发到主进程写入同一日志文件，日志标记 `[Renderer]` 前缀以区分来源；同时捕获渲染进程未处理异常和 Promise 拒绝 |
 | SDK 回调格式兼容 | SDK 回调中 `code=0` 且 `msg` 为空时省略 `code`/`msg` 字段，回调处理逻辑已兼容此格式 |
 | SDK 文件拷贝脚本 | 提供 `wemeet_sdk/win/x64/copy.bat`，一键从 SDK 分发包拷贝 DLL、Release 目录、lib 和 .node 到项目 |
-| SDK 版本 | 腾讯会议 SDK `3.43.100`（macOS arm64/x64、Windows x64） |
+| SDK 版本 | 腾讯会议 SDK `3.43.112.62`（macOS arm64/x64、Windows x64） |
 
 ## 12. 企业管理（SSO 免登 Web 页面）
 

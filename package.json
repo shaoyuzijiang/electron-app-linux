@@ -1,7 +1,7 @@
 {
   "name": "tencent-meeting-sdk-demo",
   "productName": "腾讯会议SDK Demo",
-  "version": "3.43.100",
+  "version": "3.43.112",
   "description": "腾讯会议SDK Demo",
   "main": "main.js",
   "scripts": {
@@ -13,8 +13,8 @@
     "dev": "node bootstrap/start.js && electron .",
     "pack": "node bootstrap/build.js --dir",
     "dist": "node bootstrap/build.js",
-    "dist:mac:arm64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --arm64",
-    "dist:mac:x64": "rm -rf output/mac/TMSDK.framework && cp -R wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework output/mac/TMSDK.framework && node bootstrap/build.js --x64",
+    "dist:mac:arm64": "node bootstrap/build.js --arm64",
+    "dist:mac:x64": "node bootstrap/build.js --x64",
     "dist:win:x64": "node bootstrap/build.js --x64",
     "postinstall:mac": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers",
     "postinstall:win": "node-gyp rebuild --target=33.0.0 --arch=x64 --dist-url=https://electronjs.org/headers && if not exist wemeet_sdk\\win\\x64 mkdir wemeet_sdk\\win\\x64 && copy build\\Release\\wemeet_electron_sdk.node wemeet_sdk\\win\\x64\\wemeet_electron_sdk.node"
@@ -30,6 +30,7 @@
     "appId": "com.tencent.meeting.sdk.demo",
     "productName": "腾讯会议SDK Demo",
     "npmRebuild": false,
+    "afterPack": "./bootstrap/after-pack.js",
     "artifactName": "${productName}-${version}-${env.BUILD_DATE}-${arch}.${ext}",
     "directories": {
       "output": "dist"
@@ -51,7 +52,9 @@
     "protocols": [
       {
         "name": "TencentMeetingSDK Scheme",
-        "schemes": ["wemeetsdk"],
+        "schemes": [
+          "wemeetsdk"
+        ],
         "role": "Viewer"
       }
     ],
@@ -65,15 +68,6 @@
       "icon": "app.png",
       "entitlements": "entitlements.mac.plist",
       "hardenedRuntime": true,
-      "extraFiles": [
-        {
-          "from": "output/mac/TMSDK.framework",
-          "to": "Frameworks/TMSDK.framework",
-          "filter": [
-            "**/*"
-          ]
-        }
-      ],
       "target": [
         {
           "target": "dmg"
