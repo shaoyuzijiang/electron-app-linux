@@ -356,6 +356,22 @@ document.getElementById('btnRecordView').addEventListener('click', async () => {
   }
 });
 
+// 监听录音笔状态回调：录制结束时自动打开录制查看页面
+// SDK 回调 OnVoiceRecordStatusChange 状态值:
+//   -1 未录音 | 0 录音结束 | 1 录音开始 | 2 录音进行中 | 3 暂停 | 4 上传成功 | 5 上传失败
+window.electronAPI.onSdkCallback((rawMsg) => {
+  try {
+    const cb = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
+    if (cb.func === 'OnVoiceRecordStatusChange' && cb.param) {
+      const status = String(cb.param.voice_record_status);
+      if (status === '0') {
+        // 录音结束 → 自动打开录制查看页面（ShowPreMeetingView tabId=2）
+        window.electronAPI.showPreMeetingView(0, 2).catch(() => {});
+      }
+    }
+  } catch {}
+});
+
 // ========== 头像菜单 ==========
 // 头像菜单的 UI 渲染在独立悬浮子窗口中（见 renderer/avatar-menu-overlay.html +
 // utils/avatar-menu-window.js），本页面不再持有菜单 DOM。菜单项点击后主进程会把
