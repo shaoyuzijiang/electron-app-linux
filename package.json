@@ -44,7 +44,8 @@
       "ipc-handlers.js",
       "renderer/**/*",
       "output/mac/**/*",
-      "entitlements.mac.plist"
+      "entitlements.mac.plist",
+      "app.png"
     ],
     "asarUnpack": [
       "output/mac/**/*"

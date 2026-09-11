@@ -123,7 +123,8 @@ function showMenu(opts) {
 function _positionAndShow(win, mainWindow, x, y, size) {
   const contentBounds = mainWindow.getContentBounds();
   const menuWidth = (size && size.width) || 160;
-  const menuHeight = (size && size.height) || 130;
+  // 兜底高度按当前菜单项数估算（5 个菜单项 + 分割线，实际以内容测量为准）
+  const menuHeight = (size && size.height) || 165;
   const winWidth = menuWidth + SHADOW_BUFFER * 2;
   const winHeight = menuHeight + SHADOW_BUFFER * 2;
   win.setBounds({

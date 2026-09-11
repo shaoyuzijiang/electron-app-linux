@@ -127,6 +127,7 @@ function getClientOs() {
  * @param {Function} deps.listWebviews - 列出所有 webview
  * @param {Function} deps.webviewManagerAPI - webview-manager 完整模块（用于多 webview 兼容调用）
  * @param {Object} deps.avatarMenuWindowAPI - 头像菜单悬浮窗模块（utils/avatar-menu-window.js）
+ * @param {Object} deps.aboutDialogWindowAPI - 「关于」对话框模块（utils/about-dialog-window.js）
  */
 function register(ipcMain, deps) {
   const {
@@ -164,6 +165,7 @@ function register(ipcMain, deps) {
     closeAllWebviews,
     webviewManagerAPI,
     avatarMenuWindowAPI,
+    aboutDialogWindowAPI,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -1656,10 +1658,26 @@ function register(ipcMain, deps) {
   // 悬浮窗内菜单项被点击：隐藏悬浮窗 + 把 action 转发给主窗口执行实际业务逻辑
   // （修改密码 / 上传日志 / 企业管理 / 退出登录 均由主窗口渲染进程处理，
   //  悬浮窗本身只负责展示 UI 和上报点击）
+  // 「关于」在主进程统一处理（弹原生版本信息对话框），不转发渲染进程——
+  // 这样会议页 / 企业登录页都能用，无需两处重复实现
   ipcMain.on('avatar-menu-item-click', (_event, action) => {
     if (avatarMenuWindowAPI && avatarMenuWindowAPI.hideMenu) {
       avatarMenuWindowAPI.hideMenu();
     }
+
+    if (action === 'about') {
+      const sdkVersion = wemeetSdk ? wemeetSdk.GetSDKVersion() : null;
+      // 自定义「关于」窗口（见 utils/about-dialog-window.js）：
+      // 原生 dialog 在 macOS 上的图标取自进程所属 App，dev 模式下永远是
+      // Electron 默认 logo 且不支持自定义，改用引用 app.png 的自定义弹窗
+      aboutDialogWindowAPI.showAboutDialog(getMainWindow(), {
+        appName: app.getName(),
+        appVersion: app.getVersion(),
+        sdkVersion: sdkVersion || '',
+      });
+      return;
+    }
+
     const mainWindow = getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('avatar-menu-action', action);

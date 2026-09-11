@@ -10,6 +10,7 @@ const meetingPolling = require('./backend_api/meeting-polling');
 const userPicker = require('./sdk_mgmt/user-picker');
 const webviewManager = require('./utils/webview-manager');
 const avatarMenuWindow = require('./utils/avatar-menu-window');
+const aboutDialogWindow = require('./utils/about-dialog-window');
 const ipcHandlers = require('./ipc-handlers');
 
 const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback, SCHEME_NAME } = wemeetSdkModule;
@@ -427,6 +428,8 @@ app.whenReady().then(() => {
     webviewManagerAPI: webviewManager,
     // 头像菜单悬浮窗
     avatarMenuWindowAPI: avatarMenuWindow,
+    // 「关于」对话框
+    aboutDialogWindowAPI: aboutDialogWindow,
   });
 
   // IPC 就绪后再创建窗口加载页面
