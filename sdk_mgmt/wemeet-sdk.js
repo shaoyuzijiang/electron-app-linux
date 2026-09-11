@@ -11,10 +11,11 @@ if (process.platform === 'win32') {
   } catch {}
 }
 
-// 应用图标路径（打包后图标在 extraResources 或 asar 外部）
+// 应用图标路径（打包后图标在 extraResources 或 asar 外部；
+// 原生 SDK 需要真实文件路径，不能使用 asar 内的虚拟路径）
 const appIconPath = app.isPackaged
   ? path.join(process.resourcesPath, 'app.png')
-  : path.join(__dirname, '..', 'app.png');
+  : path.join(__dirname, '..', 'renderer', 'assets', 'app.png');
 
 // URL Scheme 名称，用于唤起客户端
 const SCHEME_NAME = 'wemeetsdk';

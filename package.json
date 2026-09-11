@@ -44,8 +44,7 @@
       "ipc-handlers.js",
       "renderer/**/*",
       "output/mac/**/*",
-      "entitlements.mac.plist",
-      "app.png"
+      "entitlements.mac.plist"
     ],
     "asarUnpack": [
       "output/mac/**/*"
@@ -61,12 +60,12 @@
     ],
     "extraResources": [
       {
-        "from": "app.png",
+        "from": "renderer/assets/app.png",
         "to": "app.png"
       }
     ],
     "mac": {
-      "icon": "app.png",
+      "icon": "renderer/assets/app.png",
       "entitlements": "entitlements.mac.plist",
       "hardenedRuntime": true,
       "target": [
@@ -80,7 +79,7 @@
       }
     },
     "win": {
-      "icon": "app.png",
+      "icon": "renderer/assets/app.png",
       "publish": null,
       "target": [
         {

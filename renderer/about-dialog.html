@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <!--
   「关于」对话框内容（见 utils/about-dialog-window.js）。
-  版本信息由主进程通过 URL query 注入：appName / appVersion / sdkVersion。
-  logo 引用项目根的 app.png（相对路径 ../app.png，dev 与打包后均可用，
-  打包时需保证 app.png 进入 asar，见 package.json build.files）。
+  版本信息和 logo 的 file:// URL 均由主进程通过 URL query 注入：
+  appName / appVersion / sdkVersion / logo。
+  logo 不能用 asar 内相对路径引用——electron-builder 会把被
+  extraResources/icon 引用的源文件排除出 asar，因此由主进程注入
+  真实文件的绝对路径。
 -->
 <html lang="zh-CN">
 <head>
@@ -78,7 +80,7 @@
 <body>
   <div id="card">
     <button id="close-btn" title="关闭">&#10005;</button>
-    <img id="logo" src="../app.png" alt="logo" />
+    <img id="logo" src="" alt="logo" />
     <div id="app-name"></div>
     <div class="version-line" id="app-version"></div>
     <div class="version-line" id="sdk-version"></div>
@@ -87,6 +89,8 @@
   <script>
     (function () {
       var params = new URLSearchParams(location.search);
+      var logoUrl = params.get('logo');
+      if (logoUrl) document.getElementById('logo').src = logoUrl;
       document.getElementById('app-name').textContent = params.get('appName') || '';
       document.getElementById('app-version').textContent =
         '应用版本: ' + (params.get('appVersion') || '-');
