@@ -1,0 +1,38 @@
+# Dependencies and build products
+node_modules/
+build/
+dist/
+release/
+output/
+!output/.gitkeep
+
+# Local environment, logs and crash dumps
+.env
+.env.*
+*.log
+logs/
+core
+core.*
+*.core
+*.dmp
+.DS_Store
+
+# Distributable archives and packages
+*.tar
+*.tar.gz
+*.tgz
+*.AppImage
+
+# SDK imports: scripts and placeholders remain in Git; all extracted SDK content stays local
+sdk/linux-arm64/*/include/
+sdk/linux-arm64/*/Release/
+sdk/linux-arm64/*/prebuilt/
+sdk/linux-arm64/*/libwemeetsdk.so
+sdk/linux-arm64/*/libwemeet_base.so
+sdk/linux-arm64/*/saas_sdk_env.json
+sdk/linux-arm64/*/sdk-manifest.json
+native/wemeet.cpp
+
+# Native binaries are never committed
+*.so
+*.node

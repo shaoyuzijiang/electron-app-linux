@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>腾讯会议 SDK Linux ARM64 Demo</title>
+    <link rel="stylesheet" href="./css/app.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <img class="brand-image" src="./assets/app.png" alt="腾讯会议 SDK Demo" />
+          <div><strong>腾讯会议</strong><span>Linux SDK Demo</span></div>
+        </div>
+        <nav class="side-nav" aria-label="功能面板">
+          <button class="nav-item active" type="button" data-view="login"><span class="nav-glyph">L</span><span>登录</span></button>
+          <button class="nav-item" type="button" data-view="status"><span class="nav-glyph">S</span><span>运行状态</span></button>
+          <button class="nav-item" type="button" data-view="lifecycle"><span class="nav-glyph">I</span><span>初始化/登录</span></button>
+          <button class="nav-item" type="button" data-view="meeting"><span class="nav-glyph">M</span><span>会议</span></button>
+          <button class="nav-item" type="button" data-view="controls"><span class="nav-glyph">C</span><span>会中控制</span></button>
+          <button class="nav-item" type="button" data-view="configuration"><span class="nav-glyph">K</span><span>SDK 配置</span></button>
+          <button class="nav-item" type="button" data-view="callbacks"><span class="nav-glyph">R</span><span>回调日志</span></button>
+          <button class="nav-item" type="button" data-view="diagnostics"><span class="nav-glyph">D</span><span>环境诊断</span></button>
+        </nav>
+        <button id="aboutButton" class="about-button" type="button">关于此 Demo</button>
+        <p class="sidebar-foot">SDK 3.26.100.14 · ARM64</p>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div><p id="viewKicker" class="eyebrow">TENCENT MEETING SDK</p><h1 id="viewTitle">欢迎使用</h1></div>
+          <div class="topbar-actions"><span id="stateBadge" class="state-badge">加载中</span></div>
+        </header>
+        <div id="mockNotice" class="mock-notice" hidden>Mock SDK：当前不是真实 Linux SDK 环境</div>
+        <p id="actionMessage" class="action-message" aria-live="polite"></p>
+
+        <section id="login" class="view login-view active" data-title="欢迎使用" data-kicker="TENCENT MEETING SDK">
+          <div class="login-stage">
+            <article class="login-card">
+              <img class="login-logo" src="./assets/app.png" alt="" />
+              <p class="section-label">Linux ARM64 Demo</p>
+              <h2>登录会议 SDK</h2>
+              <p class="muted">当前为本地 Mock 验证入口。真实账号鉴权尚未接入，不会收集或保存密码。</p>
+              <label>Mock 显示名称<input id="displayName" maxlength="80" value="Mock User" autocomplete="off" /></label>
+              <button id="loginButton" class="primary full-width">登录 SDK</button>
+              <button id="goLifecycleButton" class="text-button" type="button">先初始化 SDK</button>
+              <p class="login-footnote">登录按钮会在 SDK 初始化完成后可用</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="status" class="view" data-title="运行状态" data-kicker="SDK RUNTIME">
+          <div class="hero-card">
+            <div><p class="section-label">运行状态</p><h2>SDK 生命周期</h2><p id="stateDescription" class="muted">正在读取运行状态。</p></div>
+            <div class="hero-status"><span class="status-dot"></span><strong id="heroState">—</strong><span>当前 SDK 状态</span></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><span>SDK 状态</span><strong id="sdkState">—</strong></div>
+            <div class="stat"><span>会议状态</span><strong id="meetingState">—</strong></div>
+            <div class="stat"><span>运行模式</span><strong id="modeState">—</strong></div>
+          </div>
+          <div class="empty-state"><strong>阶段 2C：界面统一完成</strong><p>真实 Linux SDK 的构建和 POC 仍需在麒麟 ARM64 实机上执行。</p></div>
+        </section>
+
+        <section id="lifecycle" class="view" data-title="初始化与登录" data-kicker="SDK LIFECYCLE">
+          <div class="content-grid lifecycle-grid">
+            <article class="panel action-card featured"><p class="section-label">第 1 步</p><h2>初始化 SDK</h2><p class="muted">准备 Mock SDK 运行环境并等待初始化回调。</p><label>应用名称<input id="appName" maxlength="80" value="Linux Electron Demo" /></label><button id="initializeButton" class="primary full-width">初始化 SDK</button></article>
+            <article class="panel action-card"><p class="section-label">第 2 步</p><h2>登录 SDK</h2><p class="muted">进入登录页后使用 Mock 显示名称完成本地验证。</p><button id="goLoginButton" class="secondary full-width" type="button">前往登录页</button><div class="step-note">真实鉴权尚未接入</div></article>
+          </div>
+          <article class="panel destructive-panel"><div><p class="section-label">维护操作</p><h2>释放 SDK</h2><p class="muted">仅在已初始化或登录后可执行。</p></div><div class="button-row"><button id="logoutButton" class="secondary">登出</button><button id="uninitializeButton" class="danger">反初始化</button></div></article>
+        </section>
+
+        <section id="meeting" class="view" data-title="会议" data-kicker="MEETING">
+          <div class="content-grid meeting-grid"><article class="panel action-card featured"><p class="section-label">加入会议</p><h2>输入会议号</h2><label>会议号<input id="meetingCode" maxlength="32" placeholder="例如 123-456-789" autocomplete="off" /></label><button id="joinButton" class="primary full-width">加入会议</button><p class="hint">仅在 Mock 登录完成后可验证入会流程。</p></article><article class="panel action-card"><p class="section-label">当前会议</p><h2 id="meetingCardTitle">尚未入会</h2><p id="meetingCardDescription" class="muted">加入会议后，可在此执行离会操作。</p><button id="leaveButton" class="secondary full-width">离开会议</button></article></div>
+        </section>
+
+        <section id="controls" class="view" data-title="会中控制" data-kicker="IN-MEETING CONTROLS">
+          <article class="panel"><p class="section-label">能力矩阵</p><h2>当前可用能力</h2><div id="controlCapabilities" class="capability-list"></div><p class="hint">仅展示 Linux 3.26.100.14 能力矩阵和当前运行时导出接口的交集；不支持能力不会显示。</p></article>
+        </section>
+
+        <section id="configuration" class="view" data-title="SDK 配置" data-kicker="SDK CONFIGURATION">
+          <article class="panel"><p class="section-label">当前配置</p><h2>运行基线</h2><dl class="config-list"><div><dt>目标 SDK</dt><dd>Linux ARM64 3.26.100.14</dd></div><div><dt>原生 Runtime</dt><dd>阶段 2 已准备，尚未在 Linux ARM64 实机验证</dd></div><div><dt>鉴权</dt><dd>未实现，不接收 Secret、Token 或账号密码</dd></div><div><dt>Mock</dt><dd>仅未打包开发模式可用</dd></div></dl></article>
+        </section>
+
+        <section id="callbacks" class="view" data-title="回调日志" data-kicker="SDK CALLBACKS">
+          <article class="panel log-panel"><div class="section-heading"><div><p class="section-label">回调日志</p><h2>最近 SDK 回调</h2></div><span id="callbackCount" class="count-badge">0</span></div><div id="callbackLog" class="callback-log"><p class="muted">暂无回调。</p></div></article>
+        </section>
+
+        <section id="diagnostics" class="view" data-title="环境诊断" data-kicker="ENVIRONMENT">
+          <article class="panel diagnostics-panel"><p class="section-label">环境诊断</p><h2>运行环境</h2><dl id="diagnosticsList" class="diagnostics-list"></dl></article>
+        </section>
+      </section>
+    </main>
+
+    <div id="aboutModal" class="modal-backdrop" hidden role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle"><button id="closeAboutButton" class="modal-close" type="button" aria-label="关闭">×</button><img class="modal-logo" src="./assets/app.png" alt="" /><p class="section-label">ABOUT</p><h2 id="aboutTitle">腾讯会议 SDK Linux ARM64 Demo</h2><p>阶段 2C：统一界面与 GitHub/麒麟 ARM64 手工操作准备。</p><button id="closeAboutPrimaryButton" class="primary full-width" type="button">我知道了</button></section></div>
+    <script src="./js/app.js"></script>
+  </body>
+</html>
