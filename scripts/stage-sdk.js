@@ -1,14 +1,31 @@
 'use strict';
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { SDK_VERSION, assertArm64Elf, assertSafeSymlinks, copyPreservingLinks } = require('./sdk-utils');
+const { SDK_VERSION, assertArm64Elf, assertSafeSymlinks, copyPreservingLinks, movePreservingLinks } = require('./sdk-utils');
 
 const projectRoot = path.resolve(__dirname, '..');
 const sdkRoot = path.join(projectRoot, 'sdk', 'linux-arm64', SDK_VERSION);
 const runtimeRoot = path.join(projectRoot, 'output', 'linux-arm64');
 const usePrebuilt = process.argv.includes('--use-prebuilt');
+
+function replaceRuntimeDirectory({ replacementRoot, runtimeRoot: targetRoot, fsImpl = fs }) {
+  const parent = path.dirname(targetRoot);
+  const backupRoot = path.join(parent, `.linux-arm64-backup-${process.pid}-${Date.now()}`);
+  let backedUp = false;
+  try {
+    if (fsImpl.existsSync(targetRoot)) {
+      fsImpl.renameSync(targetRoot, backupRoot);
+      backedUp = true;
+    }
+    fsImpl.renameSync(replacementRoot, targetRoot);
+    if (backedUp) fsImpl.rmSync(backupRoot, { recursive: true, force: true });
+  } catch (error) {
+    if (fsImpl.existsSync(targetRoot)) fsImpl.rmSync(targetRoot, { recursive: true, force: true });
+    if (backedUp && fsImpl.existsSync(backupRoot)) fsImpl.renameSync(backupRoot, targetRoot);
+    throw new Error(`SDK 运行时替换失败，已恢复旧运行时：${error.message}`);
+  }
+}
 
 function stageRuntime({ addonSource } = {}) {
   const selectedAddon = addonSource || (usePrebuilt
@@ -18,8 +35,12 @@ function stageRuntime({ addonSource } = {}) {
     throw new Error(usePrebuilt ? '官方预编译 addon 不存在' : '缺少重新编译的 addon；请先在 Linux ARM64 执行 npm run build:native:linux-arm64');
   }
   assertArm64Elf(selectedAddon);
-  const stagingParent = fs.mkdtempSync(path.join(os.tmpdir(), 'tmsdk-stage-'));
+  const outputParent = path.dirname(runtimeRoot);
+  fs.mkdirSync(outputParent, { recursive: true });
+  // 暂存于 output 同级目录，确保通常走同文件系统 rename；movePreservingLinks 仍处理异常挂载场景。
+  const stagingParent = fs.mkdtempSync(path.join(outputParent, '.sdk-stage-'));
   const stagingRoot = path.join(stagingParent, 'linux-arm64');
+  const replacementRoot = path.join(outputParent, `.linux-arm64-next-${process.pid}-${Date.now()}`);
   try {
     fs.mkdirSync(stagingRoot, { recursive: true });
     fs.copyFileSync(selectedAddon, path.join(stagingRoot, 'wemeet_electron_sdk.node'), fs.constants.COPYFILE_EXCL);
@@ -30,11 +51,11 @@ function stageRuntime({ addonSource } = {}) {
     }
     copyPreservingLinks(path.join(sdkRoot, 'Release'), path.join(stagingRoot, 'Release'));
     assertSafeSymlinks(stagingRoot);
-    fs.mkdirSync(path.dirname(runtimeRoot), { recursive: true });
-    fs.rmSync(runtimeRoot, { recursive: true, force: true });
-    fs.renameSync(stagingRoot, runtimeRoot);
+    movePreservingLinks(stagingRoot, replacementRoot);
+    replaceRuntimeDirectory({ replacementRoot, runtimeRoot });
     console.info(`SDK 运行时已暂存至 ${runtimeRoot}${usePrebuilt ? '（官方预编译 addon，仅排障用途）' : ''}`);
   } finally {
+    fs.rmSync(replacementRoot, { recursive: true, force: true });
     fs.rmSync(stagingParent, { recursive: true, force: true });
   }
 }
@@ -48,4 +69,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { stageRuntime };
+module.exports = { replaceRuntimeDirectory, stageRuntime };

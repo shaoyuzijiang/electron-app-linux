@@ -6,6 +6,7 @@ release/
 output/
 !output/.gitkeep
 .sdk-import-tmp-*
+.sdk-stage-*
 
 # Local environment, logs and crash dumps
 .env

@@ -151,8 +151,21 @@ function collectExecutableElfFiles(rootPath) {
   return results.sort();
 }
 
-function copyPreservingLinks(source, destination) {
-  fs.cpSync(source, destination, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true, force: false, errorOnExist: true });
+function copyPreservingLinks(source, destination, fsImpl = fs) {
+  fsImpl.cpSync(source, destination, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true, force: false, errorOnExist: true });
+}
+
+function movePreservingLinks(source, destination, fsImpl = fs) {
+  try {
+    fsImpl.renameSync(source, destination);
+    return;
+  } catch (error) {
+    // 暂存目录与目标不在同一文件系统时（例如 /tmp 为独立挂载点）rename 会返回 EXDEV，
+    // 此时回退为「完整复制后再删除源目录」，保持权限与符号链接。
+    if (error.code !== 'EXDEV') throw error;
+  }
+  copyPreservingLinks(source, destination, fsImpl);
+  fsImpl.rmSync(source, { recursive: true, force: true });
 }
 
 function validateManifestFiles(manifest, resolvePath) {
@@ -178,6 +191,7 @@ module.exports = {
   createSdkExtractionPlan,
   inspectElf,
   isPathInside,
+  movePreservingLinks,
   resolveArchiveLink,
   sha256File,
   validateManifestFiles

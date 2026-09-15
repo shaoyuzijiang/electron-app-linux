@@ -12,9 +12,11 @@ const {
   assertSafeSymlinks,
   createSdkExtractionPlan,
   inspectElf,
+  movePreservingLinks,
   sha256File,
   validateManifestFiles
 } = require('../scripts/sdk-utils');
+const { replaceRuntimeDirectory } = require('../scripts/stage-sdk');
 
 function withTempDirectory(callback) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tmsdk-test-'));
@@ -104,6 +106,54 @@ test('目录成员不带末尾斜杠时仍生成最小桥接依赖计划', () =>
   assert.ok(plan.extractMembers.includes(`${root}/SDK/Release`));
   assert.ok(plan.extractMembers.includes(`${root}/Electron_Demo/include/json`));
 });
+
+test('跨设备暂存回退为复制并清理源目录', () => withTempDirectory((directory) => {
+  const source = path.join(directory, '.sdk-stage-fixture');
+  const destination = path.join(directory, 'output', 'linux-arm64');
+  fs.mkdirSync(path.join(source, 'Release', 'plugins'), { recursive: true });
+  fs.writeFileSync(path.join(source, 'wemeet_electron_sdk.node'), 'addon');
+  fs.writeFileSync(path.join(source, 'Release', 'plugins', 'libqsvgicon.so'), 'plugin');
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  movePreservingLinks(source, destination, {
+    renameSync() { throw Object.assign(new Error('EXDEV: cross-device link not permitted'), { code: 'EXDEV' }); },
+    cpSync: fs.cpSync,
+    rmSync: fs.rmSync
+  });
+  assert.equal(fs.existsSync(source), false);
+  assert.equal(fs.readFileSync(path.join(destination, 'wemeet_electron_sdk.node'), 'utf8'), 'addon');
+  assert.equal(fs.readFileSync(path.join(destination, 'Release', 'plugins', 'libqsvgicon.so'), 'utf8'), 'plugin');
+}));
+
+test('非跨设备错误直接抛出且不落盘半成品', () => withTempDirectory((directory) => {
+  const source = path.join(directory, 'source');
+  const destination = path.join(directory, 'destination');
+  fs.mkdirSync(source);
+  assert.throws(() => movePreservingLinks(source, destination, {
+    renameSync() { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }); }
+  }), /permission denied/);
+  assert.equal(fs.existsSync(source), true);
+  assert.equal(fs.existsSync(destination), false);
+}));
+
+test('新 runtime 替换失败时恢复旧 runtime', () => withTempDirectory((directory) => {
+  const runtimeRoot = path.join(directory, 'output', 'linux-arm64');
+  const replacementRoot = path.join(directory, 'output', '.linux-arm64-next');
+  fs.mkdirSync(runtimeRoot, { recursive: true });
+  fs.mkdirSync(replacementRoot, { recursive: true });
+  fs.writeFileSync(path.join(runtimeRoot, 'old-marker'), 'old');
+  fs.writeFileSync(path.join(replacementRoot, 'new-marker'), 'new');
+  let renameCount = 0;
+  const fsImpl = Object.assign({}, fs, {
+    renameSync(source, destination) {
+      renameCount += 1;
+      if (renameCount === 2) throw new Error('simulated replacement failure');
+      fs.renameSync(source, destination);
+    }
+  });
+  assert.throws(() => replaceRuntimeDirectory({ replacementRoot, runtimeRoot, fsImpl }), /已恢复旧运行时/);
+  assert.equal(fs.readFileSync(path.join(runtimeRoot, 'old-marker'), 'utf8'), 'old');
+  assert.equal(fs.existsSync(path.join(replacementRoot, 'new-marker')), true);
+}));
 
 test('缺少必需文件或目录内容时拒绝归档', () => {
   const root = 'TMSDK_0300000000_3.26.100.14_arm64_default.publish';
