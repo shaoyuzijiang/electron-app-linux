@@ -2,6 +2,23 @@
 
 本文面向没有 AI 协助的麒麟 ARM64 电脑。本文只覆盖 SDK 导入、原生构建准备和 POC；**不包含真实业务登录、会议功能或生产发布**。
 
+## 已确认的麒麟实机基线
+
+已报告的实机环境为：
+
+```text
+系统：Kylin Desktop V10 SP1
+架构：aarch64
+glibc：2.31
+Git：2.25.1
+桌面会话：Wayland
+/home 可用空间：约 68 GB
+项目目录：/home/ctf/Dev/electron-app-linux
+SDK 包：/home/ctf/sdk-packages/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz
+```
+
+该环境可以先完成 SDK 导入和原生编译。当前会话为 Wayland；若 SDK 初始化或窗口功能出现问题，优先切换到 X11/Xorg 后重新验证。不要修改系统全局 Wayland/X11 配置。
+
 ## 0. 操作边界
 
 - 使用私有 GitHub 仓库 `electron-app-linux`；不要将 SDK 压缩包、`Release/`、`.so`、`.node`、Token 或 `.env` 提交到仓库。
@@ -101,7 +118,7 @@ native/wemeet.cpp
 
 如果 GNU tar 在 `sdk:import` 中针对 `Release/plugins` 下大量文件报告“归档中找不到”，这是旧版导入器同时传入父目录和子成员导致。更新到修复提交后直接重新执行 `npm run sdk:import`；不要手工补 `iconengines`、Wayland Qt 插件或其他 `.so`，也不要修改 SDK 包。
 
-新版导入日志会显示 tar 版本、归档成员总数、安全选中成员数、实际提取项数量和列表。正常包的实际提取项约为 7 个；如果检测到旧导入失败残留，导入器会提示核查而不会自动删除未知文件。
+新版导入日志会显示 tar 版本、归档成员总数、安全选中成员数、实际提取项数量和列表。归档显式包含 `SDK/include/` 和 `SDK/Release/` 两个目录成员时，实际提取项**精确为 7 个**；若归档缺少目录成员，导入器会输出 fallback 提示并使用受限成员清单兼容提取。如果检测到旧导入失败残留，导入器会提示核查而不会自动删除未知文件。
 
 ## 6. 构建 Electron 33 原生 addon 与暂存运行时
 

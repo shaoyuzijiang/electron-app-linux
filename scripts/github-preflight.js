@@ -8,6 +8,10 @@ const projectRoot = path.resolve(__dirname, '..');
 const maxFileSize = 50 * 1024 * 1024;
 const blockedExtensions = new Set(['.so', '.node', '.tar', '.gz', '.tgz', '.appimage']);
 const blockedExactNames = new Set(['wemeet.cpp', 'sdk-manifest.json', 'saas_sdk_env.json', 'libwemeetsdk.so', 'libwemeet_base.so']);
+const documentedKylinPaths = new Set([
+  '/home/ctf/Dev/electron-app-linux',
+  '/home/ctf/sdk-packages/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz'
+]);
 const credentialPatterns = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i,
   /TMSDK_TOKEN\s*=\s*['"](?!\.{3}|<|\[|\$\{)[^'"]{8,}/,
@@ -35,6 +39,11 @@ function isBlockedSdkPath(relativePath) {
     || relativePath.startsWith('sdk/linux-arm64/') && (relativePath.includes('/include/') || relativePath.includes('/Release/') || relativePath.includes('/prebuilt/') || blockedExactNames.has(path.basename(relativePath)));
 }
 
+function hasUnexpectedLocalPath(content) {
+  const paths = content.match(/\/(?:Users|home)\/[A-Za-z0-9_.\/-]+/g) || [];
+  return paths.some((localPath) => !documentedKylinPaths.has(localPath));
+}
+
 function scan() {
   const failures = [];
   const files = gitFiles();
@@ -48,7 +57,7 @@ function scan() {
     if (size > maxFileSize) failures.push(`${relativePath}: 待提交文件超过 50MB`);
     if (size > 2 * 1024 * 1024) continue;
     const content = fs.readFileSync(absolutePath, 'utf8');
-    if (/\/Users\/[^/\s]+\//.test(content) || /\/home\/[^/\s]+\//.test(content)) failures.push(`${relativePath}: 包含本机私有路径`);
+    if (hasUnexpectedLocalPath(content)) failures.push(`${relativePath}: 包含未经批准的本机路径`);
     if (credentialPatterns.some((pattern) => pattern.test(content))) failures.push(`${relativePath}: 疑似凭证字段或私钥`);
   }
   for (const relativePath of walkForEnvFiles(projectRoot)) failures.push(`${relativePath}: 存在本地环境文件`);
