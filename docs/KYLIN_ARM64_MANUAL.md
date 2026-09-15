@@ -99,6 +99,10 @@ native/wemeet.cpp
 
 若 `sdk:verify` 报告 ELF、AArch64、权限、符号链接或 manifest 错误，停止继续操作，重新获取同版本 ARM64 包；不要手工替换单个 `.so` 或 `Release/` 文件。
 
+如果 GNU tar 在 `sdk:import` 中针对 `Release/plugins` 下大量文件报告“归档中找不到”，这是旧版导入器同时传入父目录和子成员导致。更新到修复提交后直接重新执行 `npm run sdk:import`；不要手工补 `iconengines`、Wayland Qt 插件或其他 `.so`，也不要修改 SDK 包。
+
+新版导入日志会显示 tar 版本、归档成员总数、安全选中成员数、实际提取项数量和列表。正常包的实际提取项约为 7 个；如果检测到旧导入失败残留，导入器会提示核查而不会自动删除未知文件。
+
 ## 6. 构建 Electron 33 原生 addon 与暂存运行时
 
 ```bash

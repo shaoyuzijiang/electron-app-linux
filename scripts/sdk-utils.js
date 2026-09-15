@@ -44,7 +44,7 @@ function isPathInside(parent, candidate) {
 }
 
 function assertSafeArchiveMember(memberPath, expectedRoot) {
-  if (!memberPath || memberPath.includes('\0') || path.posix.isAbsolute(memberPath) || memberPath.includes('\\')) {
+  if (!memberPath || memberPath.includes('\0') || /[\r\n]/.test(memberPath) || path.posix.isAbsolute(memberPath) || memberPath.includes('\\')) {
     throw new Error(`压缩包成员路径不安全：${memberPath}`);
   }
   const parts = memberPath.split('/').filter(Boolean);
@@ -53,10 +53,64 @@ function assertSafeArchiveMember(memberPath, expectedRoot) {
 }
 
 function resolveArchiveLink(memberPath, linkTarget, expectedRoot) {
-  if (!linkTarget || linkTarget.includes('\0') || path.posix.isAbsolute(linkTarget)) throw new Error(`符号链接目标不安全：${memberPath}`);
+  if (!linkTarget || linkTarget.includes('\0') || /[\r\n]/.test(linkTarget) || path.posix.isAbsolute(linkTarget)) throw new Error(`符号链接目标不安全：${memberPath}`);
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(memberPath), linkTarget));
   assertSafeArchiveMember(resolved, expectedRoot);
   return resolved;
+}
+
+function createSdkExtractionPlan(members, expectedRoot) {
+  const uniqueMembers = new Set();
+  for (const member of members) {
+    assertSafeArchiveMember(member, expectedRoot);
+    if (uniqueMembers.has(member)) throw new Error(`压缩包成员重复：${member}`);
+    uniqueMembers.add(member);
+  }
+
+  const requiredFiles = [
+    `${expectedRoot}/SDK/libwemeetsdk.so`,
+    `${expectedRoot}/SDK/libwemeet_base.so`,
+    `${expectedRoot}/SDK/saas_sdk_env.json`,
+    `${expectedRoot}/Electron_Demo/wemeet_sdk/wemeet.cpp`,
+    `${expectedRoot}/Electron_Demo/output/linux/wemeet_electron_sdk.node`
+  ];
+  const directoryRoots = [`${expectedRoot}/SDK/include`, `${expectedRoot}/SDK/Release`];
+  for (const requiredFile of requiredFiles) {
+    if (!uniqueMembers.has(requiredFile)) throw new Error(`SDK 压缩包缺少必需文件：${requiredFile}`);
+  }
+
+  const selectedMembers = members.filter((member) => requiredFiles.includes(member)
+    || directoryRoots.some((directoryRoot) => member === directoryRoot || member === `${directoryRoot}/` || member.startsWith(`${directoryRoot}/`)));
+
+  const directoryMembers = [];
+  const fallbackMembers = [];
+  for (const directoryRoot of directoryRoots) {
+    const explicitDirectory = members.find((member) => member === directoryRoot || member === `${directoryRoot}/`);
+    if (explicitDirectory) {
+      directoryMembers.push(explicitDirectory);
+      continue;
+    }
+    const descendants = members.filter((member) => member.startsWith(`${directoryRoot}/`));
+    if (!descendants.length) throw new Error(`SDK 压缩包缺少必需目录或内容：${directoryRoot}`);
+    fallbackMembers.push(...descendants);
+  }
+
+  const usesFallbackMemberList = fallbackMembers.length > 0;
+  const extractMembers = usesFallbackMemberList
+    ? [...requiredFiles, ...fallbackMembers]
+    : [...requiredFiles, ...directoryMembers];
+  if (new Set(extractMembers).size !== extractMembers.length) throw new Error('SDK 提取计划存在重复成员');
+  if (!usesFallbackMemberList && directoryMembers.some((directory) => extractMembers.some((member) => member !== directory && member.startsWith(`${directory.replace(/\/$/, '')}/`)))) {
+    throw new Error('SDK 提取计划不能同时包含目录和其子成员');
+  }
+
+  return Object.freeze({
+    selectedMembers: Object.freeze([...selectedMembers]),
+    extractMembers: Object.freeze(extractMembers),
+    usesFallbackMemberList,
+    requiredFiles: Object.freeze(requiredFiles),
+    directoryMembers: Object.freeze(directoryMembers)
+  });
 }
 
 function walkTree(rootPath, visitor) {
@@ -113,6 +167,7 @@ module.exports = {
   assertSafeSymlinks,
   collectExecutableElfFiles,
   copyPreservingLinks,
+  createSdkExtractionPlan,
   inspectElf,
   isPathInside,
   resolveArchiveLink,

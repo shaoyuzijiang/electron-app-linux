@@ -17,7 +17,7 @@
 
 ## SDK 导入与校验
 
-仅通过命令行参数或环境变量提供 SDK 包路径，脚本不会执行包内 `.sh`、二进制或安装脚本：
+仅通过命令行参数或环境变量提供 SDK 包路径，脚本不会执行包内 `.sh`、二进制或安装脚本。导入器先完整扫描归档安全性，再只向 tar 传递 `SDK/include`、`SDK/Release` 两个目录入口及五个必需文件，避免 GNU tar 收到重复的目录和子成员参数：
 
 ```bash
 export TMSDK_PACKAGE_PATH="/path/to/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
@@ -118,6 +118,7 @@ TMSDK_ID='...' TMSDK_TOKEN='...' npm run poc:linux-arm64
 - `不是 ELF64` 或 `e_machine` 非 `183`：导入了错误架构或错误文件，重新检查 SDK 包来源。
 - `加载 Linux ARM64 SDK addon 失败`：检查是否在 Linux ARM64、Electron 版本是否为 `33.4.11`、`wemeet_electron_sdk.node` 是否重新编译、`.so` 是否与 addon 同级。
 - `SDK helper 缺少执行权限` 或 `符号链接断裂`：重新导入并检查打包/复制流程是否保留模式和链接。
+- GNU tar 报 `Release/plugins` 下大量“归档中找不到”：这是旧版导入器重复传入父目录和子成员导致。更新到包含 `fix: support GNU tar SDK extraction` 的提交后重新执行 `npm run sdk:import`；不要手工补 Qt 插件，也不要修改 SDK 包。
 - `真实 Linux SDK 仅支持 linux/arm64`：当前是 macOS、Windows、x64 或其他架构，只能进行静态检查和 Mock 验证。
 
 ## GitHub 与麒麟 ARM64 手工操作
