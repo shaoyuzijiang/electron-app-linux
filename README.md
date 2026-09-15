@@ -8,12 +8,12 @@
 - SDK 生命周期状态机、Linux `3.26.100.14` 静态能力矩阵、回调 JSON 解析与脱敏。
 - 开发专用 Mock SDK 和基础控制台 UI；正式打包默认排除 Mock。
 - SDK 安全导入：白名单提取、压缩包路径与符号链接检查、ARM64 ELF 校验、SHA-256 manifest、运行资源权限与链接保留。
-- Linux ARM64 原生构建配置：同版本 `native/wemeet.cpp`、SDK 头文件、`libwemeetsdk.so`、`$ORIGIN` RPATH 和 C++ exceptions。
+- Linux ARM64 原生构建配置：同版本 `native/wemeet.cpp`、`native/jsoncpp.cpp`、配套 `native/json/` 头文件、SDK 头文件、`libwemeetsdk.so`、`$ORIGIN` RPATH 和 C++ exceptions。
 - 真实 runtime、Loader 和 POC 准备：运行时路径选择、环境变量、X11/Wayland 识别、`GetSDKVersion()`、运行时导出接口交集。
 - 统一会议客户端风格 UI：浅色导航、登录卡、状态区、内容卡、内部滚动的回调日志与环境诊断，以及开发专用 Mock 提示。
 - GitHub 上传安全准备：SDK/原生产物/归档/.env/本机路径预检，以及麒麟 ARM64 手工操作文档。
 
-官方桥接源码会导入到 `native/wemeet.cpp`。导入时仅移除其中对 `InitWemeetSDK` 第二个参数（SDK Token）的日志写入；上游 SHA-256、最终 SHA-256 和补丁说明记录在 `sdk-manifest.json`，不会记录任何 Token。
+官方 bridge 会一并导入到 `native/wemeet.cpp`、`native/jsoncpp.cpp` 和 `native/json/`。`wemeet.cpp` 会直接包含 `jsoncpp.cpp`，因此 `binding.gyp` 只编译 `wemeet.cpp`，不会将 `jsoncpp.cpp` 作为额外 source 以避免重复符号。导入时仅移除 `InitWemeetSDK` 第二个参数（SDK Token）的日志写入；所有 bridge 文件的上游/本地 SHA-256 与补丁说明记录在 `sdk-manifest.json`，不会记录任何 Token。
 
 ## SDK 导入与校验
 
@@ -37,10 +37,17 @@ sdk/linux-arm64/3.26.100.14/
 ├── prebuilt/wemeet_electron_sdk.node
 └── sdk-manifest.json
 
-native/wemeet.cpp
+native/
+├── wemeet.cpp
+├── jsoncpp.cpp
+└── json/
+    ├── json.h
+    └── json-forwards.h
 ```
 
 `prebuilt/wemeet_electron_sdk.node` 仅保存为官方 Electron 17 基线，不能作为正式 Electron 33 产物。
+
+旧版导入若只存在 `native/wemeet.cpp` 且缺少 `jsoncpp.cpp` / `json/`，新版导入器会拒绝覆盖以保护现有文件。确认没有需要保留的 native 修改后，执行 `npm run sdk:reset-incomplete -- --confirm`，再重新执行 `npm run sdk:import` 和 `npm run sdk:verify`。
 
 ## macOS 可完成的工作
 

@@ -25,6 +25,10 @@ function archivePlan() {
     `${root}/SDK/libwemeet_base.so`,
     `${root}/SDK/saas_sdk_env.json`,
     `${root}/Electron_Demo/wemeet_sdk/wemeet.cpp`,
+    `${root}/Electron_Demo/wemeet_sdk/jsoncpp.cpp`,
+    `${root}/Electron_Demo/include/json/`,
+    `${root}/Electron_Demo/include/json/json.h`,
+    `${root}/Electron_Demo/include/json/json-forwards.h`,
     `${root}/Electron_Demo/output/linux/wemeet_electron_sdk.node`
   ], root);
 }
@@ -42,6 +46,8 @@ test('实际 tar 调用只使用顶层提取项，不混入 Release 子成员', 
   assert.equal(argumentsList.includes('TMSDK_0300000000_3.26.100.14_arm64_default.publish/SDK/Release/plugins/iconengines/libqsvgicon.so'), false);
   assert.equal(argumentsList.filter((item) => item.includes('/SDK/Release')).length, 1);
   assert.equal(argumentsList.filter((item) => item.includes('/SDK/include')).length, 1);
+  assert.equal(argumentsList.filter((item) => item.includes('/Electron_Demo/include/json')).length, 1);
+  assert.equal(argumentsList.includes('TMSDK_0300000000_3.26.100.14_arm64_default.publish/Electron_Demo/include/json/json.h'), false);
 }));
 
 test('小型 tar fixture 只传顶层目录也能提取 Release 子资源', () => withTempDirectory((directory) => {
@@ -56,6 +62,9 @@ test('小型 tar fixture 只传顶层目录也能提取 Release 子资源', () =
     'SDK/libwemeet_base.so',
     'SDK/saas_sdk_env.json',
     'Electron_Demo/wemeet_sdk/wemeet.cpp',
+    'Electron_Demo/wemeet_sdk/jsoncpp.cpp',
+    'Electron_Demo/include/json/json.h',
+    'Electron_Demo/include/json/json-forwards.h',
     'Electron_Demo/output/linux/wemeet_electron_sdk.node'
   ];
   for (const relativePath of files) {
@@ -71,31 +80,36 @@ test('小型 tar fixture 只传顶层目录也能提取 Release 子资源', () =
   fs.mkdirSync(extractionRoot);
   extractArchive({ packagePath: archivePath, tempRoot: extractionRoot, plan });
   assert.equal(fs.existsSync(path.join(extractionRoot, root, 'SDK', 'Release', 'plugins', 'iconengines', 'libqsvgicon.so')), true);
+  assert.equal(fs.existsSync(path.join(extractionRoot, root, 'Electron_Demo', 'include', 'json', 'json.h')), true);
+  assert.equal(fs.existsSync(path.join(extractionRoot, root, 'Electron_Demo', 'include', 'json', 'json-forwards.h')), true);
 }));
 
 test('tar 启动级错误保留原始原因', () => {
   assert.throws(() => runTar(['-tzf', 'fixture.tar.gz'], () => ({ error: new Error('E2BIG') })), /无法启动 tar：E2BIG/);
 });
 
-test('提交阶段失败会清理本次 SDK 和 bridge 半成品并恢复占位目录', () => withTempDirectory((directory) => {
+test('提交阶段失败会清理本次 SDK 和完整 bridge 半成品并恢复占位目录', () => withTempDirectory((directory) => {
   const preparedSdk = path.join(directory, 'prepared-sdk');
-  const preparedBridge = path.join(directory, 'prepared-wemeet.cpp');
+  const preparedNative = path.join(directory, 'prepared-native');
   const sdkDestination = path.join(directory, 'sdk', 'linux-arm64', '3.26.100.14');
-  const nativeDestination = path.join(directory, 'native', 'wemeet.cpp');
+  const nativeDestination = path.join(directory, 'native');
   fs.mkdirSync(preparedSdk, { recursive: true });
   fs.writeFileSync(path.join(preparedSdk, 'marker'), 'prepared');
-  fs.writeFileSync(preparedBridge, 'prepared bridge');
+  fs.mkdirSync(path.join(preparedNative, 'json'), { recursive: true });
+  fs.writeFileSync(path.join(preparedNative, 'wemeet.cpp'), 'prepared bridge');
+  fs.writeFileSync(path.join(preparedNative, 'jsoncpp.cpp'), 'prepared jsoncpp');
+  fs.writeFileSync(path.join(preparedNative, 'json', 'json.h'), 'prepared header');
   fs.mkdirSync(sdkDestination, { recursive: true });
   fs.writeFileSync(path.join(sdkDestination, '.gitkeep'), '');
   let moves = 0;
   assert.throws(() => commitPreparedImport({
     preparedSdk,
-    preparedBridge,
+    preparedNative,
     sdkDestination,
     nativeDestination,
     moveImpl: (source, destination) => {
       moves += 1;
-      if (moves === 2) throw new Error('simulated bridge move failure');
+      if (moves === 2) throw new Error('simulated native move failure');
       fs.renameSync(source, destination);
     }
   }), /已清理本次半成品/);
@@ -105,7 +119,7 @@ test('提交阶段失败会清理本次 SDK 和 bridge 半成品并恢复占位�
 
 test('检测到不完整导入残留时不会自动删除用户文件', () => withTempDirectory((directory) => {
   const sdkDestination = path.join(directory, 'sdk', 'linux-arm64', '3.26.100.14');
-  const nativeDestination = path.join(directory, 'native', 'wemeet.cpp');
+  const nativeDestination = path.join(directory, 'native');
   fs.mkdirSync(sdkDestination, { recursive: true });
   fs.writeFileSync(path.join(sdkDestination, 'unknown-file'), 'keep');
   assert.throws(() => assertImportTargetsAvailable(sdkDestination, nativeDestination), /不完整的 SDK 导入残留/);

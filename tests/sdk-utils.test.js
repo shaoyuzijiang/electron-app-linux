@@ -44,6 +44,10 @@ function createArchiveMembers({ trailingDirectories = true } = {}) {
     `${root}/SDK/libwemeet_base.so`,
     `${root}/SDK/saas_sdk_env.json`,
     `${root}/Electron_Demo/wemeet_sdk/wemeet.cpp`,
+    `${root}/Electron_Demo/wemeet_sdk/jsoncpp.cpp`,
+    directory(`${root}/Electron_Demo/include/json`),
+    `${root}/Electron_Demo/include/json/json.h`,
+    `${root}/Electron_Demo/include/json/json-forwards.h`,
     `${root}/Electron_Demo/output/linux/wemeet_electron_sdk.node`
   ];
 }
@@ -79,29 +83,36 @@ test('验证 manifest 文件哈希', () => withTempDirectory((directory) => {
   assert.deepEqual(validateManifestFiles(manifest, (relativePath) => path.join(directory, relativePath)), ['manifest SHA-256 不匹配：item']);
 }));
 
-test('GNU tar 风格成员列表生成仅含七项的顶层提取计划', () => {
+test('GNU tar 风格成员列表生成仅含九项的桥接依赖提取计划', () => {
   const root = 'TMSDK_0300000000_3.26.100.14_arm64_default.publish';
   const plan = createSdkExtractionPlan(createArchiveMembers(), root);
-  assert.equal(plan.extractMembers.length, 7);
+  assert.equal(plan.extractMembers.length, 9);
   assert.ok(plan.extractMembers.includes(`${root}/SDK/include/`));
   assert.ok(plan.extractMembers.includes(`${root}/SDK/Release/`));
+  assert.ok(plan.extractMembers.includes(`${root}/Electron_Demo/include/json/`));
+  assert.ok(plan.extractMembers.includes(`${root}/Electron_Demo/wemeet_sdk/jsoncpp.cpp`));
   assert.equal(plan.extractMembers.some((member) => member.includes('Release/plugins/')), false);
-  assert.equal(plan.extractMembers.some((member) => member.endsWith('wemeet_sdk.h')), false);
+  assert.equal(plan.extractMembers.some((member) => member.endsWith('json/json.h')), false);
   assert.equal(plan.usesFallbackMemberList, false);
 });
 
-test('目录成员不带末尾斜杠时仍生成最小提取计划', () => {
+test('目录成员不带末尾斜杠时仍生成最小桥接依赖计划', () => {
   const root = 'TMSDK_0300000000_3.26.100.14_arm64_default.publish';
   const plan = createSdkExtractionPlan(createArchiveMembers({ trailingDirectories: false }), root);
-  assert.equal(plan.extractMembers.length, 7);
+  assert.equal(plan.extractMembers.length, 9);
   assert.ok(plan.extractMembers.includes(`${root}/SDK/include`));
   assert.ok(plan.extractMembers.includes(`${root}/SDK/Release`));
+  assert.ok(plan.extractMembers.includes(`${root}/Electron_Demo/include/json`));
 });
 
 test('缺少必需文件或目录内容时拒绝归档', () => {
   const root = 'TMSDK_0300000000_3.26.100.14_arm64_default.publish';
   const members = createArchiveMembers().filter((member) => !member.endsWith('libwemeet_base.so'));
   assert.throws(() => createSdkExtractionPlan(members, root), /缺少必需文件/);
+  const missingJsonCpp = createArchiveMembers().filter((member) => !member.endsWith('jsoncpp.cpp'));
+  assert.throws(() => createSdkExtractionPlan(missingJsonCpp, root), /缺少必需文件/);
+  const missingJsonHeader = createArchiveMembers().filter((member) => !member.endsWith('json-forwards.h'));
+  assert.throws(() => createSdkExtractionPlan(missingJsonHeader, root), /缺少必需文件/);
   const missingRelease = createArchiveMembers().filter((member) => !member.includes('/SDK/Release'));
   assert.throws(() => createSdkExtractionPlan(missingRelease, root), /缺少必需目录或内容/);
 });

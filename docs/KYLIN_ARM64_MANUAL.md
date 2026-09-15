@@ -111,14 +111,29 @@ npm run sdk:verify
 
 ```text
 sdk/linux-arm64/3.26.100.14/
-native/wemeet.cpp
+native/
+├── wemeet.cpp
+├── jsoncpp.cpp
+└── json/
+    ├── json.h
+    └── json-forwards.h
 ```
 
 若 `sdk:verify` 报告 ELF、AArch64、权限、符号链接或 manifest 错误，停止继续操作，重新获取同版本 ARM64 包；不要手工替换单个 `.so` 或 `Release/` 文件。
 
 如果 GNU tar 在 `sdk:import` 中针对 `Release/plugins` 下大量文件报告“归档中找不到”，这是旧版导入器同时传入父目录和子成员导致。更新到修复提交后直接重新执行 `npm run sdk:import`；不要手工补 `iconengines`、Wayland Qt 插件或其他 `.so`，也不要修改 SDK 包。
 
-新版导入日志会显示 tar 版本、归档成员总数、安全选中成员数、实际提取项数量和列表。归档显式包含 `SDK/include/` 和 `SDK/Release/` 两个目录成员时，实际提取项**精确为 7 个**；若归档缺少目录成员，导入器会输出 fallback 提示并使用受限成员清单兼容提取。如果检测到旧导入失败残留，导入器会提示核查而不会自动删除未知文件。
+新版导入日志会显示 tar 版本、归档成员总数、安全选中成员数、实际提取项数量和列表。归档显式包含 `SDK/include/`、`SDK/Release/` 及 `Electron_Demo/include/json/` 三个目录成员时，实际提取项**精确为 9 个**；若归档缺少目录成员，导入器会输出 fallback 提示并使用受限成员清单兼容提取。导入必须同时包含 `wemeet.cpp`、`jsoncpp.cpp`、`json.h` 和 `json-forwards.h`，不要从系统或其他 SDK 版本手工补 JsonCpp。
+
+如果旧版导入已生成 `native/wemeet.cpp` 但缺少 JsonCpp，升级后 `sdk:import` 会保护性拒绝覆盖。确认当前没有需要保留的本地 native 修改后，使用显式清理命令：
+
+```bash
+npm run sdk:reset-incomplete -- --confirm
+npm run sdk:import
+npm run sdk:verify
+```
+
+该命令只允许清理旧版预期的 `native/wemeet.cpp` 和 SDK 专用版本目录；`native/` 含未知文件时会拒绝清理。
 
 ## 6. 构建 Electron 33 原生 addon 与暂存运行时
 

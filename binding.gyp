@@ -3,7 +3,10 @@
     {
       "target_name": "wemeet_electron_sdk",
       "sources": ["native/wemeet.cpp"],
-      "include_dirs": ["sdk/linux-arm64/3.26.100.14/include"],
+      "include_dirs": [
+        "sdk/linux-arm64/3.26.100.14/include",
+        "native/json"
+      ],
       "conditions": [
         ["OS==\"linux\" and target_arch==\"arm64\"", {
           "link_settings": {

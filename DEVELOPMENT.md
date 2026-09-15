@@ -843,7 +843,7 @@ SDK 导入和打包必须保留：
 4. 提取指定文件，避免无选择地执行包内脚本；
 5. 校验关键二进制为 ELF64 AArch64；
 6. 导入同版本头文件；
-7. 导入配套 `wemeet.cpp`；
+7. 导入配套 `wemeet.cpp`、`jsoncpp.cpp` 与 `Electron_Demo/include/json/`，保持 bridge 编译依赖同版本一致；
 8. 完整复制 `Release/`；
 9. 保留权限和符号链接；
 10. 目录白名单只将 `SDK/include` 和 `SDK/Release` 目录入口传给 tar，禁止把目录及其所有后代成员重复作为提取参数；

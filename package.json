@@ -10,6 +10,7 @@
     "start:mock": "cross-env MEETING_DEMO_MOCK=1 electron .",
     "sdk:import": "node scripts/import-sdk.js",
     "sdk:verify": "node scripts/verify-sdk.js",
+    "sdk:reset-incomplete": "node scripts/reset-incomplete-import.js",
     "sdk:stage": "node scripts/stage-sdk.js",
     "build:native:linux-arm64": "node scripts/build-native.js",
     "poc:linux-arm64": "electron scripts/poc-linux-arm64.js",

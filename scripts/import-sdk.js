@@ -18,6 +18,12 @@ const {
 const projectRoot = path.resolve(__dirname, '..');
 const expectedArchiveName = `TMSDK_0300000000_${SDK_VERSION}_${SDK_ARCH}_default.publish.tar.gz`;
 const expectedRoot = expectedArchiveName.replace(/\.tar\.gz$/, '');
+const nativeBridgeFiles = Object.freeze([
+  'native/wemeet.cpp',
+  'native/jsoncpp.cpp',
+  'native/json/json.h',
+  'native/json/json-forwards.h'
+]);
 const requiredSdkPaths = Object.freeze([
   'libwemeetsdk.so',
   'libwemeet_base.so',
@@ -68,8 +74,11 @@ function extractArchive({ packagePath, tempRoot, plan, runTarImpl = runTar, fsIm
   if (plan.usesFallbackMemberList) {
     const memberListPath = path.join(tempRoot, '.sdk-extract-members.txt');
     fsImpl.writeFileSync(memberListPath, `${plan.extractMembers.join('\n')}\n`, { mode: 0o600 });
-    runTarImpl(['-xzf', packagePath, '-C', tempRoot, '-T', memberListPath]);
-    fsImpl.rmSync(memberListPath, { force: true });
+    try {
+      runTarImpl(['-xzf', packagePath, '-C', tempRoot, '-T', memberListPath]);
+    } finally {
+      fsImpl.rmSync(memberListPath, { force: true });
+    }
     return;
   }
   runTarImpl(['-xzf', packagePath, '-C', tempRoot, ...plan.extractMembers]);
@@ -82,15 +91,17 @@ function sanitizeNativeBridge(bridgePath, fsImpl = fs) {
   fsImpl.writeFileSync(bridgePath, source.replace(unsafeLog, 'vec_args[i] = buf;\n    if (i != 1) log(buf);  // SDK Token 永不写入桥接日志。'), { mode: 0o644 });
 }
 
-function writeManifest({ sdkRoot, bridgePath, sourcePackage, upstreamBridgeSha256, fsImpl = fs }) {
+function writeManifest({ sdkRoot, nativeRoot, sourcePackage, upstreamBridgeSha256, fsImpl = fs }) {
   const files = [
     'libwemeetsdk.so',
     'libwemeet_base.so',
     'saas_sdk_env.json',
     'prebuilt/wemeet_electron_sdk.node',
-    'native/wemeet.cpp'
+    ...nativeBridgeFiles
   ].map((relativePath) => {
-    const absolutePath = relativePath === 'native/wemeet.cpp' ? bridgePath : path.join(sdkRoot, relativePath);
+    const absolutePath = relativePath.startsWith('native/')
+      ? path.join(nativeRoot, relativePath.slice('native/'.length))
+      : path.join(sdkRoot, relativePath);
     return { path: relativePath, sha256: sha256File(absolutePath) };
   });
   const manifest = {
@@ -101,10 +112,10 @@ function writeManifest({ sdkRoot, bridgePath, sourcePackage, upstreamBridgeSha25
     files,
     executableElfFiles: collectExecutableElfFiles(path.join(sdkRoot, 'Release')),
     nativeBridge: {
-      path: 'native/wemeet.cpp',
+      files: nativeBridgeFiles,
       sourceSdkVersion: SDK_VERSION,
       upstreamSha256: upstreamBridgeSha256,
-      localSha256: sha256File(bridgePath),
+      localSha256: sha256File(path.join(nativeRoot, 'wemeet.cpp')),
       securityPatch: '禁止记录 InitWemeetSDK 的 SDK Token 参数'
     }
   };
@@ -115,18 +126,27 @@ function prepareImport({ tempRoot, root, sourcePackage, fsImpl = fs }) {
   const extractedRoot = path.join(tempRoot, root);
   const sdkRoot = path.join(extractedRoot, 'SDK');
   const addonPath = path.join(extractedRoot, 'Electron_Demo', 'output', 'linux', 'wemeet_electron_sdk.node');
-  const bridgePath = path.join(extractedRoot, 'Electron_Demo', 'wemeet_sdk', 'wemeet.cpp');
-  if (!isPathInside(tempRoot, sdkRoot)) throw new Error('提取后的 SDK 目录不安全');
-  assertSafeSymlinks(sdkRoot);
+  const bridgeSourceRoot = path.join(extractedRoot, 'Electron_Demo', 'wemeet_sdk');
+  const jsonSourceRoot = path.join(extractedRoot, 'Electron_Demo', 'include', 'json');
+  const nativeRoot = path.join(extractedRoot, '.prepared-native');
+  if (!isPathInside(tempRoot, sdkRoot) || !isPathInside(tempRoot, bridgeSourceRoot) || !isPathInside(tempRoot, jsonSourceRoot)) {
+    throw new Error('提取后的桥接目录不安全');
+  }
+  assertSafeSymlinks(extractedRoot);
   assertArm64Elf(path.join(sdkRoot, 'libwemeetsdk.so'));
   assertArm64Elf(path.join(sdkRoot, 'libwemeet_base.so'));
   assertArm64Elf(addonPath);
-  const upstreamBridgeSha256 = sha256File(bridgePath);
+  const upstreamBridgeSha256 = sha256File(path.join(bridgeSourceRoot, 'wemeet.cpp'));
   fsImpl.mkdirSync(path.join(sdkRoot, 'prebuilt'), { recursive: true });
   fsImpl.renameSync(addonPath, path.join(sdkRoot, 'prebuilt', 'wemeet_electron_sdk.node'));
-  sanitizeNativeBridge(bridgePath, fsImpl);
-  writeManifest({ sdkRoot, bridgePath, sourcePackage, upstreamBridgeSha256, fsImpl });
-  return { preparedSdk: sdkRoot, preparedBridge: bridgePath };
+  fsImpl.mkdirSync(nativeRoot, { recursive: true });
+  fsImpl.renameSync(path.join(bridgeSourceRoot, 'wemeet.cpp'), path.join(nativeRoot, 'wemeet.cpp'));
+  fsImpl.renameSync(path.join(bridgeSourceRoot, 'jsoncpp.cpp'), path.join(nativeRoot, 'jsoncpp.cpp'));
+  fsImpl.renameSync(jsonSourceRoot, path.join(nativeRoot, 'json'));
+  sanitizeNativeBridge(path.join(nativeRoot, 'wemeet.cpp'), fsImpl);
+  assertSafeSymlinks(nativeRoot);
+  writeManifest({ sdkRoot, nativeRoot, sourcePackage, upstreamBridgeSha256, fsImpl });
+  return { preparedSdk: sdkRoot, preparedNative: nativeRoot };
 }
 
 function isPlaceholderDirectory(directoryPath, fsImpl = fs) {
@@ -136,19 +156,19 @@ function isPlaceholderDirectory(directoryPath, fsImpl = fs) {
 }
 
 function hasCompleteImport(sdkDestination, nativeDestination, fsImpl = fs) {
-  return fsImpl.existsSync(nativeDestination)
+  return nativeBridgeFiles.every((relativePath) => fsImpl.existsSync(path.join(nativeDestination, relativePath.slice('native/'.length))))
     && requiredSdkPaths.every((relativePath) => fsImpl.existsSync(path.join(sdkDestination, relativePath)));
 }
 
 function assertImportTargetsAvailable(sdkDestination, nativeDestination, fsImpl = fs) {
   const hasSdk = fsImpl.existsSync(sdkDestination);
-  const hasBridge = fsImpl.existsSync(nativeDestination);
-  if (!hasSdk && !hasBridge) return;
+  const hasNative = fsImpl.existsSync(nativeDestination);
+  if (!hasSdk && !hasNative) return;
   if (hasCompleteImport(sdkDestination, nativeDestination, fsImpl)) {
     throw new Error('检测到已完成的 SDK 导入；为保护本地资源，不会覆盖。请先运行 npm run sdk:verify。');
   }
-  if (isPlaceholderDirectory(sdkDestination, fsImpl) && !hasBridge) return;
-  throw new Error('检测到不完整的 SDK 导入残留；导入器不会自动删除未知文件。请核查 sdk/linux-arm64/3.26.100.14 和 native/wemeet.cpp 后再重试。');
+  if (isPlaceholderDirectory(sdkDestination, fsImpl) && !hasNative) return;
+  throw new Error('检测到不完整的 SDK 导入残留；导入器不会自动删除未知文件。请核查 sdk/linux-arm64/3.26.100.14 和 native/ 后再重试。');
 }
 
 function restorePlaceholder(directoryPath, fsImpl = fs) {
@@ -156,22 +176,25 @@ function restorePlaceholder(directoryPath, fsImpl = fs) {
   fsImpl.writeFileSync(path.join(directoryPath, '.gitkeep'), '');
 }
 
-function commitPreparedImport({ preparedSdk, preparedBridge, sdkDestination, nativeDestination, fsImpl = fs, moveImpl = fs.renameSync }) {
+function commitPreparedImport({ preparedSdk, preparedNative, sdkDestination, nativeDestination, fsImpl = fs, moveImpl = fs.renameSync }) {
   const sdkHadPlaceholder = isPlaceholderDirectory(sdkDestination, fsImpl);
+  const nativeHadPlaceholder = isPlaceholderDirectory(nativeDestination, fsImpl);
   let createdSdk = false;
-  let createdBridge = false;
+  let createdNative = false;
   try {
     if (sdkHadPlaceholder) fsImpl.rmSync(sdkDestination, { recursive: true, force: true });
+    if (nativeHadPlaceholder) fsImpl.rmSync(nativeDestination, { recursive: true, force: true });
     fsImpl.mkdirSync(path.dirname(sdkDestination), { recursive: true });
     moveImpl(preparedSdk, sdkDestination);
     createdSdk = true;
     fsImpl.mkdirSync(path.dirname(nativeDestination), { recursive: true });
-    moveImpl(preparedBridge, nativeDestination);
-    createdBridge = true;
+    moveImpl(preparedNative, nativeDestination);
+    createdNative = true;
   } catch (error) {
-    if (createdBridge) fsImpl.rmSync(nativeDestination, { force: true });
+    if (createdNative) fsImpl.rmSync(nativeDestination, { recursive: true, force: true });
     if (createdSdk) fsImpl.rmSync(sdkDestination, { recursive: true, force: true });
     if (sdkHadPlaceholder && !fsImpl.existsSync(sdkDestination)) restorePlaceholder(sdkDestination, fsImpl);
+    if (nativeHadPlaceholder && !fsImpl.existsSync(nativeDestination)) restorePlaceholder(nativeDestination, fsImpl);
     throw new Error(`SDK 导入提交失败，已清理本次半成品：${error.message}`);
   }
 }
@@ -191,9 +214,8 @@ function main({ packagePath = process.argv[2] || process.env.TMSDK_PACKAGE_PATH,
   if (path.basename(packagePath) !== expectedArchiveName) throw new Error(`SDK 包名不匹配，期望：${expectedArchiveName}`);
   if (!fsImpl.statSync(packagePath).isFile()) throw new Error('SDK 包路径不是普通文件');
   const sdkDestination = path.join(projectRoot, 'sdk', 'linux-arm64', SDK_VERSION);
-  const nativeDestination = path.join(projectRoot, 'native', 'wemeet.cpp');
+  const nativeDestination = path.join(projectRoot, 'native');
   assertImportTargetsAvailable(sdkDestination, nativeDestination, fsImpl);
-
   const archive = inspectArchive({ packagePath, runTarImpl });
   printDiagnostics({ packagePath, archive, tarVersion: getTarVersion(spawnImpl) });
   const tempRoot = fsImpl.mkdtempSync(path.join(projectRoot, '.sdk-import-tmp-'));
@@ -216,4 +238,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { assertImportTargetsAvailable, commitPreparedImport, extractArchive, getTarVersion, inspectArchive, main, prepareImport, runTar };
+module.exports = { assertImportTargetsAvailable, commitPreparedImport, extractArchive, getTarVersion, inspectArchive, main, nativeBridgeFiles, prepareImport, runTar };

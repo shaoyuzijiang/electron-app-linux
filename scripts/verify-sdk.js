@@ -21,6 +21,12 @@ const requiredPaths = [
   'prebuilt/wemeet_electron_sdk.node',
   'sdk-manifest.json'
 ];
+const requiredNativePaths = [
+  'native/wemeet.cpp',
+  'native/jsoncpp.cpp',
+  'native/json/json.h',
+  'native/json/json-forwards.h'
+];
 
 function main() {
   const errors = [];
@@ -29,12 +35,17 @@ function main() {
     const absolutePath = path.join(sdkRoot, relativePath);
     if (!fs.existsSync(absolutePath)) errors.push(`缺少必需路径：${relativePath}`);
   }
+  for (const relativePath of requiredNativePaths) {
+    const absolutePath = path.join(projectRoot, relativePath);
+    if (!fs.existsSync(absolutePath)) errors.push(`缺少原生桥接依赖：${relativePath}`);
+  }
   if (errors.length) throw new Error(errors.join('\n'));
 
   for (const relativePath of ['libwemeetsdk.so', 'libwemeet_base.so', 'prebuilt/wemeet_electron_sdk.node']) {
     try { assertArm64Elf(path.join(sdkRoot, relativePath)); } catch (error) { errors.push(error.message); }
   }
   try { assertSafeSymlinks(sdkRoot); } catch (error) { errors.push(error.message); }
+  try { assertSafeSymlinks(path.join(projectRoot, 'native')); } catch (error) { errors.push(error.message); }
 
   let manifest;
   try {
@@ -42,13 +53,21 @@ function main() {
     if (manifest.sdkVersion !== SDK_VERSION) errors.push(`manifest SDK 版本不匹配：${manifest.sdkVersion}`);
     if (manifest.cpuArchitecture !== 'arm64') errors.push(`manifest CPU 架构不匹配：${manifest.cpuArchitecture}`);
     errors.push(...validateManifestFiles(manifest, (relativePath) => {
-      const root = relativePath === 'native/wemeet.cpp' ? projectRoot : sdkRoot;
+      const root = relativePath.startsWith('native/') ? projectRoot : sdkRoot;
       const absolutePath = path.resolve(root, relativePath);
       if (!isPathInside(root, absolutePath)) throw new Error(`manifest 路径逃逸：${relativePath}`);
       return absolutePath;
     }));
-    if (!manifest.nativeBridge || manifest.nativeBridge.sourceSdkVersion !== SDK_VERSION) errors.push('manifest 缺少原生桥接来源版本信息');
-    else if (sha256File(path.join(projectRoot, 'native', 'wemeet.cpp')) !== manifest.nativeBridge.localSha256) errors.push('原生桥接本地 SHA-256 不匹配');
+    if (!manifest.nativeBridge || manifest.nativeBridge.sourceSdkVersion !== SDK_VERSION) {
+      errors.push('manifest 缺少原生桥接来源版本信息');
+    } else {
+      const expectedBridgeFiles = new Set(requiredNativePaths);
+      const manifestBridgeFiles = new Set(manifest.nativeBridge.files || []);
+      for (const relativePath of expectedBridgeFiles) {
+        if (!manifestBridgeFiles.has(relativePath)) errors.push(`manifest 缺少原生桥接依赖记录：${relativePath}`);
+      }
+      if (sha256File(path.join(projectRoot, 'native', 'wemeet.cpp')) !== manifest.nativeBridge.localSha256) errors.push('原生桥接本地 SHA-256 不匹配');
+    }
     for (const relativePath of manifest.executableElfFiles || []) {
       const absolutePath = path.join(sdkRoot, 'Release', relativePath);
       if (!fs.existsSync(absolutePath)) errors.push(`SDK helper 缺失：Release/${relativePath}`);

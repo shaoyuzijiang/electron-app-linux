@@ -67,19 +67,27 @@ function createSdkExtractionPlan(members, expectedRoot) {
     uniqueMembers.add(member);
   }
 
-  const requiredFiles = [
+  const requiredMembers = [
     `${expectedRoot}/SDK/libwemeetsdk.so`,
     `${expectedRoot}/SDK/libwemeet_base.so`,
     `${expectedRoot}/SDK/saas_sdk_env.json`,
     `${expectedRoot}/Electron_Demo/wemeet_sdk/wemeet.cpp`,
-    `${expectedRoot}/Electron_Demo/output/linux/wemeet_electron_sdk.node`
+    `${expectedRoot}/Electron_Demo/wemeet_sdk/jsoncpp.cpp`,
+    `${expectedRoot}/Electron_Demo/output/linux/wemeet_electron_sdk.node`,
+    `${expectedRoot}/Electron_Demo/include/json/json.h`,
+    `${expectedRoot}/Electron_Demo/include/json/json-forwards.h`
   ];
-  const directoryRoots = [`${expectedRoot}/SDK/include`, `${expectedRoot}/SDK/Release`];
-  for (const requiredFile of requiredFiles) {
+  const directoryRoots = [
+    `${expectedRoot}/SDK/include`,
+    `${expectedRoot}/SDK/Release`,
+    `${expectedRoot}/Electron_Demo/include/json`
+  ];
+  const extractFiles = requiredMembers.filter((member) => !member.startsWith(`${expectedRoot}/Electron_Demo/include/json/`));
+  for (const requiredFile of requiredMembers) {
     if (!uniqueMembers.has(requiredFile)) throw new Error(`SDK 压缩包缺少必需文件：${requiredFile}`);
   }
 
-  const selectedMembers = members.filter((member) => requiredFiles.includes(member)
+  const selectedMembers = members.filter((member) => requiredMembers.includes(member)
     || directoryRoots.some((directoryRoot) => member === directoryRoot || member === `${directoryRoot}/` || member.startsWith(`${directoryRoot}/`)));
 
   const directoryMembers = [];
@@ -97,8 +105,8 @@ function createSdkExtractionPlan(members, expectedRoot) {
 
   const usesFallbackMemberList = fallbackMembers.length > 0;
   const extractMembers = usesFallbackMemberList
-    ? [...requiredFiles, ...fallbackMembers]
-    : [...requiredFiles, ...directoryMembers];
+    ? [...extractFiles, ...fallbackMembers]
+    : [...extractFiles, ...directoryMembers];
   if (new Set(extractMembers).size !== extractMembers.length) throw new Error('SDK 提取计划存在重复成员');
   if (!usesFallbackMemberList && directoryMembers.some((directory) => extractMembers.some((member) => member !== directory && member.startsWith(`${directory.replace(/\/$/, '')}/`)))) {
     throw new Error('SDK 提取计划不能同时包含目录和其子成员');
@@ -108,7 +116,7 @@ function createSdkExtractionPlan(members, expectedRoot) {
     selectedMembers: Object.freeze([...selectedMembers]),
     extractMembers: Object.freeze(extractMembers),
     usesFallbackMemberList,
-    requiredFiles: Object.freeze(requiredFiles),
+    requiredFiles: Object.freeze(requiredMembers),
     directoryMembers: Object.freeze(directoryMembers)
   });
 }
