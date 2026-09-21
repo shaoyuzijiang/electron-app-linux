@@ -92,10 +92,11 @@ if [[ "${NEW_VERSION}" == "${OLD_VERSION}" ]]; then
 fi
 
 #===============================================================================
-# 步骤 1: 替换 wemeet.cpp
+# 步骤 1: 重新拷贝 wemeet.cpp（先删后拷）
 #===============================================================================
-log "步骤 1: 替换 wemeet_sdk/wemeet.cpp..."
+log "步骤 1: 重新拷贝 wemeet_sdk/wemeet.cpp（先删后拷）..."
 
+rm -f "${PROJECT_DIR}/wemeet_sdk/wemeet.cpp"
 cp "${WEMEET_CPP_SRC}" "${PROJECT_DIR}/wemeet_sdk/wemeet.cpp"
 
 ok "wemeet.cpp 已更新"
