@@ -91,6 +91,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('set-user-configuration', { userKey, userConfig }),
   getUserConfiguration: (userKey) =>
     ipcRenderer.invoke('get-user-configuration', { userKey }),
+  // 会议设置窗口使用：Promise 化的 UserConfigService 读写（等待 SDK 异步回调）
+  getUserConfigValue: (key) =>
+    ipcRenderer.invoke('get-user-config-value', { key }),
+  setUserConfigValue: (key, value) =>
+    ipcRenderer.invoke('set-user-config-value', { key, value }),
   setProxyInfo: (proxyInfo) =>
     ipcRenderer.invoke('set-proxy-info', { proxyInfo }),
   getProxyInfo: () => ipcRenderer.invoke('get-proxy-info'),

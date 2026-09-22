@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<!--
+  「会议设置」窗口内容（见 utils/meeting-settings-window.js）。
+  展示并编辑腾讯会议 SDK UserConfigService 支持的全部配置项
+  （GetUserConfiguration / SetUserConfiguration）。
+
+  读写流程：
+    - 打开时：批量并发调用 getUserConfigValue(key) 读取当前值
+    - 保存时：仅提交「已修改」的项，串行调用 setUserConfigValue(key, value)
+
+  配置项定义来源：官方接口参考文档 UserConfigService 章节（SDK >= 3.43.100/3.43.111）。
+  类型约定：bool=开关，enum(int)=下拉，string=文本，number=数字输入。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>会议设置</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    #card {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+    }
+    /* ---------- 头部 ---------- */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 10px 20px;
+      border-bottom: 1px solid #eee;
+      flex-shrink: 0;
+    }
+    #title { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+    #sdk-status { font-size: 12px; color: #999; margin-top: 2px; }
+    #close-btn {
+      width: 26px; height: 26px;
+      line-height: 24px; text-align: center;
+      font-size: 14px; color: #999;
+      border: none; border-radius: 50%;
+      background: transparent; cursor: pointer;
+    }
+    #close-btn:hover { background: #f0f0f0; color: #333; }
+    /* ---------- 提示条 ---------- */
+    #banner {
+      display: none;
+      margin: 10px 16px 0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #banner.info { display: block; background: #f0f7ff; color: #1c6ec8; }
+    #banner.error { display: block; background: #fff1f0; color: #d4380d; }
+    #banner.success { display: block; background: #f6ffed; color: #389e0d; }
+    /* ---------- 内容区 ---------- */
+    #scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 16px 10px 20px;
+    }
+    #scroll::-webkit-scrollbar { width: 8px; }
+    #scroll::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+    .group { margin-bottom: 4px; }
+    .group-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin: 14px 0 6px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid #f5f5f5;
+      gap: 12px;
+    }
+    .setting-label {
+      font-size: 13px;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .setting-label .tag {
+      font-size: 10px;
+      color: #999;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .read-state {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .read-state.loading { background: #faad14; }
+    .read-state.ok { background: #52c41a; }
+    .read-state.fail { background: #d4380d; }
+    /* 控件 */
+    .switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; }
+    .switch input { display: none; }
+    .switch .track {
+      position: absolute; inset: 0;
+      background: #ddd; border-radius: 10px;
+      transition: background 0.2s;
+    }
+    .switch input:checked + .track { background: #1c6ec8; }
+    .switch .track::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: left 0.2s;
+    }
+    .switch input:checked + .track::after { left: 18px; }
+    select, input[type="text"], input[type="number"] {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 12px;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      outline: none;
+      max-width: 180px;
+      flex-shrink: 0;
+    }
+    select:focus, input:focus { border-color: #1c6ec8; }
+    input[type="number"] { width: 90px; }
+    input[type="text"] { width: 150px; }
+    select:disabled, input:disabled { background: #f7f7f7; color: #999; }
+    /* ---------- 底部 ---------- */
+    #footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid #eee;
+      flex-shrink: 0;
+    }
+    #save-status { margin-right: auto; font-size: 12px; color: #999; }
+    .btn {
+      height: 30px;
+      padding: 0 16px;
+      font-size: 13px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn.secondary { background: #f0f0f0; color: #333; }
+    .btn.secondary:hover { background: #e5e5e5; }
+    .btn.primary { background: #1c6ec8; color: #fff; }
+    .btn.primary:hover { background: #155da8; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div id="header">
+      <div>
+        <div id="title">会议设置</div>
+        <div id="sdk-status">正在检查 SDK 状态...</div>
+      </div>
+      <button id="close-btn" title="关闭">&#10005;</button>
+    </div>
+    <div id="banner"></div>
+    <div id="scroll"></div>
+    <div id="footer">
+      <span id="save-status"></span>
+      <button class="btn secondary" id="reload-btn">重新读取</button>
+      <button class="btn primary" id="save-btn">保存修改</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // ============ 配置项定义（来源：官方文档 UserConfigService） ============
+      // type: bool=开关 enum=下拉(整型) string=文本 number=数字
+      // default: 未读取到当前值时控件使用的默认（仅少数项有官方默认值）
+      // mobileOnly: true 的项仅移动端（Android/iOS）支持，PC 端不显示
+      const CONFIG_GROUPS = [
+        {
+          name: '功能开关',
+          items: [
+            { key: 'enableNearDiscover', type: 'bool', label: '近场发现', tag: '需蓝牙权限' },
+            { key: 'enableMeetingEndAlert', type: 'bool', label: '主持人解散会议后弹框提示', tag: '≥3.43.111' },
+            { key: 'enableCloudRecordDetail', type: 'bool', label: '云录制"查看详情"入口', tag: '≥3.43.111', default: true },
+            // enableQuickPip 仅 Android & iOS 支持，PC 端不显示
+            { key: 'enableQuickPip', type: 'bool', label: '快捷浮窗 / 画中画', mobileOnly: true },
+          ],
+        },
+        {
+          name: '常规',
+          items: [
+            { key: 'enableOpenMicPromptTone', type: 'bool', label: '开麦时播放提示音' },
+            { key: 'enableVoiceActivated', type: 'bool', label: '语音激励' },
+            { key: 'enableWindowFilter', type: 'bool', label: '腾讯会议窗口过滤', tag: '桌面端' },
+          ],
+        },
+        {
+          name: '视频',
+          items: [
+            { key: 'enableVideoMirror', type: 'bool', label: '视频镜像' },
+            { key: 'enableHDVideo', type: 'bool', label: '高清摄像头画质', tag: '桌面端' },
+            { key: 'enableNoiseCancellation', type: 'bool', label: '视频降噪' },
+            { key: 'enableImageQualityEnhance', type: 'bool', label: '暗场景增强' },
+          ],
+        },
+        {
+          name: '音频',
+          items: [
+            { key: 'enableAutoMicVolume', type: 'bool', label: '自动调整麦克风音量' },
+            {
+              key: 'audioEnhancementMode', type: 'enum', label: '音频降噪与增强模式', tag: '会外配置',
+              options: [
+                { value: 0, label: '抑制背景噪音' },
+                { value: 2, label: '音乐模式' },
+              ],
+            },
+            {
+              key: 'noiseSuppressionLevel', type: 'enum', label: '噪声抑制级别', tag: '配合抑制背景噪音',
+              options: [
+                { value: 1, label: '低' },
+                { value: 2, label: '中' },
+                { value: 3, label: '高' },
+              ],
+            },
+            { key: 'enableStereoMode', type: 'bool', label: '立体声', tag: '音乐模式与专业音频' },
+            { key: 'enableHighFidelityMode', type: 'bool', label: '高保真音乐模式', tag: '音乐模式与专业音频' },
+            { key: 'enableEchoCancellation', type: 'bool', label: '回声消除', tag: '音乐模式与专业音频' },
+            { key: 'enableDigitalAGC', type: 'bool', label: '数字 AGC', tag: '音乐模式与专业音频' },
+          ],
+        },
+        {
+          name: '字幕与转写',
+          items: [
+            {
+              key: 'captionFontSize', type: 'enum', label: '字幕字号',
+              options: [
+                { value: 12, label: '12' },
+                { value: 15, label: '15' },
+                { value: 18, label: '18' },
+                { value: 21, label: '21' },
+                { value: 24, label: '24' },
+              ],
+            },
+            { key: 'captionTranslateLang', type: 'string', label: '字幕/转写翻译语言', tag: '异步生效' },
+            { key: 'enableCaptionBilingual', type: 'bool', label: '字幕同时显示双语' },
+            { key: 'enableTranscriptionBilingual', type: 'bool', label: '转写同时显示双语' },
+            {
+              key: 'asrSplitSpeakerMode', type: 'enum', label: '拆分当前设备发言人',
+              options: [
+                { value: 1, label: '询问我' },
+                { value: 2, label: '始终拆分' },
+                { value: 3, label: '始终不拆分' },
+              ],
+            },
+            { key: 'captionIndustryDomain', type: 'string', label: '常用行业领域', tag: '异步生效' },
+            { key: 'transcriptionPermission', type: 'number', label: '文字转写权限' },
+            { key: 'enableAllowMembersAiSummary', type: 'bool', label: '允许参会者使用元宝纪要' },
+            { key: 'enableAutoOpenAiSummary', type: 'bool', label: '入会时自动打开元宝纪要' },
+            { key: 'enableAiSummaryBullet', type: 'bool', label: '元宝纪要弹幕' },
+          ],
+        },
+        {
+          name: '工具栏入口',
+          items: [
+            { key: 'enableAskYuanbao', type: 'bool', label: '"问元宝"入口' },
+            { key: 'enableTranscription', type: 'bool', label: '"文字转写"入口' },
+            { key: 'enableJiYao', type: 'bool', label: '"元宝纪要"入口（总开关）' },
+          ],
+        },
+      ];
+
+      const scrollEl = document.getElementById('scroll');
+      const bannerEl = document.getElementById('banner');
+      const sdkStatusEl = document.getElementById('sdk-status');
+      const saveStatusEl = document.getElementById('save-status');
+      const saveBtn = document.getElementById('save-btn');
+      const reloadBtn = document.getElementById('reload-btn');
+
+      // key -> { def, el, loadedValue } loadedValue: undefined=未读到
+      const itemMap = new Map();
+      let sdkReady = false;
+      let busy = false;
+
+      // ============ UI 渲染 ============
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function renderGroups() {
+        CONFIG_GROUPS.forEach(function (group) {
+          // 过滤移动端专属项（本应用为桌面端，Android/iOS 专属配置不显示）
+          const items = group.items.filter(function (def) {
+            return !def.mobileOnly;
+          });
+          if (!items.length) return;
+          const groupEl = document.createElement('div');
+          groupEl.className = 'group';
+          groupEl.innerHTML = '<div class="group-title">' + esc(group.name) + '</div>';
+          items.forEach(function (def) {
+            const row = document.createElement('div');
+            row.className = 'setting-row';
+            row.innerHTML =
+              '<label class="setting-label">' +
+                '<span class="read-state loading" id="state-' + esc(def.key) + '"></span>' +
+                '<span>' + esc(def.label) + '</span>' +
+                (def.tag ? '<span class="tag">' + esc(def.tag) + '</span>' : '') +
+              '</label>';
+            const control = buildControl(def);
+            row.appendChild(control);
+            groupEl.appendChild(row);
+            itemMap.set(def.key, { def: def, el: control, loadedValue: undefined });
+          });
+          scrollEl.appendChild(groupEl);
+        });
+      }
+
+      function buildControl(def) {
+        if (def.type === 'bool') {
+          const wrap = document.createElement('label');
+          wrap.className = 'switch';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.id = 'ctrl-' + def.key;
+          if (def.default !== undefined) input.checked = !!def.default;
+          const track = document.createElement('span');
+          track.className = 'track';
+          wrap.appendChild(input);
+          wrap.appendChild(track);
+          return wrap;
+        }
+        if (def.type === 'enum') {
+          const select = document.createElement('select');
+          select.id = 'ctrl-' + def.key;
+          def.options.forEach(function (opt) {
+            const option = document.createElement('option');
+            option.value = String(opt.value);
+            option.textContent = opt.label;
+            select.appendChild(option);
+          });
+          return select;
+        }
+        const input = document.createElement('input');
+        input.id = 'ctrl-' + def.key;
+        input.type = def.type === 'number' ? 'number' : 'text';
+        if (def.type === 'number') input.step = '1';
+        return input;
+      }
+
+      function setReadState(key, state) {
+        const el = document.getElementById('state-' + key);
+        if (el) el.className = 'read-state ' + state;
+      }
+
+      function setControlValue(def, el, value) {
+        if (value === null || value === undefined) return;
+        if (def.type === 'bool') {
+          el.querySelector('input').checked = !!value;
+        } else if (def.type === 'enum') {
+          el.value = String(value);
+          // 当前值不在枚举里则补一个选项，避免显示空白
+          if (el.value !== String(value)) {
+            const option = document.createElement('option');
+            option.value = String(value);
+            option.textContent = String(value);
+            el.appendChild(option);
+            el.value = String(value);
+          }
+        } else {
+          el.value = String(value);
+        }
+      }
+
+      function getControlValue(def, el) {
+        if (def.type === 'bool') return el.querySelector('input').checked;
+        if (def.type === 'enum') return parseInt(el.value, 10);
+        if (def.type === 'number') {
+          const n = parseInt(el.value, 10);
+          return isNaN(n) ? null : n;
+        }
+        return el.value;
+      }
+
+      function setControlsDisabled(disabled) {
+        itemMap.forEach(function (entry) {
+          entry.el.style.pointerEvents = disabled ? 'none' : '';
+          entry.el.style.opacity = disabled ? '0.5' : '';
+        });
+      }
+
+      function showBanner(type, text) {
+        bannerEl.className = type;
+        bannerEl.textContent = text;
+      }
+
+      // ============ 读取 ============
+      // 注意：SDK UserConfigService 一次只处理一个请求（并发返回 -3002
+      // kTMSDKErrorDuplicatedCall），因此必须逐项串行读取
+      async function readAll() {
+        if (!sdkReady) return;
+        busy = true;
+        saveBtn.disabled = true;
+        reloadBtn.disabled = true;
+        setControlsDisabled(true);
+        let done = 0;
+        let failed = 0;
+        const entries = Array.from(itemMap.entries());
+        const total = entries.length;
+
+        for (let i = 0; i < total; i++) {
+          const key = entries[i][0];
+          const entry = entries[i][1];
+          setReadState(key, 'loading');
+          saveStatusEl.textContent = '读取中... ' + (done + 1) + '/' + total + '（' + key + '）';
+          try {
+            const result = await window.electronAPI.getUserConfigValue(key);
+            if (result.success) {
+              entry.loadedValue = result.value;
+              setControlValue(entry.def, entry.el, result.value);
+              setReadState(key, 'ok');
+            } else {
+              entry.loadedValue = undefined;
+              setReadState(key, 'fail');
+              failed++;
+            }
+          } catch (err) {
+            entry.loadedValue = undefined;
+            setReadState(key, 'fail');
+            failed++;
+          }
+          done++;
+        }
+
+        busy = false;
+        saveBtn.disabled = false;
+        reloadBtn.disabled = false;
+        setControlsDisabled(false);
+        saveStatusEl.textContent = failed
+          ? '读取完成，' + failed + ' 项未读取到（以当前值提交）'
+          : '读取完成';
+      }
+
+      // ============ 保存 ============
+      function collectChanges() {
+        const changes = [];
+        itemMap.forEach(function (entry, key) {
+          const loaded = entry.loadedValue;
+          // 仅提交「读取成功且值被修改」的项；
+          // 未读取到当前值的项不提交，避免把控件默认值误写入 SDK
+          if (loaded === undefined) return;
+          const value = getControlValue(entry.def, entry.el);
+          if (value === null) return;
+          if (String(loaded) === String(value)) return;
+          changes.push({ key: key, value: value });
+        });
+        return changes;
+      }
+
+      async function save() {
+        if (!sdkReady || busy) return;
+        const changes = collectChanges();
+        if (!changes.length) {
+          showBanner('info', '没有修改需要保存');
+          return;
+        }
+        busy = true;
+        saveBtn.disabled = true;
+        reloadBtn.disabled = true;
+        setControlsDisabled(true);
+
+        let okCount = 0;
+        const errors = [];
+        for (let i = 0; i < changes.length; i++) {
+          const item = changes[i];
+          saveStatusEl.textContent = '保存中... ' + (i + 1) + '/' + changes.length + '（' + item.key + '）';
+          try {
+            const result = await window.electronAPI.setUserConfigValue(item.key, item.value);
+            if (result.success) {
+              okCount++;
+              itemMap.get(item.key).loadedValue = item.value;
+              setReadState(item.key, 'ok');
+            } else {
+              errors.push(item.key + ': ' + (result.message || '失败'));
+            }
+          } catch (err) {
+            errors.push(item.key + ': ' + err.message);
+          }
+        }
+
+        busy = false;
+        saveBtn.disabled = false;
+        reloadBtn.disabled = false;
+        setControlsDisabled(false);
+        saveStatusEl.textContent = '';
+        if (errors.length) {
+          showBanner('error', '成功 ' + okCount + ' 项，失败 ' + errors.length + ' 项：\n' + errors.join('\n'));
+        } else {
+          showBanner('success', '已保存 ' + okCount + ' 项配置');
+        }
+      }
+
+      // ============ 初始化 ============
+      document.getElementById('close-btn').addEventListener('click', function () {
+        window.close();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') window.close();
+      });
+      saveBtn.addEventListener('click', save);
+      reloadBtn.addEventListener('click', function () {
+        showBanner('info', '');
+        bannerEl.className = '';
+        readAll();
+      });
+
+      renderGroups();
+
+      window.electronAPI
+        .getSdkStatus()
+        .then(function (status) {
+          const initialized = !!(status && status.initialized);
+          const loggedIn = !!(status && status.loggedIn);
+          const version = status && status.version ? status.version : '';
+          sdkReady = initialized && loggedIn;
+          sdkStatusEl.textContent = version
+            ? '腾讯会议 SDK ' + version + (sdkReady ? '' : ' · 未登录')
+            : 'SDK 状态未知';
+          if (!initialized) {
+            showBanner('error', 'SDK 未初始化，无法读取或设置会议配置');
+            setControlsDisabled(true);
+            setReadStateAllFail();
+            return;
+          }
+          if (!loggedIn) {
+            showBanner('error', 'SDK 未登录，配置读写需要登录后调用');
+            setControlsDisabled(true);
+            setReadStateAllFail();
+            return;
+          }
+          readAll();
+        })
+        .catch(function () {
+          sdkStatusEl.textContent = 'SDK 状态未知';
+          showBanner('error', '无法获取 SDK 状态');
+        });
+
+      function setReadStateAllFail() {
+        itemMap.forEach(function (entry, key) {
+          setReadState(key, 'fail');
+        });
+        saveStatusEl.textContent = '';
+      }
+    })();
+  </script>
+</body>
+</html>

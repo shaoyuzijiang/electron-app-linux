@@ -11,6 +11,7 @@ const userPicker = require('./sdk_mgmt/user-picker');
 const webviewManager = require('./utils/webview-manager');
 const avatarMenuWindow = require('./utils/avatar-menu-window');
 const aboutDialogWindow = require('./utils/about-dialog-window');
+const meetingSettingsWindow = require('./utils/meeting-settings-window');
 const ipcHandlers = require('./ipc-handlers');
 
 const { wemeetSdk, appIconPath, sdkEvents, handleSDKCallback, SCHEME_NAME } = wemeetSdkModule;
@@ -430,6 +431,10 @@ app.whenReady().then(() => {
     avatarMenuWindowAPI: avatarMenuWindow,
     // 「关于」对话框
     aboutDialogWindowAPI: aboutDialogWindow,
+    // 「会议设置」对话框
+    meetingSettingsWindowAPI: meetingSettingsWindow,
+    // SDK 事件发射器（ipc-handlers 用于 UserConfigService 异步回调桥接）
+    sdkEvents,
   });
 
   // IPC 就绪后再创建窗口加载页面

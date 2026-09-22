@@ -166,6 +166,8 @@ function register(ipcMain, deps) {
     webviewManagerAPI,
     avatarMenuWindowAPI,
     aboutDialogWindowAPI,
+    meetingSettingsWindowAPI,
+    sdkEvents,
   } = deps;
 
   // ========== 通用接口 ==========
@@ -764,6 +766,94 @@ function register(ipcMain, deps) {
     } catch (err) {
       return { success: false, message: err.message };
     }
+  });
+
+  // ========== 会议设置：UserConfigService Promise 化读写 ==========
+  // GetUserConfiguration / SetUserConfiguration 的结果通过 SDK 异步回调返回，
+  // 这里用 pending map + sdkEvents 'callback' 事件桥接为 Promise。
+  // 注意：SetUserConfiguration 的回调不携带 config_key，无法区分并发请求，
+  // 因此设置操作串行执行（同一时刻只允许一个 pending set）。
+  const pendingUserConfigGets = new Map(); // config_key -> { resolve, timer }
+  let pendingUserConfigSet = null; // { resolve, timer }
+  const USER_CONFIG_TIMEOUT_MS = 8000;
+
+  sdkEvents.on('callback', ({ func, code, msg }) => {
+    if (func === 'GetUserConfiguration') {
+      // 成功：msg 为 {config_key, config_value}（C++ 层将 config_json 放在 msg 位置）
+      // 失败：msg 为错误文本；查询不支持的配置项时 config_value 为空字符串
+      const configKey =
+        msg && typeof msg === 'object' && msg.config_key ? String(msg.config_key) : '';
+      const pending = pendingUserConfigGets.get(configKey);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingUserConfigGets.delete(configKey);
+        if (code === 0 && msg && typeof msg === 'object') {
+          pending.resolve({ success: true, value: msg.config_value });
+        } else {
+          pending.resolve({
+            success: false,
+            message: (msg && typeof msg === 'string' && msg) || `查询失败 (code=${code})`,
+          });
+        }
+      }
+    } else if (func === 'SetUserConfiguration') {
+      // 回调仅含 code/msg，不含 key —— 串行匹配
+      const pending = pendingUserConfigSet;
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingUserConfigSet = null;
+        if (code === 0) {
+          pending.resolve({ success: true });
+        } else {
+          pending.resolve({ success: false, message: msg || `设置失败 (code=${code})` });
+        }
+      }
+    }
+  });
+
+  // 读取单个配置项（Promise 化，等待 SDK 异步回调）
+  ipcMain.handle('get-user-config-value', async (_event, { key }) => {
+    if (!wemeetSdk || !isSdkInitialized()) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingUserConfigGets.delete(key);
+        resolve({ success: false, message: '读取超时' });
+      }, USER_CONFIG_TIMEOUT_MS);
+      pendingUserConfigGets.set(key, { resolve, timer });
+      try {
+        wemeetSdk.GetUserConfiguration(key);
+      } catch (err) {
+        clearTimeout(timer);
+        pendingUserConfigGets.delete(key);
+        resolve({ success: false, message: err.message });
+      }
+    });
+  });
+
+  // 设置单个配置项（Promise 化；串行，等待上一次完成后才会接受下一次）
+  ipcMain.handle('set-user-config-value', async (_event, { key, value }) => {
+    if (!wemeetSdk || !isSdkInitialized()) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    if (pendingUserConfigSet) {
+      return { success: false, message: '上一次设置尚未完成，请稍候' };
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingUserConfigSet = null;
+        resolve({ success: false, message: '设置超时' });
+      }, USER_CONFIG_TIMEOUT_MS);
+      pendingUserConfigSet = { resolve, timer };
+      try {
+        wemeetSdk.SetUserConfiguration(key, JSON.stringify({ config_value: value }));
+      } catch (err) {
+        clearTimeout(timer);
+        pendingUserConfigSet = null;
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
   ipcMain.handle('set-proxy-info', async (_event, { proxyInfo }) => {
@@ -1663,6 +1753,15 @@ function register(ipcMain, deps) {
   ipcMain.on('avatar-menu-item-click', (_event, action) => {
     if (avatarMenuWindowAPI && avatarMenuWindowAPI.hideMenu) {
       avatarMenuWindowAPI.hideMenu();
+    }
+
+    if (action === 'meeting-settings') {
+      // 会议设置窗口：编辑 SDK UserConfigService 全部配置项
+      // （与「关于」一致在主进程统一处理，任意页面可用）
+      if (meetingSettingsWindowAPI && meetingSettingsWindowAPI.showMeetingSettingsWindow) {
+        meetingSettingsWindowAPI.showMeetingSettingsWindow(getMainWindow());
+      }
+      return;
     }
 
     if (action === 'about') {
