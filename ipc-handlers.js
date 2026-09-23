@@ -745,6 +745,16 @@ function register(ipcMain, deps) {
     }
   });
 
+  // 打开「会议设置」窗口（编辑 SDK UserConfigService 全量配置项）
+  // 入口在会议页侧边栏，由渲染进程触发
+  ipcMain.handle('open-meeting-settings', async () => {
+    if (meetingSettingsWindowAPI && meetingSettingsWindowAPI.showMeetingSettingsWindow) {
+      meetingSettingsWindowAPI.showMeetingSettingsWindow(getMainWindow());
+      return { success: true };
+    }
+    return { success: false, message: '会议设置模块未注入' };
+  });
+
   ipcMain.handle('show-ai-assistant-view', async () => {
     if (!(await ensureSDKLoggedIn())) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
@@ -1766,15 +1776,6 @@ function register(ipcMain, deps) {
   ipcMain.on('avatar-menu-item-click', (_event, action) => {
     if (avatarMenuWindowAPI && avatarMenuWindowAPI.hideMenu) {
       avatarMenuWindowAPI.hideMenu();
-    }
-
-    if (action === 'meeting-settings') {
-      // 会议设置窗口：编辑 SDK UserConfigService 全部配置项
-      // （与「关于」一致在主进程统一处理，任意页面可用）
-      if (meetingSettingsWindowAPI && meetingSettingsWindowAPI.showMeetingSettingsWindow) {
-        meetingSettingsWindowAPI.showMeetingSettingsWindow(getMainWindow());
-      }
-      return;
     }
 
     if (action === 'about') {

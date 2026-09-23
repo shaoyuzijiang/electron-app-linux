@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 打开 SDK Rooms 控制器界面
   showRoomsControllerView: () =>
     ipcRenderer.invoke('show-rooms-controller-view'),
+  // 打开「会议设置」窗口
+  openMeetingSettings: () =>
+    ipcRenderer.invoke('open-meeting-settings'),
   setUserConfigValue: (key, value) =>
     ipcRenderer.invoke('set-user-config-value', { key, value }),
   setProxyInfo: (proxyInfo) =>

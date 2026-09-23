@@ -366,6 +366,11 @@ document.getElementById('btnRoomsController').addEventListener('click', async ()
   }
 });
 
+// 会议设置：打开 SDK 用户配置设置窗口（UserConfigService 全量配置项）
+document.getElementById('btnMeetingSettings').addEventListener('click', () => {
+  window.electronAPI.openMeetingSettings();
+});
+
 // 监听录音笔状态回调：录制结束时自动打开录制查看页面
 // SDK 回调 OnVoiceRecordStatusChange 状态值:
 //   -1 未录音 | 0 录音结束 | 1 录音开始 | 2 录音进行中 | 3 暂停 | 4 上传成功 | 5 上传失败
