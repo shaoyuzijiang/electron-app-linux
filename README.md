@@ -469,5 +469,5 @@ npm run build:native:win-x64 && npm run dist:win:x64
 | `JumpUrlWithLoginStatus(url)` | 带登录状态跳转 URL |
 | `GetUrlWithLoginStatus(url)` | 获取带登录状态的 URL |
 | `ShowUploadLogsView()` | 上传日志 |
-| `SetAppearanceMode(mode)` | 设置 SDK 外观模式（0=浅色，1=深色，2=跟随系统） |
+| `SetAppearanceMode(mode)` | 设置 SDK 外观模式（1=浅色，2=深色） |
 | `GetAppearanceMode()` | 获取 SDK 外观模式 |

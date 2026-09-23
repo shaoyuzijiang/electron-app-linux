@@ -1560,31 +1560,99 @@ function register(ipcMain, deps) {
     }
   });
 
-  // 设置 SDK 外观模式（浅色/深色/跟随系统）
-  // mode: 0=浅色, 1=深色, 2=跟随系统
+  // 设置 SDK 外观模式
+  // mode: TMAppearanceMode 1=浅色(Light), 2=深色(Dark)
+  // ========== SDK 外观模式：SetAppearanceMode / GetAppearanceMode（Promise 化） ==========
+  // 结果通过 SDK 异步回调返回（CommonService 服务）：
+  //   GetAppearanceMode 回调的 msg 位置为外观值（"0"/"1"/"2"）
+  //   SetAppearanceMode 回调的 msg 位置为错误文本（成功为空）
+  let pendingAppearanceGet = null;
+  let pendingAppearanceSet = null;
+  sdkEvents.on('callback', ({ func, code, msg, raw }) => {
+    if (func === 'GetAppearanceMode' && pendingAppearanceGet) {
+      const pending = pendingAppearanceGet;
+      pendingAppearanceGet = null;
+      clearTimeout(pending.timer);
+      // 外观值为数字字符串（"0"/"1"/"2"），经 C++ 层 JSON 化后是数字；
+      // 值 0 是 falsy，会被 handleSDKCallback 的 `msg || ''` 吞掉，这里从 raw 兜底解析
+      let value = msg;
+      if (value === '' || value === undefined || value === null) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.msg !== undefined) value = parsed.msg;
+        } catch {}
+      }
+      if (code === 0 && value !== '' && value !== undefined && value !== null) {
+        pending.resolve({ success: true, value: parseInt(value, 10) });
+      } else {
+        pending.resolve({
+          success: false,
+          message: (typeof value === 'string' && value) || `获取外观模式失败 (code=${code})`,
+        });
+      }
+    } else if (func === 'SetAppearanceMode' && pendingAppearanceSet) {
+      const pending = pendingAppearanceSet;
+      pendingAppearanceSet = null;
+      clearTimeout(pending.timer);
+      if (code === 0) {
+        pending.resolve({ success: true });
+      } else {
+        pending.resolve({ success: false, message: msg || `设置外观模式失败 (code=${code})` });
+      }
+    }
+  });
+
+  // 设置 SDK 外观模式（TMAppearanceMode：1=浅色 Light, 2=深色 Dark；0=Unspecified 不可作为入参）
   ipcMain.handle('set-appearance-mode', async (_event, { mode }) => {
     if (!wemeetSdk || !isSdkInitialized()) {
       return { success: false, message: 'SDK 未初始化' };
     }
-    try {
-      wemeetSdk.SetAppearanceMode(Number(mode));
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: err.message };
+    const modeNum = Number(mode);
+    if (modeNum !== 1 && modeNum !== 2) {
+      return { success: false, message: '无效的外观模式（仅支持 1=浅色, 2=深色）' };
     }
+    if (pendingAppearanceSet) {
+      return { success: false, message: '上一次设置尚未完成' };
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingAppearanceSet = null;
+        resolve({ success: false, message: '设置超时' });
+      }, 8000);
+      pendingAppearanceSet = { resolve, timer };
+      try {
+        // C++ napi 层要求参数为字符串（内部 atoi 转回整数），传 number 会抛 Wrong arguments
+        wemeetSdk.SetAppearanceMode(String(mode));
+      } catch (err) {
+        clearTimeout(timer);
+        pendingAppearanceSet = null;
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
-  // 获取 SDK 外观模式（0=浅色, 1=深色, 2=跟随系统）
+  // 获取 SDK 外观模式（TMAppearanceMode：1=浅色, 2=深色；0=未设置占位值）
   ipcMain.handle('get-appearance-mode', async () => {
     if (!wemeetSdk || !isSdkInitialized()) {
       return { success: false, message: 'SDK 未初始化' };
     }
-    try {
-      const mode = wemeetSdk.GetAppearanceMode();
-      return { success: true, data: mode };
-    } catch (err) {
-      return { success: false, message: err.message };
+    if (pendingAppearanceGet) {
+      return { success: false, message: '上一次查询尚未完成' };
     }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingAppearanceGet = null;
+        resolve({ success: false, message: '读取超时' });
+      }, 8000);
+      pendingAppearanceGet = { resolve, timer };
+      try {
+        wemeetSdk.GetAppearanceMode();
+      } catch (err) {
+        clearTimeout(timer);
+        pendingAppearanceGet = null;
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
   ipcMain.handle('set-custom-org-info', async (_event, { jsonParam }) => {

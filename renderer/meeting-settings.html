@@ -202,6 +202,19 @@
       // mobileOnly: true 的项仅移动端（Android/iOS）支持，PC 端不显示
       const CONFIG_GROUPS = [
         {
+          name: '会议外观',
+          items: [
+            {
+              // SDK 枚举：1=浅色(Light) 2=深色(Dark)；0=Unspecified 仅为 Get 返回的占位值，不可设置
+              key: 'sdk_appearance_mode', type: 'enum', label: 'SDK 外观模式', special: 'appearance',
+              options: [
+                { value: 1, label: '浅色' },
+                { value: 2, label: '深色' },
+              ],
+            },
+          ],
+        },
+        {
           name: '功能开关',
           items: [
             { key: 'enableNearDiscover', type: 'bool', label: '近场发现', tag: '需蓝牙权限' },
@@ -388,7 +401,11 @@
           if (el.value !== String(value)) {
             const option = document.createElement('option');
             option.value = String(value);
-            option.textContent = String(value);
+            // 外观模式的 0 = Unspecified（未设置，SDK 占位值）
+            option.textContent =
+              def.special === 'appearance' && String(value) === '0'
+                ? '未设置'
+                : String(value);
             el.appendChild(option);
             el.value = String(value);
           }
@@ -439,7 +456,11 @@
           setReadState(key, 'loading');
           saveStatusEl.textContent = '读取中... ' + (done + 1) + '/' + total + '（' + key + '）';
           try {
-            const result = await window.electronAPI.getUserConfigValue(key);
+            // 外观模式走独立接口（GetAppearanceMode），其余走 UserConfigService
+            const result =
+              entry.def.special === 'appearance'
+                ? await window.electronAPI.getAppearanceMode()
+                : await window.electronAPI.getUserConfigValue(key);
             if (result.success) {
               entry.loadedValue = result.value;
               setControlValue(entry.def, entry.el, result.value);
@@ -477,7 +498,7 @@
           const value = getControlValue(entry.def, entry.el);
           if (value === null) return;
           if (String(loaded) === String(value)) return;
-          changes.push({ key: key, value: value });
+          changes.push({ key: key, value: value, special: entry.def.special });
         });
         return changes;
       }
@@ -500,7 +521,11 @@
           const item = changes[i];
           saveStatusEl.textContent = '保存中... ' + (i + 1) + '/' + changes.length + '（' + item.key + '）';
           try {
-            const result = await window.electronAPI.setUserConfigValue(item.key, item.value);
+            // 外观模式走独立接口（SetAppearanceMode），其余走 UserConfigService
+            const result =
+              item.special === 'appearance'
+                ? await window.electronAPI.setAppearanceMode(item.value)
+                : await window.electronAPI.setUserConfigValue(item.key, item.value);
             if (result.success) {
               okCount++;
               itemMap.get(item.key).loadedValue = item.value;
