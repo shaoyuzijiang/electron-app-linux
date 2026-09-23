@@ -30,6 +30,7 @@
 | 历史会议 | 查看已结束的历史会议列表 |
 | 会议详情 | 查看指定会议的详细信息 |
 | 录音笔 | 显示录音笔窗口 |
+| 控制 Rooms | 会议页侧边栏「控制 Rooms」按钮，打开 SDK Rooms 控制器界面（`ShowRoomsControllerView`） |
 | 录制查看 | 打开 SDK 会前界面的"录制"标签页查看云录制列表（`ShowPreMeetingView` tabId=2）；监听 `OnVoiceRecordStatusChange` 回调，录音笔录音结束（状态 0）时自动打开录制查看页面 |
 | AI 小助手 | 显示 AI 助手界面 |
 | 字幕 | 会中开关字幕，更新字幕设置 |
@@ -185,7 +186,7 @@
 | 一次性 Ticket 免登 | APP 端用 Access Token 申请一次性 SSO Ticket（`POST /api/auth/sso/ticket`），WebView 打开 `https://host/sso/redirect?ticket=xxx`，服务端 302 + Set-Cookie 落到目标页；Access Token 全程不进 URL/Referer/access log |
 | 受众白名单 | 前端 `AUDIENCES` 与后端 `config.sso.audiences` 对齐：`web-user-center:chat`（即时通讯）、`web-user-center:organization`（组织架构）、`web-user-center:role`（角色管理） |
 | 角色控制 | 仅 `role === 'admin' \|\| 'superadmin'` 在头像菜单中看到"企业管理"入口；前端预校验 + 后端 `requireAdmin` 二次校验（颁发时与兑换时各一次） |
-| 头像菜单 | 点击用户头像展开下拉菜单（修改密码 / 上传腾讯会议日志 / 企业管理 / 关于 / 退出登录）；点击外部区域自动关闭 |
+| 头像菜单 | 点击用户头像展开下拉菜单（修改密码 / 上传腾讯会议日志 / 企业管理 / 会议设置 / 关于 / 退出登录）；点击外部区域自动关闭 |
 | 关于弹窗 | 头像菜单"关于"项展示应用名、应用版本、腾讯会议 SDK 版本；自定义模态窗口（不使用原生 dialog，规避 dev 模式 Electron 默认 logo 问题），logo 由主进程注入真实文件路径（dev 与打包后表现一致） |
 | 默认入口 | 首次点击"企业管理"默认打开"组织架构"页；后续可扩展为多个子模块 |
 | 动态页签 | 在侧边栏会议页签下方插入新的页签，标题为 webview 当前 `document.title`（实时更新），右侧带 × 关闭按钮 |

@@ -356,6 +356,16 @@ document.getElementById('btnRecordView').addEventListener('click', async () => {
   }
 });
 
+// 控制 Rooms：调用 SDK ShowRoomsControllerView 打开 Rooms 控制器界面
+document.getElementById('btnRoomsController').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.showRoomsControllerView();
+    if (!result.success) alert(result.message || '无法打开控制 Rooms 界面');
+  } catch (err) {
+    alert('操作失败: ' + err.message);
+  }
+});
+
 // 监听录音笔状态回调：录制结束时自动打开录制查看页面
 // SDK 回调 OnVoiceRecordStatusChange 状态值:
 //   -1 未录音 | 0 录音结束 | 1 录音开始 | 2 录音进行中 | 3 暂停 | 4 上传成功 | 5 上传失败

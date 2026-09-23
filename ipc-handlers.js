@@ -732,6 +732,19 @@ function register(ipcMain, deps) {
     }
   });
 
+  // 打开 Rooms 控制器界面（SDK ShowRoomsControllerView）
+  ipcMain.handle('show-rooms-controller-view', async () => {
+    if (!(await ensureSDKLoggedIn())) {
+      return { success: false, message: 'SDK 未就绪，请重新登录' };
+    }
+    try {
+      wemeetSdk.ShowRoomsControllerView();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
   ipcMain.handle('show-ai-assistant-view', async () => {
     if (!(await ensureSDKLoggedIn())) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };

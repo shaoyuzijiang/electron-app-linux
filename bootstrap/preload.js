@@ -94,6 +94,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 会议设置窗口使用：Promise 化的 UserConfigService 读写（等待 SDK 异步回调）
   getUserConfigValue: (key) =>
     ipcRenderer.invoke('get-user-config-value', { key }),
+  // 打开 SDK Rooms 控制器界面
+  showRoomsControllerView: () =>
+    ipcRenderer.invoke('show-rooms-controller-view'),
   setUserConfigValue: (key, value) =>
     ipcRenderer.invoke('set-user-config-value', { key, value }),
   setProxyInfo: (proxyInfo) =>
