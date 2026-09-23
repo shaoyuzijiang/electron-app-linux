@@ -867,6 +867,24 @@
       await openRegisterPage();
     });
 
+    // 注册入口仅生产环境开放：其他环境（uat / 自定义）隐藏
+    // （非生产后端的注册流程不对外开放，避免脏数据进入测试/生产库）
+    async function updateRegisterLinkVisibility() {
+      const registerLink = document.querySelector('.register-link');
+      if (!registerLink) return;
+      let baseUrl = '';
+      try {
+        if (window.electronAPI && window.electronAPI.settings) {
+          const r = await window.electronAPI.settings.getServerUrl();
+          if (r && r.success && r.baseUrl) baseUrl = r.baseUrl;
+        }
+      } catch {}
+      // detectEnv 定义在服务端设置弹窗区域：prod / uat / custom
+      const env = baseUrl ? detectEnv(baseUrl) : 'prod';
+      registerLink.style.display = env === 'prod' ? '' : 'none';
+    }
+    updateRegisterLinkVisibility();
+
     // 返回登录
     document.getElementById('registerBackBtn').addEventListener('click', async () => {
       await closeRegisterPage();
@@ -1102,6 +1120,8 @@
           settingsStatus.className = 'settings-status success';
           // 清空注册页 URL 缓存，下次打开重新拉取
           REGISTER_URL = '';
+          // 同步注册入口显隐（仅生产环境显示）
+          updateRegisterLinkVisibility();
           setTimeout(closeSettingsModal, 800);
         } else {
           settingsStatus.textContent = r.message || '保存失败';
