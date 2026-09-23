@@ -100,6 +100,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 打开「会议设置」窗口
   openMeetingSettings: () =>
     ipcRenderer.invoke('open-meeting-settings'),
+  // 解析入会链接为会议信息（Promise 化，等待 SDK OnParseMeetingInfoUrl 回调）
+  parseMeetingUrl: (url) =>
+    ipcRenderer.invoke('parse-meeting-url', { url }),
   setUserConfigValue: (key, value) =>
     ipcRenderer.invoke('set-user-config-value', { key, value }),
   setProxyInfo: (proxyInfo) =>

@@ -461,16 +461,54 @@ function register(ipcMain, deps) {
     }
   });
 
+  // 入会结果：JoinMeetingByJSON / JoinMeeting 的结果通过 OnJoinMeeting 异步回调返回，
+  // 这里 Promise 化（按回调中的 meeting_code 匹配，超时 15s）
+  const pendingJoinMeetings = new Map(); // meeting_code -> { resolve, timer }
+  sdkEvents.on('callback', ({ func, code, msg, param }) => {
+    if (func !== 'OnJoinMeeting' || !pendingJoinMeetings.size) return;
+    const meetingCode = param && param.meeting_code ? String(param.meeting_code) : '';
+    const pending = pendingJoinMeetings.get(meetingCode);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingJoinMeetings.delete(meetingCode);
+      if (code === 0) {
+        pending.resolve({ success: true });
+      } else {
+        pending.resolve({ success: false, message: msg || `入会失败 (code=${code})` });
+      }
+    }
+  });
+
   ipcMain.handle('join-meeting-by-json', async (_event, { meetingJson }) => {
     if (!(await ensureSDKLoggedIn())) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
+
+    // 提取 meeting_code 用于回调匹配
+    let meetingCode = '';
     try {
-      wemeetSdk.JoinMeetingByJSON(meetingJson);
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: err.message };
+      meetingCode = String(JSON.parse(meetingJson).meeting_code || '');
+    } catch {
+      return { success: false, message: '入会参数格式错误' };
     }
+    if (!meetingCode) {
+      return { success: false, message: '缺少会议号' };
+    }
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingJoinMeetings.delete(meetingCode);
+        resolve({ success: false, message: '未收到入会结果（回调超时）' });
+      }, 15000);
+      pendingJoinMeetings.set(meetingCode, { resolve, timer });
+      try {
+        wemeetSdk.JoinMeetingByJSON(meetingJson);
+      } catch (err) {
+        clearTimeout(timer);
+        pendingJoinMeetings.delete(meetingCode);
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
   ipcMain.handle('quick-meeting', async () => {
@@ -743,6 +781,50 @@ function register(ipcMain, deps) {
     } catch (err) {
       return { success: false, message: err.message };
     }
+  });
+
+  // 入会链接解析：ParseMeetingInfoUrl Promise 化（自定义入会页面用）
+  // SDK 解析结果通过 OnParseMeetingInfoUrl 回调返回（msg 为会议信息 JSON：
+  // meeting_id / current_sub_meeting_id / begin_time / meeting_code）
+  let pendingParseMeetingUrl = null;
+  sdkEvents.on('callback', ({ func, code, msg }) => {
+    if (func === 'OnParseMeetingInfoUrl' && pendingParseMeetingUrl) {
+      const pending = pendingParseMeetingUrl;
+      pendingParseMeetingUrl = null;
+      clearTimeout(pending.timer);
+      if (code === 0 && msg && typeof msg === 'object') {
+        pending.resolve({ success: true, meetingInfo: msg });
+      } else {
+        // 失败时 msg 为错误文本
+        pending.resolve({
+          success: false,
+          message: (typeof msg === 'string' && msg) || `链接解析失败 (code=${code})`,
+        });
+      }
+    }
+  });
+
+  ipcMain.handle('parse-meeting-url', async (_event, { url }) => {
+    if (!wemeetSdk || !isSdkInitialized()) {
+      return { success: false, message: 'SDK 未初始化' };
+    }
+    if (pendingParseMeetingUrl) {
+      return { success: false, message: '上一次解析尚未完成' };
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingParseMeetingUrl = null;
+        resolve({ success: false, message: '解析超时' });
+      }, 8000);
+      pendingParseMeetingUrl = { resolve, timer };
+      try {
+        wemeetSdk.ParseMeetingInfoUrl(url);
+      } catch (err) {
+        clearTimeout(timer);
+        pendingParseMeetingUrl = null;
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
   // 打开「会议设置」窗口（编辑 SDK UserConfigService 全量配置项）

@@ -309,12 +309,149 @@ document.getElementById('refreshMeetings').addEventListener('click', () => {
   loadMeetingList();
 });
 
-document.getElementById('btnJoin').addEventListener('click', async () => {
+// ========== 加入会议（自定义入会页面） ==========
+// 替代 SDK 内置入会界面：支持会议号（多格式）或入会链接，
+// 通过 JoinMeetingByJSON 入会；入会设置自动使用上一次的值（localStorage）
+const JOIN_PREFS_KEY = 'joinMeetingPrefs';
+
+const joinMeetingModal = document.getElementById('joinMeetingModal');
+const joinMeetingInput = document.getElementById('joinMeetingInput');
+const joinDisplayName = document.getElementById('joinDisplayName');
+const joinMicOn = document.getElementById('joinMicOn');
+const joinCameraOn = document.getElementById('joinCameraOn');
+const joinFaceBeautyOn = document.getElementById('joinFaceBeautyOn');
+const joinMeetingError = document.getElementById('joinMeetingError');
+const submitJoinMeetingBtn = document.getElementById('submitJoinMeeting');
+
+function loadJoinPrefs() {
   try {
-    const result = await window.electronAPI.showJoinMeetingView();
-    if (!result.success) alert(result.message || '无法打开加入会议界面');
+    const raw = localStorage.getItem(JOIN_PREFS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveJoinPrefs(prefs) {
+  try {
+    localStorage.setItem(JOIN_PREFS_KEY, JSON.stringify(prefs));
+  } catch {}
+}
+
+// 会议号输入归一化为纯数字，支持格式：
+//   '429 4793 262'、'429-4793-262'、'4294793262'、'#腾讯会议：838-827-151'
+// 实现为提取输入中首段数字串（自动兼容「会议号：」等前缀写法）
+// 返回 null 表示无法解析
+function parseMeetingCodeInput(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const m = text.match(/\d[\d\s\-—–]*\d/);
+  if (!m) return null;
+  const digits = m[0].replace(/[\s\-—–]/g, '');
+  if (!/^\d{9,12}$/.test(digits)) return null;
+  return digits;
+}
+
+// 判断是否为入会链接（scheme:// 开头，如 https:// 或 wemeet://）
+function isMeetingUrl(text) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(String(text || '').trim());
+}
+
+function showJoinMeetingError(msg) {
+  joinMeetingError.textContent = msg;
+}
+
+function openJoinMeetingModal() {
+  const prefs = loadJoinPrefs();
+  joinMeetingInput.value = '';
+  joinDisplayName.value = prefs.displayName || '';
+  joinMicOn.checked = !!prefs.micOn;
+  joinCameraOn.checked = !!prefs.cameraOn;
+  joinFaceBeautyOn.checked = !!prefs.faceBeautyOn;
+  showJoinMeetingError('');
+  joinMeetingModal.classList.add('show');
+  setTimeout(() => joinMeetingInput.focus(), 50);
+}
+
+function closeJoinMeetingModal() {
+  joinMeetingModal.classList.remove('show');
+}
+
+document.getElementById('btnJoin').addEventListener('click', openJoinMeetingModal);
+document.getElementById('cancelJoinMeeting').addEventListener('click', closeJoinMeetingModal);
+
+// 仅通过「取消」或「加入会议」按钮关闭，点击弹窗外部区域不关闭
+
+// 输入框回车直接提交
+joinMeetingInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitJoinMeetingBtn.click();
+});
+
+submitJoinMeetingBtn.addEventListener('click', async () => {
+  const raw = joinMeetingInput.value.trim();
+  if (!raw) {
+    showJoinMeetingError('请输入会议号或入会链接');
+    return;
+  }
+
+  let meetingCode;
+  if (isMeetingUrl(raw)) {
+    // 入会链接：先调用 ParseMeetingInfoUrl 解析出会议号
+    submitJoinMeetingBtn.disabled = true;
+    submitJoinMeetingBtn.textContent = '解析链接中...';
+    try {
+      const result = await window.electronAPI.parseMeetingUrl(raw);
+      if (!result.success) {
+        showJoinMeetingError(result.message || '入会链接解析失败');
+        return;
+      }
+      meetingCode = String((result.meetingInfo && result.meetingInfo.meeting_code) || '');
+      if (!meetingCode) {
+        showJoinMeetingError('链接中未包含会议号');
+        return;
+      }
+    } catch (err) {
+      showJoinMeetingError('链接解析失败: ' + err.message);
+      return;
+    } finally {
+      submitJoinMeetingBtn.disabled = false;
+      submitJoinMeetingBtn.textContent = '加入会议';
+    }
+  } else {
+    meetingCode = parseMeetingCodeInput(raw);
+    if (!meetingCode) {
+      showJoinMeetingError('会议号格式不正确');
+      return;
+    }
+  }
+
+  // 保存本次入会设置，下次自动使用
+  const displayName = joinDisplayName.value.trim();
+  const micOn = joinMicOn.checked;
+  const cameraOn = joinCameraOn.checked;
+  const faceBeautyOn = joinFaceBeautyOn.checked;
+  saveJoinPrefs({ displayName, micOn, cameraOn, faceBeautyOn });
+
+  const param = { meeting_code: meetingCode };
+  if (displayName) param.user_display_name = displayName;
+  param.mic_on = micOn;
+  param.camera_on = cameraOn;
+  param.face_beauty_on = faceBeautyOn;
+
+  submitJoinMeetingBtn.disabled = true;
+  submitJoinMeetingBtn.textContent = '加入中...';
+  try {
+    const result = await window.electronAPI.joinMeetingByJson(JSON.stringify(param));
+    if (result.success) {
+      closeJoinMeetingModal();
+    } else {
+      showJoinMeetingError(result.message || '入会失败');
+    }
   } catch (err) {
-    alert('操作失败: ' + err.message);
+    showJoinMeetingError('入会失败: ' + err.message);
+  } finally {
+    submitJoinMeetingBtn.disabled = false;
+    submitJoinMeetingBtn.textContent = '加入会议';
   }
 });
 
