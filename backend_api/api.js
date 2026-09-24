@@ -78,8 +78,11 @@ async function getProfile(accessToken) {
  * 获取腾讯会议 SDK Token
  * @returns {{ sdkId, sdkToken, expiresIn }}
  */
-async function getSdkToken() {
-  return await request(`${httpApi.getBaseUrl()}/api/auth/sdk-token`);
+async function getSdkToken(accessToken) {
+  if (!accessToken) throw new Error('获取 SDK Token 需要登录');
+  return await request(`${httpApi.getBaseUrl()}/api/auth/sdk-token`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 }
 
 /**

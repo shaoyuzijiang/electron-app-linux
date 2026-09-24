@@ -1,23 +1,39 @@
-/**
- * Token 存储管理
- * 使用 electron-store 的简单内存+文件存储方案
- */
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
-
-const TOKEN_FILE = path.join(app.getPath('userData'), 'auth-tokens.json');
+const { app, safeStorage } = require('electron');
 
 let tokens = null;
 let sdkTokenData = null;
 let idTokenData = null;
 
+function tokenPath() {
+  return path.join(app.getPath('userData'), 'auth-tokens.enc');
+}
+
+function legacyTokenPath() {
+  return path.join(app.getPath('userData'), 'auth-tokens.json');
+}
+
+function canPersistSecurely() {
+  return process.platform !== 'linux' && safeStorage.isEncryptionAvailable();
+}
+
+function removePersistedTokens() {
+  for (const file of [tokenPath(), legacyTokenPath()]) {
+    try { fs.rmSync(file, { force: true }); } catch {}
+  }
+}
+
 function loadTokens() {
+  if (tokens) return tokens;
+  if (!canPersistSecurely()) {
+    removePersistedTokens();
+    return null;
+  }
   try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      const data = fs.readFileSync(TOKEN_FILE, 'utf-8');
-      tokens = JSON.parse(data);
-    }
+    tokens = JSON.parse(safeStorage.decryptString(fs.readFileSync(tokenPath())));
   } catch {
     tokens = null;
   }
@@ -28,15 +44,21 @@ function saveTokens(tokenData) {
   tokens = {
     accessToken: tokenData.accessToken,
     refreshToken: tokenData.refreshToken,
-    expiresIn: tokenData.expiresIn,
+    expiresIn: Number(tokenData.expiresIn || 0),
     tokenType: tokenData.tokenType,
     savedAt: Date.now(),
   };
-  try {
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2), 'utf-8');
-  } catch {
-    // 静默处理写入失败
+  if (!canPersistSecurely()) {
+    removePersistedTokens();
+    console.warn('[Auth] Linux Token 仅保存在当前进程内存中');
+    return false;
   }
+  const file = tokenPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, safeStorage.encryptString(JSON.stringify(tokens)), { mode: 0o600 });
+  fs.chmodSync(file, 0o600);
+  try { fs.rmSync(legacyTokenPath(), { force: true }); } catch {}
+  return true;
 }
 
 function getTokens() {
@@ -45,60 +67,31 @@ function getTokens() {
 
 function clearTokens() {
   tokens = null;
-  try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      fs.unlinkSync(TOKEN_FILE);
-    }
-  } catch {
-    // 静默处理
-  }
+  removePersistedTokens();
 }
 
-/**
- * 检查 accessToken 是否已过期
- */
 function isAccessTokenExpired() {
-  const t = getTokens();
-  if (!t) return true;
-  const expiresAt = t.savedAt + t.expiresIn * 1000;
-  // 提前 30 秒视为过期，避免边界问题
-  return Date.now() > expiresAt - 30 * 1000;
+  const value = getTokens();
+  if (!value || !value.accessToken) return true;
+  return Date.now() >= value.savedAt + value.expiresIn * 1000 - 30000;
 }
 
-/**
- * 保存 SDK Token 数据
- */
-function saveSdkToken(data) {
-  sdkTokenData = data;
-}
+function saveSdkToken(data) { sdkTokenData = data || null; }
+function getSdkToken() { return sdkTokenData; }
+function saveIdToken(data) { idTokenData = data || null; }
+function getIdToken() { return idTokenData; }
+function clearMeetingTokens() { sdkTokenData = null; idTokenData = null; }
 
-/**
- * 获取 SDK Token 数据
- */
-function getSdkToken() {
-  return sdkTokenData;
-}
-
-/**
- * 保存 ID Token 数据
- */
-function saveIdToken(data) {
-  idTokenData = data;
-}
-
-/**
- * 获取 ID Token 数据
- */
-function getIdToken() {
-  return idTokenData;
-}
-
-/**
- * 清除会议相关 Token
- */
-function clearMeetingTokens() {
-  sdkTokenData = null;
-  idTokenData = null;
-}
-
-module.exports = { loadTokens, saveTokens, getTokens, clearTokens, isAccessTokenExpired, saveSdkToken, getSdkToken, saveIdToken, getIdToken, clearMeetingTokens };
+module.exports = {
+  loadTokens,
+  saveTokens,
+  getTokens,
+  clearTokens,
+  isAccessTokenExpired,
+  canPersistSecurely,
+  saveSdkToken,
+  getSdkToken,
+  saveIdToken,
+  getIdToken,
+  clearMeetingTokens,
+};

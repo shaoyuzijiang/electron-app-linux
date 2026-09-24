@@ -251,19 +251,41 @@ window.NavModule = {
 
 // ========== 初始化 ==========
 
-// 非调试模式（正式包）隐藏 webview 页签
-if (!window.electronAPI || !window.electronAPI.isDev) {
-  document.querySelectorAll('.nav-item[data-tab="webview"]').forEach((item) => {
-    item.remove();
-  });
+function removeNavigationTab(tab) {
+  document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach((item) => item.remove());
 }
 
-// 默认显示 IM 页签
-meetingContentEls().forEach((el) => { el.style.display = 'none'; });
-sdkLoadingEl.style.display = 'none';
-contactsPageEl.style.display = 'none';
-if (imPageEl) imPageEl.style.display = '';
-if (calendarPageEl) calendarPageEl.style.display = 'none';
-if (window.IMModule) window.IMModule.init();
+async function initializeNavigation() {
+  let capabilities = null;
+  try {
+    capabilities = await window.electronAPI.getSdkCapabilities();
+  } catch (error) {
+    console.warn('无法读取平台能力，使用完整页面默认入口:', error);
+  }
+
+  window.PlatformCapabilities = capabilities || {};
+  const enabled = (name) => !capabilities || capabilities[name] === true;
+  if (!enabled('feature.im')) removeNavigationTab('im');
+  if (!enabled('feature.calendar')) removeNavigationTab('calendar');
+  if (!enabled('feature.contacts')) removeNavigationTab('contacts');
+  if (!enabled('feature.webView') || !window.electronAPI.isDev) removeNavigationTab('webview');
+
+  meetingContentEls().forEach((el) => { el.style.display = 'none'; });
+  sdkLoadingEl.style.display = 'none';
+  contactsPageEl.style.display = 'none';
+  if (imPageEl) imPageEl.style.display = 'none';
+  if (calendarPageEl) calendarPageEl.style.display = 'none';
+  if (webviewPageEl) webviewPageEl.style.display = 'none';
+
+  const defaultTab = enabled('feature.im') ? 'im' : 'meeting';
+  if (defaultTab === 'im' && window.IMModule) window.IMModule.init();
+  if (defaultTab === 'im') {
+    if (imPageEl) imPageEl.style.display = '';
+  } else {
+    switchTab('meeting');
+  }
+}
+
+initializeNavigation();
 
 // 用户头像 + 头像菜单的初始化由 enterprise-sso.js 自行处理（脚本在 nav.js 之后加载）

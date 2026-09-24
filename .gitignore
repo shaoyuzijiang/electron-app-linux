@@ -8,6 +8,11 @@ default.profraw
 
 # 忽略打包暂存文件（framework 暂存、.node 产物等）
 output/mac/
+output/linux/
+dist-demo/
+.electron-headers/
+.sdk-cache/
+vendor/
 dSYM/
 pdb/
 

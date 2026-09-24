@@ -81,6 +81,7 @@
 
   // 头像元素（菜单本身渲染在独立悬浮子窗口中，见 avatar-menu-overlay.html）
   let userAvatar;
+  let platformCapabilities = null;
 
   // ticket 缓存：audienceId -> { ticket, jti, expiresAt, pending? }
   // - ticket 已就绪且 expiresAt - Date.now() > 30s 时直接复用
@@ -172,6 +173,11 @@
    * 初始化：加载用户信息 + 绑定头像菜单事件
    */
   async function init() {
+    try {
+      platformCapabilities = window.PlatformCapabilities || await window.electronAPI.getSdkCapabilities();
+    } catch {
+      platformCapabilities = null;
+    }
     userAvatar = document.getElementById('userAvatarNav');
 
     if (!userAvatar) {
@@ -185,6 +191,7 @@
     // 头像 hover 触发预申请：用户进入菜单时大概率要点「企业管理」，
     // 此时提前申请 ticket 缓存，让点击时几乎无延迟
     userAvatar.addEventListener('mouseenter', () => {
+      if (platformCapabilities && platformCapabilities['feature.enterpriseSso'] !== true) return;
       if (!_avatarHovered) {
         _avatarHovered = true;
       }
@@ -208,8 +215,8 @@
         currentUser = result.profile;
         const username = currentUser.username || '?';
         userAvatar.textContent = username.charAt(0).toUpperCase();
-        // 登录后立即预申请（用户角色已确认）
-        _prewarmDefaultTicket();
+        // 登录后仅在当前平台支持企业 SSO 时预申请。
+        if (!platformCapabilities || platformCapabilities['feature.enterpriseSso'] === true) _prewarmDefaultTicket();
       } else {
         userAvatar.textContent = '?';
       }
@@ -272,7 +279,12 @@
    */
   function onAvatarClick(e) {
     e.stopPropagation();
-    if (!userAvatar || !window.electronAPI || !window.electronAPI.avatarMenuToggle) return;
+    if (!userAvatar || !window.electronAPI) return;
+    if (platformCapabilities && platformCapabilities['feature.enterpriseSso'] !== true) {
+      if (window.confirm('确定退出登录吗？')) window.electronAPI.logout();
+      return;
+    }
+    if (!window.electronAPI.avatarMenuToggle) return;
     const rect = userAvatar.getBoundingClientRect();
     window.electronAPI.avatarMenuToggle({
       x: rect.left,

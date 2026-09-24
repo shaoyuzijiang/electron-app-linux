@@ -132,6 +132,7 @@ function getClientOs() {
 function register(ipcMain, deps) {
   const {
     wemeetSdk,
+    getPlatformCapabilities,
     getMainWindow,
     getValidAccessToken,
     ensureSDKLoggedIn,
@@ -437,6 +438,8 @@ function register(ipcMain, deps) {
   });
 
   // ========== 腾讯会议 SDK IPC 接口 ==========
+
+  ipcMain.handle('get-sdk-capabilities', () => getPlatformCapabilities());
 
   ipcMain.handle('get-sdk-status', () => {
     return {

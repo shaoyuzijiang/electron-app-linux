@@ -31,10 +31,12 @@ async function retrySdkLogin() {
     <div class="loading-text">会议功能加载中...</div>
   `;
   try {
-    const idTokenResult = await window.electronAPI.fetchIdToken();
-    if (idTokenResult.error) {
-      showSdkError('会议功能加载失败，请重试');
-      return;
+    if (typeof window.electronAPI.fetchIdToken === 'function') {
+      const idTokenResult = await window.electronAPI.fetchIdToken();
+      if (idTokenResult && idTokenResult.error) {
+        showSdkError('会议功能加载失败，请重试');
+        return;
+      }
     }
     const result = await window.electronAPI.waitSdkLogin();
     if (result.success) {
@@ -303,6 +305,35 @@ document.getElementById('meetingList').addEventListener('click', async (e) => {
   }
 });
 
+// ========== 平台能力降级 ==========
+// Renderer 不判断操作系统；所有 SDK 差异由主进程提供的 capability contract 决定。
+let platformCapabilities = null;
+
+async function applyPlatformCapabilities() {
+  try {
+    platformCapabilities = await window.electronAPI.getSdkCapabilities();
+  } catch (error) {
+    console.warn('无法读取平台能力，保留默认会议入口:', error);
+    return;
+  }
+
+  const availability = [
+    ['btnScreen', 'view.screenCast'],
+    ['btnVoiceRecord', 'view.voiceRecord'],
+    ['btnRecordView', 'view.record'],
+    ['btnRoomsController', 'view.rooms'],
+  ];
+  for (const [id, capability] of availability) {
+    const button = document.getElementById(id);
+    if (button && platformCapabilities[capability] !== true) button.style.display = 'none';
+  }
+
+  const settingsButton = document.getElementById('btnMeetingSettings');
+  if (settingsButton && platformCapabilities['settings.userConfiguration'] !== true) {
+    settingsButton.querySelector('.label').textContent = 'SDK 设置';
+  }
+}
+
 // ========== 按钮事件 ==========
 
 document.getElementById('refreshMeetings').addEventListener('click', () => {
@@ -503,9 +534,15 @@ document.getElementById('btnRoomsController').addEventListener('click', async ()
   }
 });
 
-// 会议设置：打开 SDK 用户配置设置窗口（UserConfigService 全量配置项）
-document.getElementById('btnMeetingSettings').addEventListener('click', () => {
-  window.electronAPI.openMeetingSettings();
+// 会议设置：3.43 使用应用 UserConfigService 页面；Linux 3.26 降级到 SDK 原生设置页面。
+document.getElementById('btnMeetingSettings').addEventListener('click', async () => {
+  if (platformCapabilities && platformCapabilities['settings.userConfiguration'] !== true) {
+    const result = await window.electronAPI.showMeetingSettingView();
+    if (!result.success) alert(result.message || '无法打开 SDK 设置页面');
+    return;
+  }
+  const result = await window.electronAPI.openMeetingSettings();
+  if (result && !result.success) alert(result.message || '无法打开会议设置');
 });
 
 // 监听录音笔状态回调：录制结束时自动打开录制查看页面
@@ -735,6 +772,50 @@ function toUnixTimestamp(datetimeLocalValue) {
   return String(Math.floor(new Date(datetimeLocalValue).getTime() / 1000));
 }
 
+// ========== 预定会议 → 日程联动 ==========
+// 后端日程支持内嵌 meeting 信息；预定成功后自动创建同时间的日程，
+// 使会议出现在日历对应日期，并支持从日历直接入会。失败不影响会议本身。
+
+function calendarLocalTime(unixSecs) {
+  const date = new Date(unixSecs * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+async function syncMeetingToCalendar(data, subject, startSecs, endSecs) {
+  try {
+    if (typeof window.electronAPI.calendarCreateEvent !== 'function') return;
+    if (window.PlatformCapabilities && window.PlatformCapabilities['feature.calendar'] !== true) return;
+
+    let info = null;
+    if (data && Array.isArray(data.meeting_info_list) && data.meeting_info_list.length > 0) {
+      info = data.meeting_info_list[0];
+    } else if (data && data.meeting_info) {
+      info = data.meeting_info;
+    } else if (data && (data.subject || data.meeting_id || data.meeting_code)) {
+      info = data;
+    }
+    if (!info) return;
+
+    await window.electronAPI.calendarCreateEvent({
+      title: subject,
+      startTime: calendarLocalTime(startSecs),
+      endTime: calendarLocalTime(endSecs),
+      meeting: {
+        meetingType: 'wemeet',
+        meetingId: String(info.meeting_id || ''),
+        meetingCode: String(info.meeting_code || ''),
+        joinUrl: String(info.join_url || ''),
+        meetingSubject: subject,
+      },
+    });
+    console.log('[Calendar] 预定会议已同步到日程');
+  } catch (err) {
+    console.warn('[Calendar] 会议同步日程失败（不影响会议预定）:', err && err.message);
+  }
+}
+
 function getMeetingFormValues() {
   const subject = meetingFormSubject.value.trim();
   const startTimeRaw = meetingFormStartTime.value;
@@ -860,6 +941,7 @@ submitMeetingFormBtn.addEventListener('click', async () => {
       const result = await window.electronAPI.createMeeting(meetingData);
       if (result.success) {
         showScheduleResult(result.data);
+        syncMeetingToCalendar(result.data, subject, Number(meetingData.start_time), Number(meetingData.end_time));
         loadMeetingList(false, true);
       } else {
         meetingFormError.textContent = result.message || '创建会议失败';
@@ -1009,5 +1091,6 @@ window.electronAPI.onMeetingListUpdate((result) => {
 });
 
 // ========== 会议模块初始化 ==========
+applyPlatformCapabilities();
 loadMeetingList();
 checkSdkStatus();

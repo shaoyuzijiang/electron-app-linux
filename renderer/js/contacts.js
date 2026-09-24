@@ -185,7 +185,7 @@ async function loadDepartmentTree() {
         }
       }
     } else if (!cached) {
-      container.innerHTML = `<div class="meeting-empty">获取部门数据失败</div>`;
+      container.innerHTML = `<div class="meeting-empty">获取部门数据失败${result.message ? '：' + result.message : ''}</div>`;
     }
   } catch (err) {
     console.error('获取部门树失败:', err);

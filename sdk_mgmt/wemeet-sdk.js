@@ -261,7 +261,7 @@ async function initSDK() {
         sdkInitReject = reject;
       });
 
-      const sdkData = await api.getSdkToken();
+      const sdkData = await api.getSdkToken(await getValidAccessToken());
       tokenStore.saveSdkToken(sdkData);
 
       const sdkId = String(sdkData.sdkId);

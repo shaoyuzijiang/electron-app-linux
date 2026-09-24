@@ -8,6 +8,7 @@ const POLLING_INTERVAL = 5 * 60 * 1000; // 5 分钟
 let _getValidAccessToken = null;
 let _getMainWindow = null;
 let _isSdkLoggedIn = null;
+let _instanceId = 2;
 
 /**
  * 初始化模块依赖
@@ -20,6 +21,7 @@ function init(deps) {
   _getValidAccessToken = deps.getValidAccessToken;
   _getMainWindow = deps.getMainWindow;
   _isSdkLoggedIn = deps.isSdkLoggedIn;
+  _instanceId = Number.isInteger(deps.instanceId) ? deps.instanceId : 2;
 }
 
 /**
@@ -30,7 +32,7 @@ function scheduleMeetingListRefresh() {
   meetingListRefreshTimer = setTimeout(async () => {
     try {
       const accessToken = await _getValidAccessToken();
-      const result = await api.getMeetingList(accessToken, { instanceid: 2, is_show_all_sub_meetings: '1' });
+      const result = await api.getMeetingList(accessToken, { instanceid: _instanceId, is_show_all_sub_meetings: '1' });
       const mainWindow = _getMainWindow();
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('meeting-list-updated', { success: true, data: result });

@@ -874,6 +874,13 @@
       if (!registerLink) return;
       let baseUrl = '';
       try {
+        if (window.electronAPI && typeof window.electronAPI.getSdkCapabilities === 'function') {
+          const capabilities = await window.electronAPI.getSdkCapabilities();
+          if (capabilities && capabilities['feature.webView'] !== true) {
+            registerLink.style.display = 'none';
+            return;
+          }
+        }
         if (window.electronAPI && window.electronAPI.settings) {
           const r = await window.electronAPI.settings.getServerUrl();
           if (r && r.success && r.baseUrl) baseUrl = r.baseUrl;

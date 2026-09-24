@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=腾讯会议 SDK Linux Demo
+Comment=银河麒麟 ARM64 腾讯会议 SDK Electron Demo
+Exec=/usr/bin/tencent-meeting-sdk-linux-demo %u
+Icon=tencent-meeting-sdk-linux-demo
+Terminal=false
+Categories=Network;VideoConference;
+MimeType=x-scheme-handler/wemeetsdk;
+StartupNotify=true

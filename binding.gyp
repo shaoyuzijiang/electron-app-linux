@@ -139,6 +139,19 @@
            ],
         }
       ]
+    }],
+    ['OS=="linux" and target_arch=="arm64"', {
+      "targets": [
+        {
+          "target_name": "wemeet_electron_sdk",
+          "sources": [ "native/linux/wemeet.cpp" ],
+          "include_dirs": [ "native/include" ],
+          "libraries": [ "-Wl,-rpath,'$$ORIGIN'", "-Wl,-rpath,'$$ORIGIN/Release/lib'", "-Wl,-z,origin", "-lwemeetsdk" ],
+          "library_dirs": [ "<(module_root_dir)/output/linux" ],
+          "cflags_cc!": [ "-std=gnu++20" ],
+          "cflags_cc": [ "-fexceptions", "-std=gnu++2a" ]
+        }
+      ]
     }]
   ]
 }
