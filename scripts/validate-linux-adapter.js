@@ -19,6 +19,7 @@ async function run() {
     JoinMeeting(...args) { calls.push('join'); joinArgsHistory.push(args); callback(JSON.stringify({ func: 'OnJoinMeeting', code: 0 })); return 0; },
     QuickMeeting() { calls.push('quick'); callback(JSON.stringify({ func: 'OnJoinMeeting', code: 0 })); return 0; },
     LeaveMeeting() { calls.push('leave'); callback(JSON.stringify({ func: 'OnLeaveMeeting', code: 0 })); return 0; },
+    ParseMeetingInfoUrl(url) { calls.push(`parse:${url}`); return 0; },
     ForceQuit() { calls.push('quit'); callback(JSON.stringify({ func: 'OnSDKUninitializeResult', code: 0 })); return 0; },
     ShowJoinMeetingView: () => 0,
     ShowScheduleMeetingView: () => 0,
@@ -53,6 +54,17 @@ async function run() {
   assert.strictEqual(joinArgsHistory[1][5], false, 'cameraOn=false 必须显式关闭入会视频');
   await adapter.leaveMeeting();
   assert.strictEqual(adapter.getStatus().inMeeting, false);
+
+  // 入会链接解析：OnParseMeetingInfoUrl 回调 Promise 化，msg 为会议信息 JSON
+  const parsePromise = adapter.parseMeetingUrl('wemeetsdk://page/meeting-info?meeting_code=12345678');
+  assert(calls.includes('parse:wemeetsdk://page/meeting-info?meeting_code=12345678'), '必须调用原生 ParseMeetingInfoUrl');
+  callback(JSON.stringify({ func: 'OnParseMeetingInfoUrl', code: 0, msg: '{"meeting_code":"12345678","meeting_id":"m1"}' }));
+  const parseResult = await parsePromise;
+  assert.deepStrictEqual(parseResult, { success: true, meetingInfo: { meeting_code: '12345678', meeting_id: 'm1' } });
+  const parseFail = adapter.parseMeetingUrl('wemeetsdk://invalid');
+  callback(JSON.stringify({ func: 'OnParseMeetingInfoUrl', code: 1, msg: '链接无效' }));
+  assert.deepStrictEqual(await parseFail, { success: false, message: '链接无效' });
+
   await adapter.openView('settings');
   await adapter.cancelSession();
   assert(calls.includes('quit'));

@@ -192,6 +192,10 @@ function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings,
     if (!json) throw new Error('会议参数无效');
     await adapter.joinMeetingByJson(json);
   }));
+  ipcMain.handle('parse-meeting-url', (event, { url } = {}) => {
+    trusted(event);
+    return adapter.parseMeetingUrl(String(url || ''));
+  });
   ipcMain.handle('enable-ring-invitation-view', (event, { enable } = {}) => sdkAction(event, async () => {
     const code = adapter.requireMethod('EnableRingInvitationView')(enable !== false);
     if (code !== undefined && Number(code) !== 0) throw new Error(`EnableRingInvitationView 调用失败：${code}`);

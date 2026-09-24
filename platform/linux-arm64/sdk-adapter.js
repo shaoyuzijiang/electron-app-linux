@@ -56,6 +56,7 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
   let pendingLogin = null;
   let pendingShutdown = null;
   let pendingMeeting = null;
+  let pendingParseUrl = null;
 
   function status() {
     return {
@@ -161,6 +162,27 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
       inMeeting = false;
       lastError = callback.msg || `SDK 状态异常：${callback.code || 'unknown'}`;
       cancelPending(lastError);
+    } else if (callback.func === 'OnParseMeetingInfoUrl') {
+      const pending = pendingParseUrl;
+      if (pending) {
+        pendingParseUrl = null;
+        clearTimeout(pending.timer);
+        let meetingInfo = callback.param;
+        if (!meetingInfo && typeof callback.msg === 'string' && callback.msg.trim().startsWith('{')) {
+          try { meetingInfo = JSON.parse(callback.msg); } catch { meetingInfo = null; }
+        } else if (!meetingInfo && callback.msg && typeof callback.msg === 'object') {
+          meetingInfo = callback.msg;
+        }
+        if (success && meetingInfo && typeof meetingInfo === 'object') {
+          pending.resolve({ success: true, meetingInfo });
+        } else {
+          pending.resolve({
+            success: false,
+            message: (typeof callback.msg === 'string' && !callback.msg.trim().startsWith('{') && callback.msg)
+              || `链接解析失败 (code=${callback.code ?? 'unknown'})`,
+          });
+        }
+      }
     } else if (callback.func === 'OnSDKTokenExpired') {
       refreshSdkToken().catch((error) => {
         lastError = error.message;
@@ -370,6 +392,24 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
     joinMeeting: ({ meetingCode, displayName = '', password = '', cameraOn = true }) =>
       invokeMeeting('JoinMeeting', [String(meetingCode), String(displayName), String(password), '', true, Boolean(cameraOn), true, false, ''], 'OnJoinMeeting', '加入会议'),
     joinMeetingByJson: (meetingJson) => invokeMeeting('JoinMeetingByJSON', [String(meetingJson)], 'OnJoinMeeting', '加入会议'),
+    // 入会链接解析：与 Mac/Windows 语义一致（单飞、8 秒超时、Promise 返回 {success, meetingInfo|message}）
+    parseMeetingUrl: (url) => {
+      if (!sessionActive || !initialized || !loggedIn) return Promise.resolve({ success: false, message: 'SDK 未就绪' });
+      if (pendingParseUrl) return Promise.resolve({ success: false, message: '上一次解析尚未完成' });
+      return new Promise((resolve) => {
+        pendingParseUrl = { resolve, timer: setTimeout(() => {
+          pendingParseUrl = null;
+          resolve({ success: false, message: '解析超时' });
+        }, 8000) };
+        try {
+          requireMethod('ParseMeetingInfoUrl')(String(url || ''));
+        } catch (error) {
+          clearTimeout(pendingParseUrl.timer);
+          pendingParseUrl = null;
+          resolve({ success: false, message: error.message });
+        }
+      });
+    },
     quickMeeting: () => invokeMeeting('QuickMeeting', [], 'OnJoinMeeting', '快速会议'),
     leaveMeeting: () => invokeMeeting('LeaveMeeting', [false], 'OnLeaveMeeting', '离开会议'),
     openView: async (view, detail = {}) => {
