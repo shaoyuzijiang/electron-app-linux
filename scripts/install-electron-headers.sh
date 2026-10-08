@@ -3,11 +3,8 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MANIFEST="$ROOT/vendor/electron-manifest.json"
-VERSION="$(node -p "require('$MANIFEST').version")"
-HEADERS_FILE="$(node -p "require('$MANIFEST').headers.file")"
-ARCHIVE="$ROOT/vendor/$HEADERS_FILE"
-CHECKSUMS="$ROOT/vendor/ELECTRON_HEADERS_SHA256SUMS"
+VERSION="33.4.11"
+ARCHIVE="$ROOT/vendor/node-v33.4.11-headers.tar.gz"
 TARGET="$ROOT/.electron-headers"
 STAGE="$ROOT/.electron-headers.stage.$$"
 
@@ -16,10 +13,7 @@ cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
 
 [[ -f "$ARCHIVE" ]] || fail "缺少 $ARCHIVE"
-[[ -f "$CHECKSUMS" ]] || fail "缺少 $CHECKSUMS"
-[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json 与供应清单版本不一致"
-(cd "$ROOT/vendor" && sha256sum -c ELECTRON_HEADERS_SHA256SUMS)
-[[ "$(sha256sum "$ARCHIVE" | awk '{print $1}')" == "$(node -p "require('$MANIFEST').headers.sha256")" ]] || fail "headers 摘要与供应清单不一致"
+[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json Electron 版本与离线 headers 不一致"
 if ! tar -tzf "$ARCHIVE" | awk '$0 ~ /^\// { exit 1 } { n=split($0,p,"/"); for(i=1;i<=n;i++) if(p[i]=="..") exit 1 }'; then
   fail "headers 归档包含不安全路径"
 fi

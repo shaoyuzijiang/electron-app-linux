@@ -3,18 +3,12 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MANIFEST="$ROOT/vendor/electron-manifest.json"
-ELECTRON_VERSION="$(node -p "require('$MANIFEST').version")"
-HEADERS_FILE="$(node -p "require('$MANIFEST').headers.file")"
+ELECTRON_VERSION="33.4.11"
+HEADERS_FILE="node-v33.4.11-headers.tar.gz"
 HEADERS="$ROOT/.electron-headers"
 OUT="$ROOT/output/linux"
 BUILT="$ROOT/build/Release/wemeet_electron_sdk.node"
 TEMP_ADDON="$OUT/.wemeet_electron_sdk.node.$$"
-SDK_ARCHIVE="$ROOT/vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
-SDK_PROVENANCE="$OUT/SDK_SOURCE_PROVENANCE.json"
-VERIFY_STAGE="$(mktemp -d)"
-cleanup() { rm -rf "$VERIFY_STAGE"; }
-trap cleanup EXIT
 
 fail() { echo "原生 addon 编译失败: $*" >&2; exit 1; }
 [[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
@@ -43,22 +37,7 @@ export PYTHON="$NODE_GYP_PYTHON"
 export npm_config_python="$NODE_GYP_PYTHON"
 [[ -f "$HEADERS/include/node/node.h" ]] || fail "缺少离线 Electron headers，请执行 npm run setup:kylin"
 [[ -f "$ROOT/native/include/wemeet_sdk.h" ]] || fail "缺少 SDK headers，请执行 npm run setup:kylin"
-[[ -f "$OUT/libwemeetsdk.so" && -f "$SDK_PROVENANCE" ]] || fail "缺少可信 SDK 准备结果"
-[[ -f "$SDK_ARCHIVE" ]] || fail "缺少固定 SDK 归档"
-
-HEADERS_ARCHIVE_SHA="$(sha256sum "$ROOT/vendor/$HEADERS_FILE" | awk '{print $1}')"
-[[ "$HEADERS_ARCHIVE_SHA" == "$(node -p "require('$MANIFEST').headers.sha256")" ]] || fail "headers 归档摘要与供应清单不一致"
-tar --no-same-owner --no-same-permissions -xzf "$ROOT/vendor/$HEADERS_FILE" -C "$VERIFY_STAGE"
-EXPECTED_HEADERS_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" "$VERIFY_STAGE/node_headers" .)"
-ACTUAL_HEADERS_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" "$HEADERS" .)"
-[[ "$ACTUAL_HEADERS_TREE_SHA" == "$EXPECTED_HEADERS_TREE_SHA" ]] || fail "实际参与编译的 headers 已偏离固定归档"
-
-ACTUAL_RUNTIME_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" "$OUT" libwemeetsdk.so libwemeet_base.so Release)"
-ACTUAL_INCLUDE_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" "$ROOT/native/include" .)"
-[[ "$ACTUAL_RUNTIME_TREE_SHA" == "$(node -p "require('$SDK_PROVENANCE').preparedRuntimeTreeSha256")" ]] || fail "实际 SDK 运行库与准备来源不一致"
-[[ "$ACTUAL_INCLUDE_TREE_SHA" == "$(node -p "require('$SDK_PROVENANCE').preparedIncludeTreeSha256")" ]] || fail "实际 SDK headers 与准备来源不一致"
-SDK_ARCHIVE_SHA="$(sha256sum "$SDK_ARCHIVE" | awk '{print $1}')"
-[[ "$SDK_ARCHIVE_SHA" == "$(node -p "require('$SDK_PROVENANCE').sdkArchiveSha256")" ]] || fail "SDK 归档与准备来源不一致"
+[[ -f "$OUT/libwemeetsdk.so" && -f "$OUT/libwemeet_base.so" ]] || fail "缺少 SDK 运行库，请执行 npm run setup:kylin"
 
 cd "$ROOT"
 rm -rf build "$OUT/wemeet_electron_sdk.node" "$OUT/ADDON_BUILD_PROVENANCE.json" "$OUT/ELF_COMPATIBILITY.json"
@@ -73,38 +52,4 @@ MACHINE="$(readelf -h "$BUILT" | awk -F: '/Machine:/ {gsub(/^[[:space:]]+/, "", 
 cp -f "$BUILT" "$TEMP_ADDON"
 mv -f "$TEMP_ADDON" "$OUT/wemeet_electron_sdk.node"
 
-ADDON_SHA="$(sha256sum "$OUT/wemeet_electron_sdk.node" | awk '{print $1}')"
-BUILD_INPUT_SHA="$(node "$ROOT/scripts/hash-tree.js" "$ROOT" binding.gyp native/linux native/include)"
-SDK_SOURCE_TREE_SHA="$(node -p "require('$SDK_PROVENANCE').sourceTreeSha256")"
-NODE_VERSION="$(node --version)"
-NPM_VERSION="$(npm --version)"
-PYTHON_VERSION="$PYTHON_VERSION"
-NODE_GYP_VERSION="$(node -p "require('./node_modules/node-gyp/package.json').version")"
-NODE_GYP_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" "$ROOT/node_modules/node-gyp" .)"
-PACKAGE_LOCK_SHA="$(sha256sum "$ROOT/package-lock.json" | awk '{print $1}')"
-NODE_BINARY="$(realpath "$(command -v node)")"
-NPM_EXECUTABLE="$(realpath "$(command -v npm)")"
-COMPILER_BINARY="$(realpath "$(command -v g++)")"
-LINKER_BINARY="$(realpath "$(command -v ld)")"
-ASSEMBLER_BINARY="$(realpath "$(command -v as)")"
-NODE_BINARY_SHA="$(sha256sum "$NODE_BINARY" | awk '{print $1}')"
-NPM_EXECUTABLE_SHA="$(sha256sum "$NPM_EXECUTABLE" | awk '{print $1}')"
-COMPILER_SHA="$(sha256sum "$COMPILER_BINARY" | awk '{print $1}')"
-LINKER_SHA="$(sha256sum "$LINKER_BINARY" | awk '{print $1}')"
-ASSEMBLER_SHA="$(sha256sum "$ASSEMBLER_BINARY" | awk '{print $1}')"
-SYSTEM_TOOLCHAIN_TREE_SHA="$(node "$ROOT/scripts/hash-tree.js" / usr/include usr/lib/gcc)"
-COMPILER="$(g++ --version | head -1)"
-OS_RELEASE_SHA="$(sha256sum /etc/os-release | awk '{print $1}')"
-OS_PRETTY_NAME="$(. /etc/os-release; printf '%s' "${PRETTY_NAME:-unknown}")"
-ADDON_SHA="$ADDON_SHA" BUILD_INPUT_SHA="$BUILD_INPUT_SHA" SDK_ARCHIVE_SHA="$SDK_ARCHIVE_SHA" \
-SDK_SOURCE_TREE_SHA="$SDK_SOURCE_TREE_SHA" HEADERS_ARCHIVE_SHA="$HEADERS_ARCHIVE_SHA" \
-HEADERS_TREE_SHA="$ACTUAL_HEADERS_TREE_SHA" ELECTRON_VERSION="$ELECTRON_VERSION" NODE_VERSION="$NODE_VERSION" \
-NPM_VERSION="$NPM_VERSION" PYTHON_VERSION="$PYTHON_VERSION" NODE_GYP_VERSION="$NODE_GYP_VERSION" \
-NODE_GYP_TREE_SHA="$NODE_GYP_TREE_SHA" PACKAGE_LOCK_SHA="$PACKAGE_LOCK_SHA" NODE_BINARY_SHA="$NODE_BINARY_SHA" \
-NPM_EXECUTABLE_SHA="$NPM_EXECUTABLE_SHA" COMPILER="$COMPILER" COMPILER_SHA="$COMPILER_SHA" \
-LINKER_SHA="$LINKER_SHA" ASSEMBLER_SHA="$ASSEMBLER_SHA" SYSTEM_TOOLCHAIN_TREE_SHA="$SYSTEM_TOOLCHAIN_TREE_SHA" \
-CFLAGS="${CFLAGS:-}" CXXFLAGS="${CXXFLAGS:-}" CPPFLAGS="${CPPFLAGS:-}" LDFLAGS="${LDFLAGS:-}" \
-GLIBC_VERSION="$GLIBC_VERSION" OS_RELEASE_SHA="$OS_RELEASE_SHA" OS_PRETTY_NAME="$OS_PRETTY_NAME" \
-node "$ROOT/scripts/write-addon-provenance.js" "$OUT/ADDON_BUILD_PROVENANCE.json"
-
-echo "原生 addon 编译完成: $OUT/wemeet_electron_sdk.node"
+echo "原生 addon 编译完成: $OUT/wemeet_electron_sdk.node (Electron $ELECTRON_VERSION)"

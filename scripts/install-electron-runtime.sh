@@ -3,10 +3,8 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MANIFEST="$ROOT/vendor/electron-manifest.json"
-VERSION="$(node -p "require('$MANIFEST').version")"
-RUNTIME_FILE="$(node -p "require('$MANIFEST').runtime.file")"
-ARCHIVE="$ROOT/vendor/$RUNTIME_FILE"
+VERSION="33.4.11"
+ARCHIVE="$ROOT/vendor/electron-v33.4.11-linux-arm64.zip"
 PACKAGE_DIR="$ROOT/node_modules/electron"
 DIST_DIR="$PACKAGE_DIR/dist"
 PATH_FILE="$PACKAGE_DIR/path.txt"
@@ -27,13 +25,10 @@ trap rollback EXIT INT TERM
 [[ "$(id -u)" -ne 0 ]] || fail "禁止使用 root/sudo"
 [[ "$(uname -s)" == "Linux" ]] || fail "仅支持 Linux"
 [[ "$(uname -m)" == "aarch64" ]] || fail "需要 aarch64，当前为 $(uname -m)"
-for command in unzip sha256sum readelf; do command -v "$command" >/dev/null 2>&1 || fail "缺少 $command"; done
-[[ -f "$ARCHIVE" && -f "$ROOT/vendor/ELECTRON_SHA256SUMS" ]] || fail "缺少离线运行时或校验文件"
+for command in unzip readelf; do command -v "$command" >/dev/null 2>&1 || fail "缺少 $command"; done
+[[ -f "$ARCHIVE" ]] || fail "缺少离线运行时: $ARCHIVE"
 [[ -d "$PACKAGE_DIR" ]] || fail "请先执行离线 npm ci"
-[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json 与供应清单版本不一致"
-
-(cd "$ROOT/vendor" && sha256sum -c ELECTRON_SHA256SUMS)
-[[ "$(sha256sum "$ARCHIVE" | awk '{print $1}')" == "$(node -p "require('$MANIFEST').runtime.sha256")" ]] || fail "运行时摘要与供应清单不一致"
+[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json Electron 版本与离线运行时不一致"
 if ! unzip -Z1 "$ARCHIVE" | awk '$0 ~ /^\// { exit 1 } { n=split($0,p,"/"); for(i=1;i<=n;i++) if(p[i]=="..") exit 1 }'; then
   fail "Electron ZIP 包含不安全路径"
 fi

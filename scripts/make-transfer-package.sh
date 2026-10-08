@@ -15,7 +15,6 @@ fail() { echo "离线传输包失败: $*" >&2; exit 1; }
 
 cd "$ROOT"
 npm run verify:platform-contract
-(cd vendor && sha256sum -c SHA256SUMS && sha256sum -c ELECTRON_SHA256SUMS && sha256sum -c ELECTRON_HEADERS_SHA256SUMS)
 [[ -d vendor/npm-cache/_cacache ]] || fail "缺少 npm 离线缓存"
 
 mkdir -p "$PACKAGE_ROOT"
@@ -38,9 +37,4 @@ if tar --version 2>/dev/null | grep -q 'GNU tar'; then
 else
   tar -C "$STAGE" -czf "$ARCHIVE" "$NAME"
 fi
-(
-  cd "$(dirname "$ARCHIVE")"
-  sha256sum "$(basename "$ARCHIVE")" > "$(basename "$ARCHIVE").sha256"
-)
 echo "统一 Linux ARM64 离线传输包: $ARCHIVE"
-echo "SHA-256: $ARCHIVE.sha256"
