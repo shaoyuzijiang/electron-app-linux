@@ -1,0 +1,56 @@
+name: build-linux-deb
+
+# 推送即自动构建 Linux ARM64 DEB 安装包。
+# 一次性前置（见 docs/AUTOPACK_PLAN.md）：把 SDK 归档与 Electron zip
+# 作为 Release 附件上传到 tag `vendor-supplies`。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, feat/unified-linux-arm64]
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 下载离线供应物（SDK 归档 / Electron runtime）
+        run: |
+          mkdir -p vendor
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
+          curl --fail --location --retry 3 \
+            -o vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz \
+            "$base/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
+          curl --fail --location --retry 3 \
+            -o vendor/electron-v33.4.11-linux-arm64.zip \
+            "$base/electron-v33.4.11-linux-arm64.zip"
+
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+
+      - name: 门禁测试
+        run: npm run verify:platform-contract
+
+      - name: 准备 SDK 运行时与预编译 addon
+        run: |
+          mkdir -p sdk-extract
+          tar -xzf vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz -C sdk-extract
+          bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          cp packaging/prebuilt/wemeet_electron_sdk.arm64.node output/linux/wemeet_electron_sdk.node
+
+      - name: 组装 DEB
+        run: WEMEET_CI=1 bash scripts/build-deb.sh
+
+      - name: 校验 DEB
+        run: npm run check -- --deb
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-deb
+          path: dist-demo/*.deb
+          if-no-files-found: error

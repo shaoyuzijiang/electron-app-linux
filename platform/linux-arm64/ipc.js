@@ -113,21 +113,29 @@ function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings,
     trusted(event);
     invalidateAuth();
     stopMeetingPolling();
-    const tokens = tokenStore.getTokens();
     tokenStore.clearTokens();
     showPage('login');
     adapter.cancelSession().catch(() => {});
-    if (tokens && tokens.accessToken) api.logout(tokens.accessToken, tokens.refreshToken).catch(() => {});
     return { success: true };
   });
 
-  // Linux 版不保存账号或密码，避免不同麒麟桌面环境缺少安全密钥环时落到明文存储。
-  // 仍返回正常的 IPC 结果，避免共享登录页的“记住密码”流程阻断登录跳转。
-  ipcMain.handle('accounts-list', (event) => { trusted(event); return { success: true, data: [] }; });
-  ipcMain.handle('accounts-get-password', (event) => { trusted(event); return { success: false, message: 'Linux 版不保存登录密码' }; });
-  ipcMain.handle('accounts-save', (event) => { trusted(event); return { success: true, persisted: false }; });
-  ipcMain.handle('accounts-remove', (event) => { trusted(event); return { success: true }; });
-  ipcMain.handle('accounts-clear', (event) => { trusted(event); return { success: true }; });
+  // 记住密码：复用共享 account-store（safeStorage 加密；密钥环不可用时自动降级为不保存，绝不落明文）
+  // account-store 依赖 Electron app/safeStorage，故在主进程注册时才加载。
+  const accountStore = require('../../utils/account-store');
+  ipcMain.handle('accounts-list', (event) => { trusted(event); return { success: true, data: accountStore.listAccounts() }; });
+  ipcMain.handle('accounts-get-password', (event, { email } = {}) => {
+    trusted(event);
+    if (!email || typeof email !== 'string') return { success: false, message: 'email 必填' };
+    return { success: true, password: accountStore.getPassword(email) };
+  });
+  ipcMain.handle('accounts-save', (event, { email, password, profile } = {}) => {
+    trusted(event);
+    if (!email || !password) return { success: false, message: 'email 和 password 必填' };
+    const ok = accountStore.saveAccount({ email, password, profile });
+    return ok ? { success: true } : { success: false, message: '当前桌面环境不支持安全存储，已跳过记住密码' };
+  });
+  ipcMain.handle('accounts-remove', (event, { email } = {}) => { trusted(event); return { success: accountStore.removeAccount(email) }; });
+  ipcMain.handle('accounts-clear', (event) => { trusted(event); accountStore.clearAccounts(); return { success: true }; });
 
   ipcMain.handle('get-server-url', (event) => { trusted(event); return { success: true, baseUrl: httpClient.getBaseUrl() }; });
   ipcMain.handle('set-server-url', async (event, { url } = {}) => {

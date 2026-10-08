@@ -18,10 +18,10 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 fail() { echo "Demo DEB 构建失败: $*" >&2; exit 1; }
 
-[[ "$(uname -s)" == Linux && "$(uname -m)" == aarch64 ]] || fail "只能在 Linux aarch64 构建"
+[[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
+[[ "$(uname -m)" == aarch64 || -n "${WEMEET_CI:-}" ]] || fail "本机构建需要 aarch64（云端组装请设置 WEMEET_CI=1）"
 for command in unzip dpkg-deb npm node; do command -v "$command" >/dev/null 2>&1 || fail "缺少命令: $command"; done
 [[ -f "$ROOT/vendor/electron-v33.4.11-linux-arm64.zip" ]] || fail "缺少 Electron ARM64 runtime"
-[[ -d "$ROOT/vendor/npm-cache/_cacache" ]] || fail "缺少 npm 离线缓存"
 
 required_sdk=(wemeet_electron_sdk.node libwemeetsdk.so libwemeet_base.so Release)
 for item in "${required_sdk[@]}"; do [[ -e "$SDK_SOURCE/$item" ]] || fail "缺少本次构建产物: output/linux/$item"; done
@@ -41,7 +41,11 @@ done
 rm -rf "$DATA/$APP_HOME/app/renderer/.DS_Store"
 (
   cd "$DATA/$APP_HOME/app"
-  npm ci --omit=dev --ignore-scripts --offline --cache "$ROOT/vendor/npm-cache" --engine-strict=true
+  if [[ -d "$ROOT/vendor/npm-cache/_cacache" ]]; then
+    npm ci --omit=dev --ignore-scripts --offline --cache "$ROOT/vendor/npm-cache" --engine-strict=true
+  else
+    npm ci --omit=dev --ignore-scripts --engine-strict=true
+  fi
 )
 
 mkdir -p "$SDK_TARGET"
