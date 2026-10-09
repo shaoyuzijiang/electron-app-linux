@@ -75,9 +75,11 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           DEB="$(ls dist-demo/*.deb)"
           BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          # 固定资产名：下载页直链永远指向最新版
+          cp "$DEB" dist-demo/wemeet-demo-linux-arm64.deb
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
-          gh release upload latest "$DEB" --clobber
+          gh release upload latest dist-demo/wemeet-demo-linux-arm64.deb --clobber
           gh release edit latest \
             --title "最新安装包（自动构建）" \
             --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i wemeet-demo-linux-arm64.deb"
