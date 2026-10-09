@@ -36,8 +36,16 @@ GitHub Actions 的 ubuntu 云端机器自带 `dpkg-deb`，x64 机器组装 arm64
    `.github/workflows/build-deb.yml`，合并进 main 后，
    push 或手动 Actions → build-linux-deb → Run workflow 即触发。
 
-3. **取包**：Actions 运行完成后，在该次运行页下载
-   `linux-arm64-deb` 产物，即为客户可安装的 `.deb`。
+3. **取包**：main 分支的每次构建会自动把最新 `.deb` 发布到 Release
+   `latest`（固定文件名 `wemeet-demo-linux-arm64.deb`，每次覆盖更新）。
+
+   下载页/客户可直接使用固定直链：
+
+   ```
+   https://github.com/shaoyuzijiang/electron-app-linux/releases/download/latest/wemeet-demo-linux-arm64.deb
+   ```
+
+   历史构建也可在各次 Actions 运行页下载 `linux-arm64-deb` 产物（保留 90 天）。
 
 ## 关于"新开一个仓库"
 

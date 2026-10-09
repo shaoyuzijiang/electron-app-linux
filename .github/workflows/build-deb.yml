@@ -8,6 +8,9 @@ on:
   push:
     branches: [main, feat/unified-linux-arm64]
 
+permissions:
+  contents: write
+
 jobs:
   build-deb:
     runs-on: ubuntu-latest
@@ -60,3 +63,24 @@ jobs:
           name: linux-arm64-deb
           path: dist-demo/*.deb
           if-no-files-found: error
+
+      # main 分支的构建自动发布到 Release `latest`（固定文件名，每次覆盖），
+      # 下载页可始终使用直链：
+      # https://github.com/<owner>/<repo>/releases/download/latest/wemeet-demo-linux-arm64.deb
+      - name: 发布到 Release 页
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          DEB="$(ls dist-demo/*.deb)"
+          BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "最新安装包（自动构建）"
+          gh release upload latest "$DEB" --clobber
+          gh release edit latest \
+            --title "最新安装包（自动构建）" \
+            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64
+
+安装：sudo dpkg -i wemeet-demo-linux-arm64.deb" && \
+          echo "已发布: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/wemeet-demo-linux-arm64.deb"
