@@ -798,6 +798,25 @@ async function syncMeetingToCalendar(data, subject, startSecs, endSecs) {
     }
     if (!info) return;
 
+    // 去重：服务端/SDK 可能已为该会议自动生成日程，避免同一会议出现两条。
+    // 匹配规则：内嵌会议号一致，或同主题且开始时间一致。
+    try {
+      const existing = await window.electronAPI.calendarGetEvents({});
+      const events = (existing && existing.success && Array.isArray(existing.data)) ? existing.data : [];
+      const startTimeStr = calendarLocalTime(startSecs);
+      const meetingId = String(info.meeting_id || '');
+      const duplicated = events.some((ev) => {
+        if (ev.meeting && meetingId && String(ev.meeting.meetingId) === meetingId) return true;
+        return ev.title === subject && ev.startTime === startTimeStr;
+      });
+      if (duplicated) {
+        console.log('[Calendar] 日程中已存在该会议，跳过重复同步');
+        return;
+      }
+    } catch (dedupErr) {
+      console.warn('[Calendar] 查询已有日程失败，继续同步:', dedupErr && dedupErr.message);
+    }
+
     await window.electronAPI.calendarCreateEvent({
       title: subject,
       startTime: calendarLocalTime(startSecs),

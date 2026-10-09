@@ -6,7 +6,7 @@ name: build-linux-deb
 on:
   workflow_dispatch:
   push:
-    branches: [main, feat/unified-linux-arm64]
+    branches: [main]
 
 permissions:
   contents: write
