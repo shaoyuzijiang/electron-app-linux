@@ -31,6 +31,12 @@ jobs:
 
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
+      # 门禁测试只需 electron 包可被 require（返回二进制路径字符串），
+      # 跳过其下载脚本后手动补元数据满足 require 检查
+      - name: 补齐 electron 包元数据
+        run: |
+          printf 'electron' > node_modules/electron/path.txt
+          mkdir -p node_modules/electron/dist
 
       - name: 门禁测试
         run: npm run verify:platform-contract
