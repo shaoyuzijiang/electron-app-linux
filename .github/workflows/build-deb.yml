@@ -80,7 +80,5 @@ jobs:
           gh release upload latest "$DEB" --clobber
           gh release edit latest \
             --title "最新安装包（自动构建）" \
-            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64
-
-安装：sudo dpkg -i wemeet-demo-linux-arm64.deb" && \
+            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i wemeet-demo-linux-arm64.deb"
           echo "已发布: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/wemeet-demo-linux-arm64.deb"
