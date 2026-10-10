@@ -27,6 +27,12 @@ jobs:
           curl --fail --location --retry 3 -o vendor/electron-v33.4.11-linux-arm64.zip "$base/electron-v33.4.11-linux-arm64.zip"
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
+      # 门禁脚本 require('electron') 需要包元数据；--ignore-scripts 跳过了其安装脚本，
+      # 手动补齐（与 build-deb.yml 同款）
+      - name: 补齐 electron 包元数据
+        run: |
+          printf 'electron' > node_modules/electron/path.txt
+          mkdir -p node_modules/electron/dist
       - name: 门禁测试
         run: npm run verify:platform-contract
       - name: 准备 SDK 与预编译 addon
@@ -64,8 +70,8 @@ jobs:
         run: npm ci --include=dev --ignore-scripts
       - name: 编译原生 addon（arm64）
         run: npm run build:native:mac-arm64
-      - name: 打包 DMG（跳过签名）
-        run: SKIP_SIGN=1 npm run dist:mac:arm64
+      - name: 打包 DMG（跳过签名，禁用发布）
+        run: SKIP_SIGN=1 npm run dist:mac:arm64 -- --publish never
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
