@@ -436,11 +436,24 @@ jobs:
 
 | 项 | 结果 |
 |---|---|
-| 上游合并 | `upstream/main`（7bde5ce）→ 演练分支，merge commit b063418 |
+| 上游合并 | `upstream/main`（含 7bde5ce + 3876da7）→ 演练分支 |
 | 版本一致性 | package.json / package-lock.json = 3.45.100；electron 33.4.11 不变 |
 | 供应物 | mac Framework 3.45.100.61（universal，353MB）、win 3.45.100.8 运行时（341MB）覆盖上传 |
-| CI 回归 | run 38036887296 三 job 全绿；dmg 465MB / nsis 347MB / deb 290MB |
 | Release | `latest` 零污染 |
+
+### 9.7 dmg"已损坏"修复与单仓对齐复查（2026-10-10）
+
+1. **dmg 报"已损坏"根因**：SKIP_SIGN=1 完全跳过签名，Apple Silicon 对签名不一致的
+   bundle 直接判损坏（坑 27）。修复：after-pack.js 在 SKIP_SIGN 时执行 ad-hoc 深度签名。
+   实测（run 38040153296 产物）：hdiutil 校验通过、`codesign --verify --deep --strict`
+   通过（Signature=adhoc）、真机启动进程存活。**需重新下载该 run 的 mac-arm64-dmg**；
+   浏览器下载副本首次打开仍需右键打开/系统设置放行（quarantine 无法避免，除非公证）。
+2. **单仓对齐复查**：发现早期提交 cd80642 误删上游 9 个文件
+   （build-all-mac/win.sh、update-mac/win-sdk.sh、symbolicate.sh、releasenotes*.md、
+   PC端…md、app_bak.png），已全部从 upstream/main 恢复。
+   现与上游文件级对齐：**上游独有文件 = 0**；本仓库独有文件全部为 Linux 改造
+   （platform/linux-arm64、native/linux、packaging/deb、common/contracts、
+   workflows、docs、main-darwin-win32.js 等），符合"单仓多端打包 + 平台差异抽离"目标。
 
 ---
 

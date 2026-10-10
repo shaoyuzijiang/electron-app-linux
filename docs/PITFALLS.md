@@ -201,6 +201,23 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 
 ---
 
+### 27. 未签名 DMG 在 Apple Silicon 上报"已损坏，无法打开"
+
+- **症状**：dmg 能挂载、hdiutil verify 通过，但打开 .app 提示"已损坏，无法打开"；
+  右键打开也无效。
+- **原因**：SKIP_SIGN=1 时完全跳过签名。主可执行文件仅剩链接器自动 ad-hoc 签，
+  而 .app 内 Frameworks/Resources 等资源完全无签名，`codesign --verify --deep` 报
+  "code has no resources but signature indicates they must be present"。
+  **Apple Silicon 上 bundle 签名不一致/无签名 = Gatekeeper 直接判损坏**，右键打开无法绕过。
+- **解决**：SKIP_SIGN=1 时不能"什么都不签"，要执行 ad-hoc 深度签名
+  （`codesign --deep --force --sign - <app>`，见 bootstrap/after-pack.js）。
+  ad-hoc 签名后可正常运行；从浏览器下载的副本因 quarantine 仍需
+  右键打开，或在"设置→隐私与安全性"中放行，或 `xattr -cr <app>`。
+- **教训**：签名分三档——无签名（arm64 必死）/ ad-hoc（可跑，免公证提示）/
+  正式证书+公证（无提示分发）。CI 兜底构建至少要做 ad-hoc。
+
+---
+
 ## 五、快速定位索引
 
 | 症状 | 优先查 |
@@ -215,3 +232,4 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 | 切页/退出刷 webview-hide 报错 | 坑 25（能力门禁 + 异步等待） |
 | push 被拒 | 坑 17、21（浅克隆/仓库损坏） |
 | CI 失败 | 坑 18、22、26（electron 元数据 / YAML / 隐式发布） |
+| mac 报"已损坏" | 坑 27（ad-hoc 签名兜底） |
