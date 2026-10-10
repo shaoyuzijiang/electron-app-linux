@@ -7,10 +7,10 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <sstream>
 #include "wemeet_sdk.h"
 #include "wemeet_sdk_def.h"
 #include "json/json.h"
-#include "json/json-forwards.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -31,14 +31,25 @@ static const char *kUninitInfo = "{"
                                  "\"force\": true,"
                                  "}";
 
+// 仅当 msg 是完整的 JSON 对象/数组时，才允许原样内联到回调 JSON 里。
+// 形如 "enableX" is disabled by administrator 的文本，会被当成合法 JSON 字符串 "enableX" 解析成功而忽略尾随内容。若据此原样拼接，
+// msg 自带的引号会破坏整条 JSON，导致渲染侧 JSON.parse 抛错、回调窗口丢消息。
 bool inline JudgeMsgJson(const char *msg) {
   Json::Value root;
   Json::Reader reader;
-  bool parsingSuccessful = reader.parse(msg, root);
-  if (!parsingSuccessful) {
+  if (!reader.parse(msg, root)) {
     return false;
   }
-  return true;
+  return root.isObject() || root.isArray();
+}
+
+// 使用 parseFromStream 函数
+bool ParseJsonStringWithStream(const char* jsonStr, Json::Value& root) {
+  Json::CharReaderBuilder builder;
+  std::string errs;
+  std::stringstream ss(jsonStr);
+
+  return Json::parseFromStream(builder, ss, &root, &errs);
 }
 
 std::map<std::string, std::function<bool(napi_env, napi_value)>> check_napi_type;
@@ -310,7 +321,7 @@ public:
     }
   }
 
-  void EnableCustomOrgInfo(bool enable, bool show) {
+  void EnableCustomOrgInfo(bool enable) {
     if (wemeet_instance_) {
       wemeet_instance_->GetInMeetingService()->EnableCustomOrgInfo(enable);
     }
@@ -414,6 +425,13 @@ public:
     }
   }
 
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+  void GetUserInfo(char *buf, int buf_len) {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetAccountService()->GetUserInfo(buf, buf_len);
+    }
+  }
+// *** Debug Code End, These Code should only exist on dev_release ***
 
   void GetCurrentMeetingInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
@@ -578,6 +596,35 @@ public:
     }
   }
 
+  void DeleteVoicePrint() {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetPreMeetingService()->DeleteVoicePrint(
+          [](int code, const char* msg, void* user_data) {
+        log(__FUNCTION__);
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+            std::string("DeleteVoicePrint"), std::string("PreMeetingService"),
+            code, false, std::string(msg), "");
+      }, nullptr);
+    }
+  }
+
+  void CheckVoicePrintIsCollected() {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetPreMeetingService()->CheckVoicePrintIsCollected(
+          [](int code, const char* msg, const char* is_collected,
+             void* user_data) {
+        log(__FUNCTION__);
+        Json::Value root;
+        root["is_collected"] = is_collected ? is_collected : "";
+        std::string param = Json::FastWriter().write(root);
+        WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
+            std::string("CheckVoicePrintIsCollected"),
+            std::string("PreMeetingService"),
+            code, false, std::string(msg ? msg : ""), param);
+      }, nullptr);
+    }
+  }
+
   void SetLeaveCastRoomActionType(int action_type) {
     if (action_type < kInMeetingLeaveCastRoomDefaultShowDialog || action_type > kInMeetingLeaveCastRoomStayInMeeting) {
       action_type = kInMeetingLeaveCastRoomDefaultShowDialog;
@@ -632,6 +679,12 @@ public:
     void ShowVoiceRecordView() {
     if (wemeet_instance_) {
       wemeet_instance_->GetPreMeetingService()->ShowVoiceRecordView();
+    }
+  }
+
+  void ShowVoicePrintRecordView() {
+    if (wemeet_instance_) {
+      wemeet_instance_->GetPreMeetingService()->ShowVoicePrintRecordView();
     }
   }
 
@@ -693,10 +746,9 @@ public:
       bool is_authorized = wemeet_instance_->GetAccountService()->IsLoggedIn();
       std::string is_authorized_str = is_authorized ? "1" : "0";
       log("IsAuthorized:" + is_authorized_str);
-      std::string param;
-      param.append("{\"IsAuthorized\":\"");
-      param.append(is_authorized_str);
-      param.append("\"}");
+      Json::Value root;
+      root["IsAuthorized"] = is_authorized_str;
+      std::string param = Json::FastWriter().write(root);
       ProcessCallbackMsg(std::string("IsAuthorized"), std::string("AccountService"), is_authorized, false, "", param);
     }
   }
@@ -708,10 +760,9 @@ public:
       is_initialized = wemeet_instance_->IsInitialized();
     }
     log("IsInitialized:" + std::to_string(is_initialized));
-    std::string param;
-    param.append("{\"IsInitialized\":\"");
-    param.append(std::to_string(is_initialized));
-    param.append("\"}");
+    Json::Value root;
+    root["IsInitialized"] = std::to_string(is_initialized);
+    std::string param = Json::FastWriter().write(root);
     ProcessCallbackMsg(std::string("IsInitialized"), std::string("CommonService"), is_initialized, false, "", param);
   }
 
@@ -767,10 +818,9 @@ public:
   }
 
   void OnAddUsersResult(int user_type, int code, const char *msg) override {
-    std::string param;
-    param.append("{\"user_type\":\"");
-    param.append(std::to_string(user_type));
-    param.append("\"}");
+    Json::Value root;
+    root["user_type"] = std::to_string(user_type);
+    std::string param = Json::FastWriter().write(root);
     ProcessCallbackMsg(std::string("OnAddUsersResult"), std::string("CommonService"), code, false, std::string(msg),
                        param);
   }
@@ -785,10 +835,9 @@ public:
   }
 
   void OnLogout(int type, int code, const char *msg) override {
-    std::string param;
-    param.append("{\"type\":\"");
-    param.append(std::to_string(type));
-    param.append("\"}");
+    Json::Value root;
+    root["type"] = std::to_string(type);
+    std::string param = Json::FastWriter().write(root);
     ProcessCallbackMsg(std::string("OnLogout"), std::string("AccountService"), code, false, std::string(msg), param);
   }
 
@@ -822,35 +871,28 @@ public:
   //msg should be normal string, param should be json string
   void
   ProcessCallbackMsg(std::string func, std::string service, int code, bool json, std::string msg, std::string param) {
-    std::string *jsonBody = new std::string();
-    jsonBody->append("{\"func\":\"");
-    jsonBody->append(func);
-    jsonBody->append("\"");
-    jsonBody->append(",");
-    jsonBody->append("\"service\":\"");
-    jsonBody->append(service);
-    jsonBody->append("\"");
-    if (code != 0 || !msg.empty()) {
-      jsonBody->append(",");
-      jsonBody->append("\"code\":\"");
-      jsonBody->append(std::to_string(code));
-      jsonBody->append("\",");
-      if (JudgeMsgJson(msg.c_str())) {
-        jsonBody->append("\"msg\":");
-        jsonBody->append(msg);
-        jsonBody->append("");
+    Json::Value root;
+    root["func"] = func;
+    root["service"] = service;
+    root["code"] = std::to_string(code);
+    if (!msg.empty()) {
+      Json::Value msgJson;
+      if (ParseJsonStringWithStream(msg.c_str(), msgJson)) {
+        root["msg"] = std::move(msgJson);
       } else {
-        jsonBody->append("\"msg\":\"");
-        jsonBody->append(msg);
-        jsonBody->append("\"");
+        root["msg"] = msg;
       }
     }
     if (!param.empty()) {
-      jsonBody->append(",");
-      jsonBody->append("\"param\":");
-      jsonBody->append(param);
+      Json::Value paramJson;
+      if (ParseJsonStringWithStream(param.c_str(), paramJson)) {
+        root["param"] = paramJson;
+      } else {
+        root["param"] = param;
+      }
     }
-    jsonBody->append("}");
+    std::string *jsonBody = new std::string();
+    *jsonBody = Json::FastWriter().write(root);
     log(*jsonBody);
     if (js_cb_) {
       napi_acquire_threadsafe_function(js_cb_);
@@ -867,13 +909,10 @@ private:
 
 
 void QtInMeetingCallback::OnLeaveMeeting(int type, int code, const char *msg, const char *meeting_code) {
-  std::string param;
-  param.append("{\"type\":\"");
-  param.append(std::to_string(type));
-  param.append("\"");
-  param.append(",\"meeting_code\":\"");
-  param.append(meeting_code);
-  param.append("\"}");
+  Json::Value root;
+  root["type"] = std::to_string(type);
+  root["meeting_code"] = meeting_code;
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnLeaveMeeting"), "InMeetingService",
                                                                   code, false, std::string(msg), param);
 }
@@ -889,10 +928,9 @@ void QtInMeetingCallback::OnShowMeetingInfo(const char *meeting_info) {
 }
 
 void QtInMeetingCallback::OnActionResult(int action_type, int code, const char *msg) {
-  std::string param;
-  param.append("{\"action_type\":\"");
-  param.append(std::to_string(action_type));
-  param.append("\"}");
+  Json::Value root;
+  root["action_type"] = std::to_string(action_type);
+  std::string param = Json::FastWriter().write(root);
   if (action_type == 1000) {
     WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnActionResult"), "InMeetingService",
                                                                     code, true, std::string(msg), param);
@@ -903,10 +941,9 @@ void QtInMeetingCallback::OnActionResult(int action_type, int code, const char *
 }
 
 void QtInMeetingCallback::OnCaptionSwitchChanged(bool is_open) {
-  std::string param;
-  param.append("{\"is_open\":\"");
-  param.append(std::to_string(is_open));
-  param.append("\"}");
+  Json::Value root;
+  root["is_open"] = std::to_string(is_open);
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
     std::string("OnCaptionSwitchChanged"), "InMeetingService", 0, false, "", param);
 }
@@ -928,77 +965,70 @@ void QtInMeetingCallback::OnInviteUsers(const char *msg) {
 }
 
 void QtInMeetingCallback::OnAudioStatusChanged(int audio_status) {
-  std::string param;
-  param.append("{\"audio_status\":\"");
-  param.append(std::to_string(audio_status));
-  param.append("\"}");
+  Json::Value root;
+  root["audio_status"] = std::to_string(audio_status);
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnAudioStatusChanged"),
                                                                   "InMeetingService", 0, false, "", param);
 }
 
 void QtInMeetingCallback::OnVideoStatusChanged(int video_status) {
-  std::string param;
-  param.append("{\"video_status\":\"");
-  param.append(std::to_string(video_status));
-  param.append("\"}");
+  Json::Value root;
+  root["video_status"] = std::to_string(video_status);
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnVideoStatusChanged"),
                                                                   "InMeetingService", 0, false, "", param);
 }
 
 void QtPreMeetingCallback::OnJoinMeeting(int code, const char *msg, const char *meeting_code) {
-  std::string param;
-  param.append("{\"meeting_code\":\"");
-  param.append(meeting_code);
-  param.append("\"}");
+  Json::Value root;
+  root["meeting_code"] = meeting_code;
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnJoinMeeting"), "PreMeetingService",
                                                                   code, false, std::string(msg), param);
 }
 
 void QtPreMeetingCallback::OnShowAddressBook(int user_type, const char *json_data) {
-  std::string param;
-  param.append("{\"user_type\":\"");
-  param.append(std::to_string(user_type));
-  param.append("\"}");
+  Json::Value root;
+  root["user_type"] = std::to_string(user_type);
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnShowAddressBook"), "PreMeetingService",
                                                                   0, true, std::string(json_data), param);
 }
 
 void QtPreMeetingCallback::OnRingInvitationEvent(int ring_state, const char *json_data) {
-  std::string param;
-  param.append("{\"ring_state\":\"");
-  param.append(std::to_string(ring_state));
-  param.append("\",");
-  param.append("\"ring_info\":");
-  param.append(json_data);
-  param.append("}");
+  Json::Value root;
+  root["ring_state"] = std::to_string(ring_state);
+  Json::Value jsonData;
+  if (ParseJsonStringWithStream(json_data, jsonData)) {
+    root["ring_info"] = jsonData;
+  } else {
+    root["ring_info"] = json_data;
+  }
+  std::string param = Json::FastWriter().write(root);
   WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(std::string("OnRingInvitationEvent"),
                                                                   "PreMeetingService", 0, false, "", param);
 }
 
 void QtPreMeetingCallback::OnVoiceRecordStatusChange(int voice_record_status, const char* json_data) {
-    std::string param;
-    param.append("{\"voice_record_status\":\"");
-    param.append(std::to_string(voice_record_status));
-    param.append("\",");
-    param.append("\"voice_record_info\":");
-    if (JudgeMsgJson(json_data)) {
-      param.append(json_data);
-      param.append("}");
+    Json::Value root;
+    root["voice_record_status"] = std::to_string(voice_record_status);
+    Json::Value jsonData;
+    if (ParseJsonStringWithStream(json_data, jsonData)) {
+      root["voice_record_info"] = jsonData;
     } else {
-      param.append("\"");
-      param.append(json_data);
-      param.append("\"}");
+      root["voice_record_info"] = json_data;
     }
+    std::string param = Json::FastWriter().write(root);
     WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
       std::string("OnVoiceRecordStatusChange"), "PreMeetingService", 0, false, "", param
     );
 }
 
 void QtPreMeetingCallback::OnActionResult(int action_type, int code, const char *msg) {
-  std::string param;
-  param.append("{\"action_type\":\"");
-  param.append(std::to_string(action_type));
-  param.append("\"}");
+  Json::Value root;
+  root["action_type"] = std::to_string(action_type);
+  std::string param = Json::FastWriter().write(root);
   if (action_type == 10) {
     WemmetElectronWrapper::GetElectronInstance().ProcessCallbackMsg(
         std::string("OnActionResult"), "PreMeetingService", code, true, std::string(msg), param);
@@ -2154,6 +2184,16 @@ napi_value ShowMeetingSettingView(napi_env env, napi_callback_info info) {
   return res;
 }
 
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+napi_value GetUserInfo(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value word;
+  char buf[4096] = {0};
+  WemmetElectronWrapper::GetElectronInstance().GetUserInfo(buf, 4096);
+  napi_create_string_utf8(env, buf, strlen(buf), &word);
+  return word;
+}
+// *** Debug Code End, These Code should only exist on dev_release ***
 
 napi_value GetCurrentMeetingInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
@@ -2463,6 +2503,20 @@ napi_value GetAppearanceMode(napi_env env, napi_callback_info info) {
   napi_create_uint32(env, kTMSDKErrorSuccess, &res);
   return res;
 }
+napi_value DeleteVoicePrint(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value res;
+  WemmetElectronWrapper::GetElectronInstance().DeleteVoicePrint();
+  napi_create_uint32(env, kTMSDKErrorSuccess, &res);
+  return res;
+}
+napi_value CheckVoicePrintIsCollected(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value res;
+  WemmetElectronWrapper::GetElectronInstance().CheckVoicePrintIsCollected();
+  napi_create_uint32(env, kTMSDKErrorSuccess, &res);
+  return res;
+}
 napi_value SetLeaveCastRoomActionType(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_status status;
@@ -2579,6 +2633,14 @@ napi_value ShowVoiceRecordView(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
   napi_value res;
   WemmetElectronWrapper::GetElectronInstance().ShowVoiceRecordView();
+  napi_create_uint32(env, kTMSDKErrorSuccess, &res);
+  return res;
+}
+
+napi_value ShowVoicePrintRecordView(napi_env env, napi_callback_info info) {
+  log(__FUNCTION__);
+  napi_value res;
+  WemmetElectronWrapper::GetElectronInstance().ShowVoicePrintRecordView();
   napi_create_uint32(env, kTMSDKErrorSuccess, &res);
   return res;
 }
@@ -3046,11 +3108,11 @@ napi_value EnableCustomOrgInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
 
   napi_status status;
-  size_t argc = 2;
-  napi_value args[2];
+  size_t argc = 1;
+  napi_value args[1];
   status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-  if (argc < 2) {
+  if (argc < 1) {
     napi_throw_type_error(env, nullptr, "Wrong number of arguments");
     return nullptr;
   }
@@ -3068,20 +3130,7 @@ napi_value EnableCustomOrgInfo(napi_env env, napi_callback_info info) {
     napi_get_value_bool(env, args[0], &enable);
   }
 
-  bool show = false;
-  {
-    napi_valuetype type;
-    status = napi_typeof(env, args[1], &type);
-
-    if (type != napi_boolean) {
-      napi_throw_type_error(env, nullptr, "Wrong arguments, need boolean type");
-      return nullptr;
-    }
-
-    napi_get_value_bool(env, args[1], &show);
-  }
-
-  WemmetElectronWrapper::GetElectronInstance().EnableCustomOrgInfo(enable, show);
+  WemmetElectronWrapper::GetElectronInstance().EnableCustomOrgInfo(enable);
   napi_value res;
   napi_create_uint32(env, kTMSDKErrorSuccess, &res);
   return res;
@@ -3250,6 +3299,10 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("ParseMeetingInfoUrl", ParseMeetingInfoUrl);
   status = napi_define_properties(env, exports, 1, &desc);
+// *** Debug Code Begin, These Code should only exist on dev_release ***
+  desc = DECLARE_NAPI_METHOD("GetUserInfo", GetUserInfo);
+  status = napi_define_properties(env, exports, 1, &desc);
+// *** Debug Code End, These Code should only exist on dev_release ***
 
   desc = DECLARE_NAPI_METHOD("GetCurrentMeetingInfo", GetCurrentMeetingInfo);
   status = napi_define_properties(env, exports, 1, &desc);
@@ -3323,6 +3376,9 @@ napi_value Init(napi_env env, napi_value exports) {
   desc = DECLARE_NAPI_METHOD("ShowVoiceRecordView", ShowVoiceRecordView);
   status = napi_define_properties(env, exports, 1, &desc);
 
+  desc = DECLARE_NAPI_METHOD("ShowVoicePrintRecordView", ShowVoicePrintRecordView);
+  status = napi_define_properties(env, exports, 1, &desc);
+
   desc = DECLARE_NAPI_METHOD("ShowAIAssistantView", ShowAIAssistantView);
   status = napi_define_properties(env, exports, 1, &desc);
 
@@ -3335,6 +3391,10 @@ napi_value Init(napi_env env, napi_value exports) {
   desc = DECLARE_NAPI_METHOD("SetAppearanceMode", SetAppearanceMode);
   status = napi_define_properties(env, exports, 1, &desc);
   desc = DECLARE_NAPI_METHOD("GetAppearanceMode", GetAppearanceMode);
+  status = napi_define_properties(env, exports, 1, &desc);
+  desc = DECLARE_NAPI_METHOD("DeleteVoicePrint", DeleteVoicePrint);
+  status = napi_define_properties(env, exports, 1, &desc);
+  desc = DECLARE_NAPI_METHOD("CheckVoicePrintIsCollected", CheckVoicePrintIsCollected);
   status = napi_define_properties(env, exports, 1, &desc);
   desc = DECLARE_NAPI_METHOD("ShowRoomsControllerView", ShowRoomsControllerView);
   status = napi_define_properties(env, exports, 1, &desc);
