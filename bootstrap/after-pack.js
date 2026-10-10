@@ -94,7 +94,17 @@ module.exports = async function afterPack(context) {
 
   // ---------- 2. 签名（DMG 构建前，确保 DMG 内是已签名 .app） ----------
   if (process.env.SKIP_SIGN === '1') {
-    console.log('[afterPack] SKIP_SIGN=1，跳过签名');
+    // 无正式证书时的兜底：ad-hoc 签名（identity "-"）。
+    // Apple Silicon 上完全无签名的二进制会被 Gatekeeper 直接判定"已损坏"，
+    // ad-hoc 签名后可运行（首次打开仍需右键打开或 xattr -cr 去隔离）。
+    console.log('[afterPack] SKIP_SIGN=1，执行 ad-hoc 签名（无正式证书）');
+    const adhoc = spawnSync('codesign', ['--deep', '--force', '--sign', '-', appPath], {
+      stdio: 'inherit',
+    });
+    if (adhoc.status !== 0) {
+      throw new Error('[afterPack] ad-hoc 签名失败');
+    }
+    console.log('[afterPack] ad-hoc 签名完成（未公证，首次打开需右键打开）');
     return;
   }
 
