@@ -183,32 +183,38 @@ git push
 - 回写本文档，追加"九、演练结果"小节（三 job 结论、产物链接、冒烟结果、坑与对策）
 - 新问题按红线 N17 回写 `docs/PITFALLS.md`（症状→原因→解决）
 
-### T7 版本对齐（延后任务，阶段 4 前置，本轮不执行）
+### T7 版本对齐（✅ 2026-10-10 已完成 CI 回归）
 
-上游 `7bde5ce` 已将 mac/win SDK 升级至 3.45.100。**实测评估结论（2026-10-10）**：
+上游 `7bde5ce`（SDK 3.45.100）实测评估与执行结论：
 
 - 该提交仅改 3 个文件：`package.json`（version 3.43.112→3.45.100）、`package-lock.json`、
-  `wemeet_sdk/wemeet.cpp`（+178/-118）。**不含任何头文件 / Framework / 运行时二进制**
-- `wemeet.cpp` 改动两类：JsonCpp 用法现代化（自包含）；新 SDK API 适配
-- API 兼容性实测：
-  - `EnableCustomOrgInfo(bool)`：3.43 头文件已是单参版本 ✅
-  - `GetUserInfo`（IAccountService，debug 段）：mac 3.43.112.62 头文件已有 ✅，
-    win 3.43.112.5 头文件**缺失** ❌
-  - `DeleteVoicePrint` / `CheckVoicePrintIsCollected` / `ShowVoicePrintRecordView`
-    （IPreMeetingService）：3.43 双端头文件均**缺失** ❌
-- **结论：合并 7bde5ce 后必须用 3.45 SDK 包编译，否则 mac/win addon 编译失败。
-  在拿到 3.45 供应物之前，禁止把 7bde5ce 合入演练分支**（会打红现有绿色 CI）
+  `wemeet_sdk/wemeet.cpp`。**不含任何头文件 / Framework / 运行时二进制**
+- ⚠️ 评估修正：此前发现 `GetUserInfo` 在 win 3.45 头文件缺失的问题，
+  实为 electron-app **本地 `shaoyuzijiang` 开发分支的未推送代码**（debug 段 API），
+  `upstream/main` 提交版 `wemeet.cpp` 并无该引用——合并后无此问题，未打任何补丁
+- `wemeet.cpp` 真实新增 API：`DeleteVoicePrint` / `CheckVoicePrintIsCollected` /
+  `ShowVoicePrintRecordView`（PreMeetingService），3.45 双端头文件均已包含 ✅
+- 已执行：合并 `upstream/main` 入演练分支（package-lock 冲突取本仓库版+同步版本号）；
+  package.json version=3.45.100；3.45 mac Framework（universal 821M）与
+  win 3.45.100.8 运行时重做供应物并 `--clobber` 覆盖上传
+- N15 三同步核对：electron 33.4.11 不变、node-gyp --target 不变、Linux addon/SDK 3.26 不受影响 ✅
+- 回归结果（run 38036887296）：**三 job 全绿**，产物 dmg 465MB / nsis 347MB / deb 290MB，
+  Release `latest` 零污染 ✅
+- 待人工：3.45 产物真机冒烟
 
-待办（依赖 owner 提供材料）：
+遗留提醒（阶段 4 时关注）：electron-app 本地 `shaoyuzijiang` 分支含未推送的
+`GetUserInfo`（debug API，win 3.45 头文件不支持）等改动，owner 后续推送后需再评估。
 
-- [ ] **材料**：mac TMSDK.framework 3.45.100（arm64）+ win SDK 3.45.100 包
-      （include/lib/x64 运行时；SDK 走人工渠道，无公开版本源）
-- [ ] 用 3.45 包重做供应物：`TMSDK.framework.arm64.zip`（--clobber 覆盖）
-      与 `wemeet-sdk-win-x64-runtime.zip`（按 9.4 节同款重排）
-- [ ] 合并上游 main（含 7bde5ce）入演练分支；package.json version 同步 3.45.100
-- [ ] N15 三同步核对：package.json electron 版本、node-gyp --target、预编译 addon
-      （electron 33.4.11 不随 SDK 升级变化，预计无改动；Linux 侧 SDK 3.26 不受影响）
-- [ ] 重跑三端 CI 回归（build-all-platforms 手动触发）
+<details>
+<summary>原始评估记录（已被上方结论修正，留档）</summary>
+
+- `EnableCustomOrgInfo(bool)`：3.43 头文件已是单参版本 ✅
+- `GetUserInfo`（IAccountService，debug 段）：mac 3.43.112.62 头文件已有，
+  win 3.43.112.5 头文件缺失（后确认 upstream/main 无此引用，不构成问题）
+- `DeleteVoicePrint` 等三个 PreMeetingService 接口：3.43 双端均缺失，3.45 双端均包含
+- 结论：合并 7bde5ce 必须配 3.45 SDK 包编译；拿齐材料前禁止合入演练分支
+
+</details>
 
 ### T8 阶段 4 正式操作（owner 放行后，另行排期）
 
@@ -423,9 +429,18 @@ jobs:
 
 ### 9.5 后续（非本轮）
 
-- [ ] 三端产物真机冒烟（download Artifacts 后人工执行）
-- [ ] T7 版本对齐（上游 7bde5ce，SDK 3.45.100）
+- [ ] 三端产物真机冒烟（3.43 与 3.45 两批产物均可用，建议直接用 3.45 批次）
 - [ ] T8 阶段 4 正式 PR（owner 放行后）
+
+### 9.6 T7 版本对齐回归记录（2026-10-10）
+
+| 项 | 结果 |
+|---|---|
+| 上游合并 | `upstream/main`（7bde5ce）→ 演练分支，merge commit b063418 |
+| 版本一致性 | package.json / package-lock.json = 3.45.100；electron 33.4.11 不变 |
+| 供应物 | mac Framework 3.45.100.61（universal，353MB）、win 3.45.100.8 运行时（341MB）覆盖上传 |
+| CI 回归 | run 38036887296 三 job 全绿；dmg 465MB / nsis 347MB / deb 290MB |
+| Release | `latest` 零污染 |
 
 ---
 
