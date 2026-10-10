@@ -83,9 +83,11 @@ jobs:
             gh release create latest --title "最新安装包（自动构建）"
           gh release upload latest "dist-demo/$ASCII_NAME" --clobber
           # 清理旧日期资产，只保留本次
-          gh release view latest --json assets --jq '.assets[].name' | while read -r asset; do
-            if [[ "$asset" != "$ASCII_NAME" ]]; then
-              gh release delete-asset latest "$asset" -y
+          # 清理旧资产一律按 id 操作（资产名可能以 - 开头，按名传参会误当选项）
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" --jq '.assets[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r assetId assetName; do
+            if [[ "$assetName" != "$ASCII_NAME" ]]; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
+              echo "已清理旧资产: $assetName"
             fi
           done
           gh release edit latest \
