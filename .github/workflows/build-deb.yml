@@ -74,6 +74,7 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
+          BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
           DEB="$(ls dist-demo/*.deb)"
           # GitHub 资产名不支持中文/空格，Release 侧用 ASCII 名；
           # 中文命名的原始产物保留在 Actions 产物 linux-arm64-deb 中（供下载页直接上传）
