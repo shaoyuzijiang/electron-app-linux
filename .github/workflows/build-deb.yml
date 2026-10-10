@@ -22,12 +22,14 @@ jobs:
           node-version: '22'
 
       - name: 下载离线供应物（SDK 归档 / Electron runtime）
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p vendor
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
-          curl --fail --location --retry 3 \
-            -o vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz \
-            "$base/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
+          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名称随版本锁定
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
+            -p 'TMSDK_*_arm64_default.publish.tar.gz' -D vendor
           curl --fail --location --retry 3 \
             -o vendor/electron-v33.4.11-linux-arm64.zip \
             "$base/electron-v33.4.11-linux-arm64.zip"

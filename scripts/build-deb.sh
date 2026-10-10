@@ -80,7 +80,7 @@ Depends: libc6 (>= 2.31), libstdc++6, libasound2, libatk-bridge2.0-0, libatk1.0-
 Recommends: xwayland
 Installed-Size: $(du -sk "$DATA" | awk '{print $1}')
 Description: 银河麒麟 ARM64 腾讯会议 SDK Electron Demo
- Demo package using Electron 33.4.11 and Tencent Meeting SDK 3.26.100.14.
+ Demo package using Electron 33.4.11 and Tencent Meeting SDK $(basename "$(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | head -1)" 2>/dev/null | cut -d_ -f3).
  Backend security tests were not run for this demo artifact.
 EOF
 install -m 0755 "$ROOT/packaging/postinst" "$CONTROL/postinst"

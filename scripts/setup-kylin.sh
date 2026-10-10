@@ -3,7 +3,16 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ARCHIVE="$ROOT/vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
+# vendor 下应恰好有一个 Linux SDK 归档；版本号从文件名解析（升级 SDK 只需替换该文件）
+SDK_ARCHIVE_MATCHES=()
+if compgen -G "$ROOT/vendor/TMSDK_*_arm64_default.publish.tar.gz" >/dev/null; then
+  readarray -t SDK_ARCHIVE_MATCHES < <(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz)
+fi
+[[ ${#SDK_ARCHIVE_MATCHES[@]} -eq 1 && -f "${SDK_ARCHIVE_MATCHES[0]}" ]] \
+  || fail "vendor/ 下应恰好有一个 TMSDK_*_arm64_default.publish.tar.gz，当前 ${#SDK_ARCHIVE_MATCHES[@]} 个"
+ARCHIVE="${SDK_ARCHIVE_MATCHES[0]}"
+SDK_ARCHIVE_BASE="$(basename "$ARCHIVE" .tar.gz)"
+SDK_VERSION="$(echo "$SDK_ARCHIVE_BASE" | cut -d_ -f3)"
 BUILD_ONLY=0
 STAGE="启动"
 TRANSACTION_ACTIVE=0
@@ -69,14 +78,14 @@ if ! tar -tzf "$ARCHIVE" | awk -F/ '$1 == "" { exit 1 } { for (i=1; i<=NF; i++) 
   fail "SDK 压缩包包含不安全路径"
 fi
 
-CACHE_ROOT="$ROOT/.sdk-cache/3.26.100.14"
-SDK_DIR="$CACHE_ROOT/TMSDK_0300000000_3.26.100.14_arm64_default.publish"
+CACHE_ROOT="$ROOT/.sdk-cache/$SDK_VERSION"
+SDK_DIR="$CACHE_ROOT/$SDK_ARCHIVE_BASE"
 STAGE="解压 SDK 归档"
 CACHE_STAGE="$ROOT/.sdk-cache/.stage.$$"
 rm -rf "$CACHE_STAGE"
 mkdir -p "$CACHE_STAGE"
 tar --no-same-owner --no-same-permissions -xzf "$ARCHIVE" -C "$CACHE_STAGE"
-[[ -d "$CACHE_STAGE/TMSDK_0300000000_3.26.100.14_arm64_default.publish/SDK" ]] || fail "SDK 目录结构不符合预期"
+[[ -d "$CACHE_STAGE/$SDK_ARCHIVE_BASE/SDK" ]] || fail "SDK 目录结构不符合预期"
 mkdir -p "$ROOT/.sdk-cache"
 rm -rf "$CACHE_ROOT"
 mv "$CACHE_STAGE" "$CACHE_ROOT"

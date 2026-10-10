@@ -30,12 +30,30 @@
 4. `npm run build:native:win-x64` 重编
 5. 注意清理旧版残留 DLL（新旧 Qt 版本混用会冲突）
 
-### Linux（本仓库，供应物 + 一键构建）
+### Linux（本仓库，一键升级脚本）
 
-1. 替换 `vendor/TMSDK_*_arm64_default.publish.tar.gz`（同步更新供应物 Release）
-2. `npm run setup:kylin`（prepare-sdk → build-native 自动完成其余步骤）
-3. 回传 `output/linux/wemeet_electron_sdk.node` 更新 `packaging/prebuilt/`
-4. push → CI 自动出包
+入口：`update-linux-sdk.sh`（对标 update-mac-sdk.sh / update-win-sdk.sh）。
+
+```bash
+./update-linux-sdk.sh <TMSDK_*_arm64_default.publish.tar.gz | 解压目录> [-y] [--dry-run] [--no-rebuild]
+```
+
+脚本自动完成：
+
+1. 校验分发包内部结构（SDK 动态库/include/Electron_Demo json 头）+ 从文件名解析版本
+2. 备份 `vendor/` 旧归档到 `vendor/_backup/`（保留原始文件名，支持 `--rollback`）
+3. 替换 `vendor/TMSDK_*_arm64_default.publish.tar.gz`（vendor 下保证唯一）
+4. 麒麟 V10 上自动执行 `npm run setup:kylin -- --build-only`（环境体检→离线依赖→
+   prepare-sdk→addon 重编→全部门禁），其他环境跳过并给出指引
+5. addon 回传 `output/linux/wemeet_electron_sdk.node` → `packaging/prebuilt/`
+6. 打印下一步清单（同步 validate-linux-adapter.js 版本 mock、上传 vendor-supplies、push）
+
+配套改造（2026-10-10）：`prepare-sdk.sh` / `setup-kylin.sh` / `check.sh` /
+两个 CI yaml 的 SDK 归档名硬编码已全部改为 `TMSDK_*` 通配解析，
+**升级 SDK 版本不再需要改任何脚本或 yaml**。
+
+注意：Linux SDK（3.26 系）与 mac/win SDK（3.43/3.45 系）版本线独立，
+本脚本不修改 package.json 版本号（那是 mac/win SDK 的版本语义）。
 
 ## 二、能否自动跟随 SDK 版本更新？
 

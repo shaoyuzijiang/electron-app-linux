@@ -3,7 +3,12 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK_ROOT="${1:-${WEMEET_SDK_ROOT:-}}"
-SDK_ARCHIVE="$ROOT/vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
+# vendor 下应恰好有一个 Linux SDK 归档（文件名含版本号，升级 SDK 只需替换该文件）
+SDK_ARCHIVE_MATCHES=()
+if compgen -G "$ROOT/vendor/TMSDK_*_arm64_default.publish.tar.gz" >/dev/null; then
+  readarray -t SDK_ARCHIVE_MATCHES < <(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz)
+fi
+SDK_ARCHIVE="${SDK_ARCHIVE_MATCHES[0]:-}"
 OUTPUT="$ROOT/output/linux"
 INCLUDE="$ROOT/native/include"
 OUTPUT_STAGE="$ROOT/output/.linux-stage.$$"
@@ -14,7 +19,8 @@ cleanup() { rm -rf "$OUTPUT_STAGE" "$INCLUDE_STAGE"; }
 trap cleanup EXIT
 
 [[ -n "$SDK_ROOT" ]] || fail "SDK 准备参数缺失，请执行 npm run setup:kylin"
-[[ -f "$SDK_ARCHIVE" ]] || fail "缺少固定 SDK 归档: $SDK_ARCHIVE"
+[[ ${#SDK_ARCHIVE_MATCHES[@]} -eq 1 && -n "$SDK_ARCHIVE" ]] \
+  || fail "vendor/ 下应恰好有一个 TMSDK_*_arm64_default.publish.tar.gz，当前 ${#SDK_ARCHIVE_MATCHES[@]} 个"
 SDK_ROOT="$(cd "$SDK_ROOT" && pwd)"
 SOURCE_SDK="$SDK_ROOT/SDK"
 SOURCE_DEMO="$SDK_ROOT/Electron_Demo"
