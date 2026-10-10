@@ -195,5 +195,8 @@ sudo dpkg -i dist-demo/*.deb
 └── docs/
     ├── AUTOPACK_PLAN.md         # 自动化打包方案管理
     ├── LINUX_TEST_PLAN.md       # 麒麟真机测试计划
-    └── PITFALLS.md              # 踩坑记录（问题 → 原因 → 解决）
+    ├── MERGE_REHEARSAL_PLAN.md  # 合并 electron-app 演练方案（施工图）
+    ├── PLATFORM_MERGE_PROPOSAL.md # mac/win 平台差异评估与合并架构建议
+    ├── SDK_UPGRADE_FLOW.md      # SDK 升级流程与自动化可行性调研
+    └── PITFALLS.md              # 踩坑记录（25 个问题：症状 → 原因 → 解决）
 ```
