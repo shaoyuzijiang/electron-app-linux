@@ -9,17 +9,13 @@
 
 ### 1. 获取安装包
 
-**方式 A：固定直链（推荐，永远是最新版）**
+**方式 A：Release 页下载（推荐）**
 
-```text
-https://github.com/shaoyuzijiang/electron-app-linux/releases/download/latest/wemeet-demo-linux-arm64.deb
-```
+打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases) → 下载 Linux 分类下最新的
+`腾讯会议SDK Demo-<版本>-<日期>-arm64.deb`（命名与 Windows/macOS 下载页对齐，每次构建自动更新）。
 
-**方式 B：Release 页下载**
-
-打开 [Releases](https://github.com/shaoyuzijiang/electron-app-linux/releases) → `最新安装包（自动构建）` → 下载 `wemeet-demo-linux-arm64.deb`。
-
-> 每次代码更新，CI 会自动构建并覆盖这个文件，无需手动挑选版本。
+> 也可以用命令行直接拉最新版：
+> `gh release download latest -R shaoyuzijiang/electron-app-linux`
 
 ### 2. 安装
 
@@ -29,8 +25,8 @@ https://github.com/shaoyuzijiang/electron-app-linux/releases/download/latest/wem
 # 进入 deb 所在目录
 cd ~/Downloads
 
-# 安装（如首次安装提示缺依赖库，先执行：sudo apt-get install -f）
-sudo dpkg -i wemeet-demo-linux-arm64.deb
+# 安装（文件名以实际下载的日期版本为准）
+sudo dpkg -i ./腾讯会议SDK\ Demo-*.deb
 ```
 
 安装脚本会自动完成：
@@ -53,7 +49,7 @@ tencent-meeting-sdk-linux-demo
 
 ```bash
 # 升级：下载新版 deb 后直接覆盖安装，用户数据不受影响
-sudo dpkg -i wemeet-demo-linux-arm64.deb
+sudo dpkg -i ./腾讯会议SDK\ Demo-*.deb
 
 # 卸载应用（保留个人数据）
 sudo dpkg -r tencent-meeting-sdk-linux-demo

@@ -156,7 +156,7 @@ else
 fi
 if [[ -n "$ONLY_DEB" || ( -z "$ONLY_DEB" && -n "${DEB:-}" ) ]]; then
   PACKAGE_NAME="tencent-meeting-sdk-linux-demo"
-  VERSION="$(node -p "require('$ROOT/package.json').version")~demo"
+  VERSION="$(node -p "require('$ROOT/package.json').version")"
   [[ -n "${DEB:-}" && -f "$DEB" ]] || fail_check "找不到 DEB（dist-demo/ 下无产物）"
   if [[ -n "${DEB:-}" && -f "$DEB" ]]; then
     command -v dpkg-deb >/dev/null 2>&1 || fail_check "缺少 dpkg-deb"

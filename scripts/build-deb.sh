@@ -5,9 +5,11 @@ export LC_ALL=C
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_NAME="tencent-meeting-sdk-linux-demo"
 APP_HOME="opt/$PACKAGE_NAME"
-VERSION="$(node -p "require('$ROOT/package.json').version")~demo"
+VERSION="$(node -p "require('$ROOT/package.json').version")"
+BUILD_DATE="$(date +%Y%m%d)"
 OUT_DIR="$ROOT/dist-demo"
-ARTIFACT="$OUT_DIR/${PACKAGE_NAME}_${VERSION}_arm64.deb"
+# 与 Mac/Windows 下载页命名对齐：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
+ARTIFACT="$OUT_DIR/腾讯会议SDK Demo-${VERSION}-${BUILD_DATE}-arm64.deb"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/${PACKAGE_NAME}.XXXXXX")"
 DATA="$WORK"
 CONTROL="$WORK/DEBIAN"

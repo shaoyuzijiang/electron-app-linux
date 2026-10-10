@@ -64,9 +64,9 @@ jobs:
           path: dist-demo/*.deb
           if-no-files-found: error
 
-      # main 分支的构建自动发布到 Release `latest`（固定文件名，每次覆盖），
-      # 下载页可始终使用直链：
-      # https://github.com/<owner>/<repo>/releases/download/latest/wemeet-demo-linux-arm64.deb
+      # main 分支的构建自动发布到 Release `latest`。
+      # 资产命名与 Mac/Windows 下载页对齐：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
+      # 每次发布覆盖式更新：只保留最新一个资产，旧日期的自动清理。
       - name: 发布到 Release 页
         if: github.ref == 'refs/heads/main'
         env:
@@ -74,13 +74,17 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           DEB="$(ls dist-demo/*.deb)"
+          NEW_NAME="$(basename "$DEB")"
           BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          # 固定资产名：下载页直链永远指向最新版
-          cp "$DEB" dist-demo/wemeet-demo-linux-arm64.deb
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
-          gh release upload latest dist-demo/wemeet-demo-linux-arm64.deb --clobber
+          gh release upload latest "$DEB" --clobber
+          gh release view latest --json assets --jq '.assets[].name' | while read -r asset; do
+            if [[ "$asset" != "$NEW_NAME" ]]; then
+              gh release delete-asset latest "$asset" -y
+            fi
+          done
           gh release edit latest \
             --title "最新安装包（自动构建）" \
-            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i wemeet-demo-linux-arm64.deb"
-          echo "已发布: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/wemeet-demo-linux-arm64.deb"
+            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i \"$NEW_NAME\""
+          echo "已发布资产: $NEW_NAME"

@@ -37,12 +37,14 @@ GitHub Actions 的 ubuntu 云端机器自带 `dpkg-deb`，x64 机器组装 arm64
    push 或手动 Actions → build-linux-deb → Run workflow 即触发。
 
 3. **取包**：main 分支的每次构建会自动把最新 `.deb` 发布到 Release
-   `latest`（固定文件名 `wemeet-demo-linux-arm64.deb`，每次覆盖更新）。
+   `latest`，资产命名与 Mac/Windows 下载页对齐：
+   `腾讯会议SDK Demo-<版本>-<构建日期>-arm64.deb`（每次发布自动清理旧日期资产，
+   Release 内始终只有最新一个）。
 
-   下载页/客户可直接使用固定直链：
+   命令行拉取最新版：
 
    ```
-   https://github.com/shaoyuzijiang/electron-app-linux/releases/download/latest/wemeet-demo-linux-arm64.deb
+   gh release download latest -R shaoyuzijiang/electron-app-linux
    ```
 
    历史构建也可在各次 Actions 运行页下载 `linux-arm64-deb` 产物（保留 90 天）。
