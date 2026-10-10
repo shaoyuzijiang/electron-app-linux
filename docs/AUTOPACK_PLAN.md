@@ -37,9 +37,13 @@ GitHub Actions 的 ubuntu 云端机器自带 `dpkg-deb`，x64 机器组装 arm64
    push 或手动 Actions → build-linux-deb → Run workflow 即触发。
 
 3. **取包**：main 分支的每次构建会自动把最新 `.deb` 发布到 Release
-   `latest`，资产命名与 Mac/Windows 下载页对齐：
-   `腾讯会议SDK Demo-<版本>-<构建日期>-arm64.deb`（每次发布自动清理旧日期资产，
-   Release 内始终只有最新一个）。
+   `latest`，命名与 Mac/Windows 下载页同构：
+   `tencent-meeting-sdk-demo-<版本>-<构建日期>-arm64.deb`
+   （每次发布自动清理旧日期资产，Release 内始终只有最新一个）。
+
+   > GitHub 资产名不允许中文/空格（会被强制清洗），因此仓库侧用全 ASCII 名。
+   > 上传到自有下载页时，展示名按 mac/win 规范命名为
+   > 「腾讯会议SDK Demo-<版本>-<日期>-arm64.deb」即可，与截图对齐。
 
    命令行拉取最新版：
 

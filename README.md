@@ -11,8 +11,8 @@
 
 **方式 A：Release 页下载（推荐）**
 
-打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases) → 下载 Linux 分类下最新的
-`腾讯会议SDK Demo-<版本>-<日期>-arm64.deb`（命名与 Windows/macOS 下载页对齐，每次构建自动更新）。
+打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases) → 下载最新构建的
+`tencent-meeting-sdk-demo-<版本>-<日期>-arm64.deb`（命名节奏与 Windows/macOS 下载页一致：名称-版本-日期-架构）。
 
 > 也可以用命令行直接拉最新版：
 > `gh release download latest -R shaoyuzijiang/electron-app-linux`
@@ -26,7 +26,7 @@
 cd ~/Downloads
 
 # 安装（文件名以实际下载的日期版本为准）
-sudo dpkg -i ./腾讯会议SDK\ Demo-*.deb
+sudo dpkg -i tencent-meeting-sdk-demo-*.deb
 ```
 
 安装脚本会自动完成：
@@ -49,7 +49,7 @@ tencent-meeting-sdk-linux-demo
 
 ```bash
 # 升级：下载新版 deb 后直接覆盖安装，用户数据不受影响
-sudo dpkg -i ./腾讯会议SDK\ Demo-*.deb
+sudo dpkg -i tencent-meeting-sdk-demo-*.deb
 
 # 卸载应用（保留个人数据）
 sudo dpkg -r tencent-meeting-sdk-linux-demo

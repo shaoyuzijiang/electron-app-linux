@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: error
 
       # main 分支的构建自动发布到 Release `latest`。
-      # 资产命名与 Mac/Windows 下载页对齐：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
+      # 资产命名与 Mac/Windows 下载页对齐（<名称>-<版本>-<日期>-arm64.deb），
       # 每次发布覆盖式更新：只保留最新一个资产，旧日期的自动清理。
       - name: 发布到 Release 页
         if: github.ref == 'refs/heads/main'
@@ -76,21 +76,13 @@ jobs:
           DEB="$(ls dist-demo/*.deb)"
           NEW_NAME="$(basename "$DEB")"
           BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          REPO_API="repos/${GITHUB_REPOSITORY}"
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
-          # 含空格/中文的文件名经 gh release upload 会被改名，导致后续清理误删；
-          # 故先用 ASCII 临时名上传，再通过 API 精确改名为目标名。
-          cp "$DEB" dist-demo/upload-tmp.deb
-          gh release upload latest dist-demo/upload-tmp.deb --clobber
-          RELEASE_ID="$(gh api "$REPO_API/releases/tags/latest" --jq '.id')"
-          ASSET_ID="$(gh api "$REPO_API/releases/$RELEASE_ID/assets" --jq '.[] | select(.name=="upload-tmp.deb") | .id')"
-          gh api -X PATCH "$REPO_API/releases/assets/$ASSET_ID" -f name="$NEW_NAME" >/dev/null
+          gh release upload latest "$DEB" --clobber
           # 清理旧日期资产，只保留本次
-          gh api "$REPO_API/releases/$RELEASE_ID/assets" --jq '.assets[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r assetId assetName; do
-            if [[ "$assetName" != "$NEW_NAME" ]]; then
-              gh api -X DELETE "$REPO_API/releases/assets/$assetId" >/dev/null
-              echo "已清理旧资产: $assetName"
+          gh release view latest --json assets --jq '.assets[].name' | while read -r asset; do
+            if [[ "$asset" != "$NEW_NAME" ]]; then
+              gh release delete-asset latest "$asset" -y
             fi
           done
           gh release edit latest \
