@@ -1,16 +1,13 @@
-# 合并 electron-app 演练方案（施工图 · 可独立执行版）
+# 合并 electron-app 演练方案（施工图 · 可独立执行版 v2）
 
 > **执行者须知**：本文档面向"没有参与过前期开发"的执行者（人或 AI），
 > 所有命令、YAML、路径均可直接复制执行。仓库为 shaoyuzijiang/electron-app-linux，
-> 工作分支 main（当前已包含全部 Linux 功能与 CI）。执行期间**不接触、不修改
-> electron-app 仓库**——那是最后阶段（阶段 4）才做的事，且需 owner 放行。
+> 工作分支 main。执行期间**不接触、不修改 electron-app 仓库**——
+> 那是最后阶段（阶段 4）才做的事，且需 owner 放行。
 >
-> 提交身份统一使用：`git -c user.name='shaoyuzijiang' -c user.email='shaoyuzijiang@users.noreply.github.com'`
-> （或本机已配置的身份）。
+> 遇到报错先查 `docs/PITFALLS.md`（25 个已踩坑）与本文件"注意事项汇总"。
 
----
-
-## 〇、项目背景速览（30 秒版）
+## 〇、项目背景速览
 
 | 项 | 内容 |
 |---|---|
@@ -26,7 +23,7 @@
 | 路径 | 职责 |
 |---|---|
 | main.js | 平台分派入口（8 行）：linux-arm64 → platform 主进程；否则 → main-darwin-win32 |
-| main-darwin-win32.js | mac/win 主进程：窗口、scheme 唤起（open-url / 单实例锁）、IPC、SDK 生命周期注入 |
+| main-darwin-win32.js | mac/win 主进程：窗口、scheme 唤起（open-url / 单实例锁）、IPC、SDK 生命周期 |
 | ipc-handlers.js | 约 100 个 ipcMain.handle 通道，桥接渲染进程与 backend_api、wemeet_sdk |
 | bootstrap/preload.js | contextBridge 暴露 132 个通道（渲染层唯一入口） |
 | backend_api/ | 通用 HTTP（RSA+AES）、auth 登录、api.js re-export im/meeting/calendar |
@@ -39,14 +36,12 @@
 | packaging/ | DEB 资源 + 预编译 addon + 图形环境脚本 |
 | scripts/ | 构建/检测/打包脚本（check.sh 为统一检测入口） |
 
-### main.js 结构结论（已评审）
+### main.js 结构结论（已评审，不要改动）
 
 - mac/win 之间的"参数级"差异（如 scheme 的 open-url vs 单实例锁）：
-  **同文件内 if 分支**，保留在 main-darwin-win32.js（326-363 行），不需要抽文件。
+  同文件内 if 分支，保留在 main-darwin-win32.js（326-363 行），不需要抽文件。
 - Linux 属"架构级"差异（安全隔离 adapter 模型）：必须文件级分派，
-  即当前 8 行 main.js。**维持现状，不改。**
-
----
+  即当前 8 行 main.js。维持现状。
 
 ## 一、供应物准备（阶段 0）
 
@@ -62,11 +57,23 @@
 
 ### 1.2 需补充的资产
 
-| 资产名（建议） | 来源（本机实测路径） | 体积 | 用途 |
-|---|---|---|---|
-| `TMSDK.framework.arm64.zip` | `/Users/yangzijian/SDKDev/electron-app/wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework`（408MB，实测存在） | 压缩后待测 | mac CI：编译期 Headers + 打包期 Framework |
-| `TMSDK.framework.x86_64.zip`（可选） | mac SDK 分发包 `TMSDK_MacOS_3.43.112.62_*.zip` 内（`SDK包/` 目录已确认存在该分发包） | 待测 | mac x64 构建备用 |
-| `wemeet-sdk-win-x64-runtime.zip` | **本机未定位到**（electron-app 工作目录的 wemeet_sdk/win 仅 36K 源码/脚本，DLL 不在其中）。需从 Windows SDK 分发包或 win 打包机收集：`wemeetsdk_x64.dll`、`wemeet_base.dll`、`Release/` 全套、`wemeetsdk_x64.lib`、`include/*.h` | 待测 | win CI：编译（.lib/include）+ 运行（DLL/Release） |
+| 资产名（建议） | 来源（本机实测路径） | 用途 |
+|---|---|---|
+| `TMSDK.framework.arm64.zip` | `/Users/yangzijian/SDKDev/electron-app/wemeet_sdk/mac/Frameworks/arm64/TMSDK.framework`（408MB，实测存在） | mac CI：编译期 Headers + 打包期 Framework |
+| `TMSDK.framework.x86_64.zip`（可选） | mac SDK 分发包 `TMSDK_MacOS_3.43.112.62_*.zip` 内（`SDK包/` 目录已确认存在） | mac x64 构建备用 |
+| `wemeet-sdk-win-x64-runtime.zip` | **本机未定位到**（electron-app 工作目录的 wemeet_sdk/win 仅 36K 源码/脚本，DLL 不在其中）。需从 Windows SDK 分发包或 win 打包机收集 | win CI：编译 + 运行 |
+
+**win runtime zip 的内部结构要求**（解压后必须与仓库路径吻合）：
+
+```
+wemeet_sdk/win/
+├── include/            # SDK C++ 头文件（编译需要）
+├── lib/x64/release/wemeetsdk_x64.lib   # 链接库（编译需要）
+└── x64/                # 运行时（打包需要）
+    ├── wemeet_electron_sdk.node
+    ├── wemeetsdk_x64.dll、wemeet_base.dll 等
+    └── Release/        # SDK 业务 DLL、modules、plugins、resources
+```
 
 **打包与上传命令**（mac Framework 为例）：
 
@@ -77,7 +84,7 @@ gh release upload vendor-supplies /tmp/TMSDK.framework.arm64.zip --clobber \
   -R shaoyuzijiang/electron-app-linux
 ```
 
-**找不到 win 运行时时的降级**：win job 先只做"addon 编译验证"
+**降级方案**：win 运行时暂缺时，win job 先只做"addon 编译验证"
 （node-gyp 成功即证明 ABI/工具链 OK），nsis 完整打包等运行时到位后启用。
 
 ### 1.3 供应物红线
@@ -100,7 +107,7 @@ git push -u origin rehearse/electron-app-merge
 ```
 
 该分支 = main 的完整拷贝。所有演练改动在此分支进行；
-`build-all.yml` 的触发条件包含此分支（见下文 YAML）。
+build-all.yml 的触发条件包含此分支（见下文 YAML）。
 
 ---
 
@@ -113,7 +120,7 @@ git push -u origin rehearse/electron-app-merge
 - linux job：main 分支由现有 build-linux-deb.yml 负责正式构建+发布；
   演练分支/手动触发时由本 workflow 兜底构建（不发布）。
 - mac job：runner（macos-14，arm64）现场用 node-gyp 编译 addon
-  （mac 无 glibc 基线问题，可编译），electron-builder 打 dmg，SKIP_SIGN=1 跳过签名。
+  （mac 无 glibc 基线问题），electron-builder 打 dmg，SKIP_SIGN=1 跳过签名。
 - win job：runner（windows-2022，自带 VS2022 + Python）编译 addon，
   electron-builder 打 nsis（无签名配置，天然可构建）。
 - 演练阶段产物全部挂 Actions Artifacts，不碰 Release。
@@ -177,9 +184,10 @@ jobs:
           node-version: '22'
       - name: 下载 mac Framework 供应物
         run: |
-          mkdir -p wemeet_sdk/mac/Frameworks/arm64
+          mkdir -p wemeet_sdk/mac/Frameworks/arm64 wemeet_sdk/mac/Frameworks/x86_64
           curl --fail --location --retry 3 -o /tmp/TMSDK.framework.arm64.zip "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/TMSDK.framework.arm64.zip"
           ditto -x -k /tmp/TMSDK.framework.arm64.zip wemeet_sdk/mac/Frameworks/arm64/
+          ln -s ../arm64/TMSDK.framework wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       - name: 编译原生 addon（arm64）
@@ -202,11 +210,11 @@ jobs:
         with:
           node-version: '22'
       - name: 下载 win SDK 运行时供应物
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p wemeet_sdk/win
-          curl --fail --location --retry 3 -o wemeet-sdk-win-x64-runtime.zip "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/wemeet-sdk-win-x64-runtime.zip"
-          unzip -q wemeet-sdk-win-x64-runtime.zip -d wemeet_sdk/win/
+          New-Item -ItemType Directory -Force -Path wemeet_sdk\win | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/wemeet-sdk-win-x64-runtime.zip" -OutFile win-runtime.zip
+          Expand-Archive -Path win-runtime.zip -DestinationPath wemeet_sdk\win -Force
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       - name: 编译原生 addon（x64）
@@ -221,18 +229,20 @@ jobs:
           if-no-files-found: error
 ```
 
-执行时易踩的坑：
+### 本 workflow 专属注意点（执行时易踩）
 
 1. mac/win 的 npm ci --ignore-scripts 不写 electron 包的 path.txt，
    若任何步骤 require('electron') 报 "Electron failed to install correctly"，
    参照 build-linux-deb.yml 的"补齐 electron 包元数据"步骤
    （printf 'electron' > path.txt 并 mkdir dist）。
    electron-builder 打包会自行下载对应平台 Electron，不受影响。
-2. win job 的 unzip 需要 bash 环境（shell: bash 已指定）。
-3. 若 win 运行时供应物暂缺，win job 先整体注释或加 if: false，
-   仅跑 mac + linux 演练。
-4. mac job 的 build:native:mac-arm64 会从 electronjs.org 下载
-   33.4.11 headers，runner 外网可达，无需额外配置。
+2. win job 解压用 PowerShell 的 Expand-Archive（Git Bash 无 unzip 命令）。
+3. mac job 编译期 include_dirs 固定指向 x86_64 Framework 路径（头文件与架构无关），
+   因此必须创建 x86_64 软链接指向 arm64 Framework（YAML 已含该步骤）。
+4. mac job 的 build:native:mac-arm64 会从 electronjs.org 下载 33.4.11 headers，
+   runner 外网可达，无需额外配置。
+5. 若 win 运行时供应物暂缺，win job 先整体注释或加 if: false，
+   仅跑 mac + linux 演练（降级方案见 1.2）。
 
 ---
 
@@ -247,9 +257,7 @@ jobs:
 | win-nsis job | 绿 + win-x64-nsis 产物存在；exe 安装后登录/入会冒烟 |
 | 无回归 | Release latest 未被演练构建覆盖（发布步骤只在 main 生效） |
 
-失败排查优先查 docs/PITFALLS.md 对应条目（CI 类坑 18/22，环境类坑 1-5）。
-
----
+失败排查优先查 docs/PITFALLS.md 对应条目（CI 类坑 18/22/25，环境类坑 1-5）。
 
 ## 五、回退机制
 
@@ -259,8 +267,6 @@ jobs:
 | 演练通过但决定暂缓 | 分支保留不动 | 零影响 |
 | electron-app PR 阶段出问题 | 关 PR / 删远端分支 | 上游 main 未动 |
 | PR 已合并后发现回归 | revert 合并提交 | 仅回退相关提交 |
-
----
 
 ## 六、阶段 4：正式操作 electron-app（owner 放行后）
 
@@ -279,8 +285,6 @@ jobs:
 3. PR CI 三端全绿 → owner merge
 4. 合并后：vendor-supplies 供应物迁移到 electron-app 的 Release
    （build-all.yml / build-linux-deb.yml 一并合入，自动接管打包）
-
----
 
 ## 七、附加交付一：平台差异评估（任务 3）
 
@@ -302,7 +306,42 @@ jobs:
 - SDK 包走人工渠道、无公开版本源 → 全自动跟随不可行，
   "拿到包之后"已全部脚本化；含版本一致性红线清单
 
----
+## 九、注意事项汇总（跨阶段 · 全量）
+
+### 仓库与安全红线
+
+- N1 全程普通用户操作（麒麟侧），禁止 sudo npm、禁止 --no-sandbox
+- N2 vendor-supplies 与 latest 两个 Release 职责分离，互不覆盖
+- N3 凭据/Token/密钥类文件绝不入库、绝不进产物（CI 与打包脚本均有检查）
+- N4 不调用 ldd 探测 SDK 私有库（触发麒麟安全弹窗），用 readelf 静态解析
+
+### 构建与环境
+
+- N5 Linux addon 必须在 glibc 2.31 基线（麒麟）编译；日常用预编译产物，CI 只组装
+- N6 Electron 三端精确锁定 33.4.11，node-gyp --target 必须一致
+- N7 kysec 可能拦截 python3 -c，build-native.sh 已内置 wrapper 自动切换
+- N8 mac 编译期 include_dirs 固定走 x86_64 头文件路径（头文件与架构无关），
+  arm64 构建也要保证该路径存在
+
+### CI 与发布
+
+- N9 npm ci --ignore-scripts 不写 electron 包元数据，CI 需手动补
+  （path.txt + dist/），否则任何 require('electron') 会抛错
+- N10 Actions Artifacts 自动压缩成 zip；对外分发一律用 Release 资产
+- N11 GitHub 资产名禁止中文/空格（强制清洗：中文删除、空格变点）
+- N12 资产名以 - 开头时，gh release delete-asset 按名删除会误判为选项，
+  一律按资产 id 删除（workflow 已按此实现）
+- N13 工作流 YAML 的 run 块内续行必须缩进，改完先本地
+  python3 -c "import yaml; yaml.safe_load(open('.github/workflows/xxx.yml'))" 验证
+- N14 预定会议走服务端一体化创建（createMeeting: true），禁止恢复
+  前端二次日程同步（validate-linux-parity 已加反向防护）
+
+### 文档与版本
+
+- N15 版本一致性红线：package.json electron 版本、node-gyp --target、
+  预编译 addon 三者必须同步更新（见 docs/SDK_UPGRADE_FLOW.md）
+- N16 传输包（401MB）是构建工具箱、DEB（~277MB）是客户安装包，勿混用
+- N17 新问题必须回写 docs/PITFALLS.md（症状→原因→解决），保持文档自愈
 
 ## 附：完成定义（DoD）
 
