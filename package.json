@@ -1,7 +1,7 @@
 {
   "name": "tencent-meeting-sdk-demo",
   "productName": "腾讯会议SDK Demo",
-  "version": "3.43.112",
+  "version": "3.45.100",
   "description": "腾讯会议SDK Demo",
   "main": "main.js",
   "scripts": {
