@@ -185,6 +185,22 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 
 ---
 
+### 26. electron-builder 在 CI 里 DMG 打完却报 `GitHub Personal Access Token is not set`
+
+- **症状**：mac job 中 DMG 与 blockmap 已构建成功，最后一步报
+  `⨯ GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"`。
+- **原因**：electron-builder 检测到 CI 环境会启用"隐式发布"（Implicit publishing）。
+  package.json 的 win 段配了 `"publish": null`，mac 段没有，
+  于是 mac 走隐式发布流程并因无 GH_TOKEN 而失败。
+- **解决**：演练构建本就不发布，打包命令追加 `--publish never`
+  （`SKIP_SIGN=1 npm run dist:mac:arm64 -- --publish never`；
+  bootstrap/build.js 会透传参数给 electron-builder）。
+  或在 package.json mac 段同样配置 `"publish": null`。
+- **教训**：CI 里 electron-builder 的产物构建成功 ≠ job 成功，
+  发布语义必须显式声明（never / 环境注入 token），不能依赖默认值。
+
+---
+
 ## 五、快速定位索引
 
 | 症状 | 优先查 |
@@ -198,4 +214,4 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 | 日程出现重复条目 | 坑 13（服务端一体化创建） |
 | 切页/退出刷 webview-hide 报错 | 坑 25（能力门禁 + 异步等待） |
 | push 被拒 | 坑 17、21（浅克隆/仓库损坏） |
-| CI 失败 | 坑 18、22（electron 元数据 / YAML） |
+| CI 失败 | 坑 18、22、26（electron 元数据 / YAML / 隐式发布） |

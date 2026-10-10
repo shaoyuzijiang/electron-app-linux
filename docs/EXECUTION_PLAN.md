@@ -361,20 +361,61 @@ jobs:
 
 ---
 
-## 九、演练结果（待 T6 回写）
+## 九、演练结果（2026-10-10 回写）
 
-- [ ] linux-deb：
-- [ ] mac-dmg：
-- [ ] win-nsis：
-- [ ] 真机冒烟：
-- [ ] 新增坑位回写 PITFALLS：
+**演练分支** `rehearse/electron-app-merge`，**构建 run** 38034503379（workflow_dispatch 前共 3 轮，详见下）。
+
+### 9.1 执行记录
+
+| 任务 | 结果 |
+|---|---|
+| T1 演练分支 | ✅ 已推送（基于 main @ eb1b8b6，即分叉点一侧，未 rebase 上游 7bde5ce） |
+| T2 build-all.yml | ✅ 已落地并推送（commit bfae4ed + 修复 9f4ac3c） |
+| T3 供应物 | ✅ 4 项齐备：Linux SDK 归档、Electron zip（原有）+ TMSDK.framework.arm64.zip（198MB）+ wemeet-sdk-win-x64-runtime.zip（333MB，由 `TMSDK_Windows_3.43.112.5_20260910` 重排打包） |
+| T4 触发构建 | ✅ 3 轮迭代后三 job 全绿 |
+| T5 验收 | ✅ CI 侧全过；真机冒烟待人工（见 9.3） |
+
+### 9.2 构建迭代与坑
+
+- 第 1 轮（push 触发）：供应物未上传，mac/win 预期性失败
+- 第 2 轮（run 38034147145）：
+  - linux-deb ❌ 坑 18（electron 元数据）→ 补齐 path.txt 步骤（照抄 build-deb.yml）
+  - mac-dmg ❌ **新坑 26**：DMG 构建成功后 electron-builder 隐式发布要求 GH_TOKEN
+    → 打包命令追加 `--publish never`
+  - win-nsis ✅（win 段 package.json 已有 `publish: null`）
+- 第 3 轮（run 38034503379）：**三 job 全绿**
+
+### 9.3 验收核对
+
+| 检查项 | 结果 |
+|---|---|
+| linux-deb job | ✅ 绿 + 产物 290MB（dpkg 装卸与麒麟冒烟待真机） |
+| mac-dmg job | ✅ 绿 + 产物 302MB（未签名右键打开 + 冒烟待真机） |
+| win-nsis job | ✅ 绿 + 产物 342MB（安装冒烟待真机） |
+| 无回归 | ✅ Release `latest` 仅含 main 构建的 DEB，演练零污染 |
+| 门禁 | ✅ verify:platform-contract（21 项能力契约）通过 |
+
+### 9.4 win 供应物重排说明
+
+`TMSDK_Windows_3.43.112.5` 包内为 `SDK/x64/{include,*.lib,*.dll,Release/}`，
+重排为仓库吻合结构后打包（zip 根 = include/ lib/ x64/，与 workflow 的
+`Expand-Archive -DestinationPath wemeet_sdk\win` 对齐）：
+`include/` ← SDK/x64/include；`lib/x64/release/wemeetsdk_x64.lib` ← SDK/x64/wemeetsdk_x64.lib；
+`x64/` ← SDK/x64 其余运行时（剔除 include、.lib、demo exe、bat）。
+头文件与上游仓库逐字节一致（仅换行符差异），编译兼容性已确认。
+
+### 9.5 后续（非本轮）
+
+- [ ] 三端产物真机冒烟（download Artifacts 后人工执行）
+- [ ] T7 版本对齐（上游 7bde5ce，SDK 3.45.100）
+- [ ] T8 阶段 4 正式 PR（owner 放行后）
 
 ---
 
 ## 附：完成定义（DoD，本轮范围）
 
-- [ ] rehearse 分支推送，build-all.yml 三 job 可触发（T1-T2）
-- [ ] 供应物按第三节就位（T3，代码完成后统一处理）
-- [ ] linux / mac / win 产物齐备且真机冒烟通过（T4-T5，win 可降级）
-- [ ] 演练结论回写本文档第九节 + PITFALLS（T6）
+- [x] rehearse 分支推送，build-all.yml 三 job 可触发（T1-T2）
+- [x] 供应物按第三节就位（T3，4 项齐备）
+- [x] linux / mac / win 产物齐备（T4-T5，win 完整出包无需降级）；真机冒烟待人工
+- [x] 演练结论回写本文档第九节 + PITFALLS 坑 26（T6）
 - [ ] T7/T8 为延后项，不在本轮 DoD 内
