@@ -87,11 +87,25 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 - **原因**：SDK 3.26 的 `JoinMeeting` 参数顺序为 `[会议号, 显示名, 密码, 邀请链接, mic_on, camera_on, speaker_on, ...]`，camera_on 是显式参数（下标 5），不传时由 SDK 设置页决定，预期不符。
 - **解决**：adapter 显式传 `camera_on=true` 默认开视频，前端可传 `cameraOn=false` 覆盖。有单元测试钉住参数下标。
 
-### 13. 预定会议在日程中出现两条（一条会议、一条日程）
+### 13. 预定会议在日程中出现两条（一条"日程"、一条"会议"）
 
-- **原因**：前端预定成功后会把会议同步成日程；同时服务端/SDK 侧也可能为该会议自动生成日程 → 叠加两条。
-- **解决**：同步前先拉取日历查重（内嵌会议号一致，或同主题且开始时间一致），已存在则跳过创建。见 `renderer/js/meeting.js` 的 `syncMeetingToCalendar`。
-- **注意**：修复只防新数据，历史双条需在日程页手动删除。
+- **复现**：Linux 预定会议（自定义表单）→ 日程页同一天出现两条同题同时段条目：
+  一条纯日程（无会议标签，服务端在会议创建后**异步**自动生成），
+  一条带会议标签（前端同步创建、内嵌会议号）。mac 端无此问题——
+  mac 日历弹窗走 `createMeeting: true` 服务端一体化创建，只产一条。
+- **踩过的弯路**：先实现"同步前查重跳过"，未防住——查重查询跑在服务端
+  自动日程生成**之前**（时序竞争），必然漏判。
+- **最终解决**：删除前端二次同步，Linux 预定表单改走与 mac 相同的
+  服务端一体化路径 `calendarCreateEvent({ ..., createMeeting: true })`，
+  会议与日程由服务端同时创建并关联，天然单条。
+  见 `renderer/js/meeting.js` 预定分支；门禁已加反向防护
+  （validate-linux-parity 禁止恢复前端二次同步）。
+- **注意**：该路径暂不支持自定义会议密码/入会静音；历史双条需手动删除。
+
+### 13.1 附加坑：编辑日程接口不支持变更会议信息
+
+后端 `PUT /api/calendar/events/:id` 仅支持 title/description/startTime/endTime/location，
+会议关联由创建时的 createMeeting 决定，"更新注入会议"方案不可行。
 
 ### 14. IPC 通道缺失：`No handler registered for 'xxx'`
 
@@ -156,6 +170,21 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 
 ---
 
+### 25. 退出/切页刷 `No handler registered for 'webview-hide'`
+
+- **症状**：切页签或退出登录时终端连续刷该报错。
+- **原因**：共享渲染层 `webview.js` 在 tab-switched 事件里无条件调用
+  `webview-hide` 通道（mac/win 用于隐藏 WebContentsView），
+  Linux 无此通道也没有内嵌 webview。
+- **解决**：`webview.js` IIFE 开头按能力契约门禁
+  （`feature.webView !== true` 直接 return）。注意能力值要**异步等待**
+  （`getSdkCapabilities`），直接读 `window.PlatformCapabilities` 会因
+  nav.js 异步赋值而产生加载时序竞争，可能让 mac/win 误退出。
+- **教训**：共享渲染层调用 Mac 专属通道的"允许清单"只管注册侧，
+  **调用侧**也可能在能力关闭的平台上被无条件触发，两端都要防。
+
+---
+
 ## 五、快速定位索引
 
 | 症状 | 优先查 |
@@ -166,6 +195,7 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 | 编译报 Python 错误 | 坑 2（kysec） |
 | 启动报 Cannot find module | 坑 5（离线依赖） |
 | 点某功能报 No handler | 坑 14（通道对齐） |
-| 日程出现重复条目 | 坑 13（同步去重） |
+| 日程出现重复条目 | 坑 13（服务端一体化创建） |
+| 切页/退出刷 webview-hide 报错 | 坑 25（能力门禁 + 异步等待） |
 | push 被拒 | 坑 17、21（浅克隆/仓库损坏） |
 | CI 失败 | 坑 18、22（electron 元数据 / YAML） |

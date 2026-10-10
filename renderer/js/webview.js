@@ -4,7 +4,7 @@
 // 支持多 webview：每个企业动态页签对应一个独立的 WebContentsView（按 tabId 区分）。
 // 当 webviewPage 显示时，根据 data-active-tab 决定激活哪个 webview。
 
-(function () {
+(async function () {
   const webviewPage = document.getElementById('webviewPage');
   const webviewContainer = document.getElementById('webviewContainer');
   const urlInput = document.getElementById('webviewUrlInput');
@@ -16,6 +16,19 @@
   const placeholder = document.getElementById('webviewPlaceholder');
 
   if (!webviewPage || !window.electronAPI || !window.electronAPI.webviewCreate) {
+    return;
+  }
+
+  // 平台能力门禁：不支持内嵌 WebView 的平台（如 Linux）直接退出，
+  // 避免切页/退出时调用 webview-hide 等通道刷 "No handler registered" 报错。
+  // 能力值异步等待（与 nav.js 同源），不依赖加载顺序。
+  let platformCapabilities = null;
+  try {
+    platformCapabilities = window.PlatformCapabilities || await window.electronAPI.getSdkCapabilities();
+  } catch (err) {
+    console.warn('[Webview] 读取平台能力失败，保持默认行为:', err && err.message);
+  }
+  if (platformCapabilities && platformCapabilities['feature.webView'] !== true) {
     return;
   }
 

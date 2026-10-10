@@ -773,8 +773,8 @@ function toUnixTimestamp(datetimeLocalValue) {
 }
 
 // ========== 预定会议 → 日程联动 ==========
-// 后端日程支持内嵌 meeting 信息；预定成功后自动创建同时间的日程，
-// 使会议出现在日历对应日期，并支持从日历直接入会。失败不影响会议本身。
+// 预定走服务端一体化创建（createMeeting: true）：会议与日程由服务端同时创建并关联，
+// 天然只有一条日程记录，无需前端二次同步。
 
 function calendarLocalTime(unixSecs) {
   const date = new Date(unixSecs * 1000);
@@ -783,57 +783,6 @@ function calendarLocalTime(unixSecs) {
     `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-async function syncMeetingToCalendar(data, subject, startSecs, endSecs) {
-  try {
-    if (typeof window.electronAPI.calendarCreateEvent !== 'function') return;
-    if (window.PlatformCapabilities && window.PlatformCapabilities['feature.calendar'] !== true) return;
-
-    let info = null;
-    if (data && Array.isArray(data.meeting_info_list) && data.meeting_info_list.length > 0) {
-      info = data.meeting_info_list[0];
-    } else if (data && data.meeting_info) {
-      info = data.meeting_info;
-    } else if (data && (data.subject || data.meeting_id || data.meeting_code)) {
-      info = data;
-    }
-    if (!info) return;
-
-    // 去重：服务端/SDK 可能已为该会议自动生成日程，避免同一会议出现两条。
-    // 匹配规则：内嵌会议号一致，或同主题且开始时间一致。
-    try {
-      const existing = await window.electronAPI.calendarGetEvents({});
-      const events = (existing && existing.success && Array.isArray(existing.data)) ? existing.data : [];
-      const startTimeStr = calendarLocalTime(startSecs);
-      const meetingId = String(info.meeting_id || '');
-      const duplicated = events.some((ev) => {
-        if (ev.meeting && meetingId && String(ev.meeting.meetingId) === meetingId) return true;
-        return ev.title === subject && ev.startTime === startTimeStr;
-      });
-      if (duplicated) {
-        console.log('[Calendar] 日程中已存在该会议，跳过重复同步');
-        return;
-      }
-    } catch (dedupErr) {
-      console.warn('[Calendar] 查询已有日程失败，继续同步:', dedupErr && dedupErr.message);
-    }
-
-    await window.electronAPI.calendarCreateEvent({
-      title: subject,
-      startTime: calendarLocalTime(startSecs),
-      endTime: calendarLocalTime(endSecs),
-      meeting: {
-        meetingType: 'wemeet',
-        meetingId: String(info.meeting_id || ''),
-        meetingCode: String(info.meeting_code || ''),
-        joinUrl: String(info.join_url || ''),
-        meetingSubject: subject,
-      },
-    });
-    console.log('[Calendar] 预定会议已同步到日程');
-  } catch (err) {
-    console.warn('[Calendar] 会议同步日程失败（不影响会议预定）:', err && err.message);
-  }
-}
 
 function getMeetingFormValues() {
   const subject = meetingFormSubject.value.trim();
@@ -943,6 +892,33 @@ submitMeetingFormBtn.addEventListener('click', async () => {
         meetingFormError.textContent = result.message || '修改会议失败';
       }
     } else {
+      // 首选：与 mac 端日程弹窗同路径——服务端一体化创建（createMeeting: true），
+      // 会议与日程由服务端同时创建并关联，天然只有一条日程记录。
+      // 说明：该路径暂不支持自定义会议密码/入会静音，随服务端能力放开后恢复。
+      let platformCapabilities = window.PlatformCapabilities;
+      if (!platformCapabilities) {
+        try { platformCapabilities = await window.electronAPI.getSdkCapabilities(); } catch {}
+      }
+      const calendarEnabled = !platformCapabilities || platformCapabilities['feature.calendar'] === true;
+
+      if (calendarEnabled) {
+        const result = await window.electronAPI.calendarCreateEvent({
+          title: subject,
+          startTime: calendarLocalTime(toUnixTimestamp(startTimeRaw)),
+          endTime: calendarLocalTime(toUnixTimestamp(endTimeRaw)),
+          participantIds: [],
+          createMeeting: true,
+        });
+        if (result.success) {
+          showScheduleResult((result.data && result.data.meeting) || result.data || {});
+          loadMeetingList(false, true);
+          return;
+        }
+        meetingFormError.textContent = result.message || '创建会议失败';
+        return;
+      }
+
+      // 兜底：日历能力不可用时退回直连创建（不同步日程，避免与服务端自动日程叠加）
       const meetingData = {
         subject,
         type: 0,
@@ -960,7 +936,6 @@ submitMeetingFormBtn.addEventListener('click', async () => {
       const result = await window.electronAPI.createMeeting(meetingData);
       if (result.success) {
         showScheduleResult(result.data);
-        syncMeetingToCalendar(result.data, subject, Number(meetingData.start_time), Number(meetingData.end_time));
         loadMeetingList(false, true);
       } else {
         meetingFormError.textContent = result.message || '创建会议失败';

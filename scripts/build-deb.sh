@@ -8,10 +8,10 @@ APP_HOME="opt/$PACKAGE_NAME"
 VERSION="$(node -p "require('./package.json').version")"
 BUILD_DATE="$(date +%Y%m%d)"
 OUT_DIR="$ROOT/dist-demo"
-# 命名与 Mac/Windows 下载页对齐（<名称>-<版本>-<日期>-arm64.deb）。
-# GitHub 资产名不允许中文/空格（会被强制清洗），故仓库侧用全 ASCII；
-# 上传到自有下载页时，展示名按「腾讯会议SDK Demo-<版本>-<日期>-arm64.deb」命名。
-ARTIFACT="$OUT_DIR/tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-arm64.deb"
+# 命名规范统一：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
+# （与 Mac/Windows 下载页完全一致；GitHub Release 资产名因平台限制
+#   不支持中文/空格，CI 上传时会自动派生 ASCII 名，见 build-deb.yml）
+ARTIFACT="$OUT_DIR/腾讯会议SDK Demo-${VERSION}-${BUILD_DATE}-arm64.deb"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/${PACKAGE_NAME}.XXXXXX")"
 DATA="$WORK"
 CONTROL="$WORK/DEBIAN"

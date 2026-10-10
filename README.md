@@ -9,10 +9,14 @@
 
 ### 1. 获取安装包
 
-**方式 A：Release 页下载（推荐）**
+**构建产物命名统一为：`腾讯会议SDK Demo-<版本>-<日期>-arm64.deb`**（与 Mac/Windows 下载页一致）。
+
+**方式 A：Release 页下载**
 
 打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases) → 下载最新构建的
-`tencent-meeting-sdk-demo-<版本>-<日期>-arm64.deb`（命名节奏与 Windows/macOS 下载页一致：名称-版本-日期-架构）。
+`tencent-meeting-sdk-demo-<版本>-<日期>-arm64.deb`。
+（GitHub 资产名不支持中文/空格，Release 上是 ASCII 名；中文名原始产物在
+Actions 运行页的 `linux-arm64-deb` 产物内，上传自有下载页时直接使用。）
 
 > 也可以用命令行直接拉最新版：
 > `gh release download latest -R shaoyuzijiang/electron-app-linux`

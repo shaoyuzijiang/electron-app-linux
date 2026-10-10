@@ -229,10 +229,11 @@ async function testBackendHandlers() {
 
 function testRendererIntegrations() {
   const meeting = read('renderer/js/meeting.js');
-  assert(meeting.includes('syncMeetingToCalendar(result.data'), '预定成功后必须触发日程同步');
-  for (const field of ['meetingType', 'meetingId', 'meetingCode', 'joinUrl', 'meetingSubject']) {
-    assert(meeting.includes(field), `日程同步 payload 缺少契约字段: ${field}`);
-  }
+  // 预定→日程联动：走服务端一体化创建（createMeeting: true，与 mac 日历弹窗同路径），
+  // 会议与日程由服务端同时创建并关联，避免出现"会议+日程"两条记录。
+  assert(meeting.includes("createMeeting: true"), '预定会议必须走服务端一体化创建（会议+日程单条关联）');
+  assert(meeting.includes('calendarCreateEvent'), '预定流程必须通过日程创建通道');
+  assert(!meeting.includes('syncMeetingToCalendar'), '禁止恢复前端二次日程同步（会导致日程重复）');
   assert(meeting.includes('feature.calendar'), '日程同步必须受能力契约开关保护');
 
   const contacts = read('renderer/js/contacts.js');

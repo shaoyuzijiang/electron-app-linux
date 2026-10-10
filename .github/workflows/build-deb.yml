@@ -73,19 +73,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
+          BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
           DEB="$(ls dist-demo/*.deb)"
-          NEW_NAME="$(basename "$DEB")"
-          BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          # GitHub 资产名不支持中文/空格，Release 侧用 ASCII 名；
+          # 中文命名的原始产物保留在 Actions 产物 linux-arm64-deb 中（供下载页直接上传）
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-arm64.deb"
+          cp "$DEB" "dist-demo/$ASCII_NAME"
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
-          gh release upload latest "$DEB" --clobber
+          gh release upload latest "dist-demo/$ASCII_NAME" --clobber
           # 清理旧日期资产，只保留本次
           gh release view latest --json assets --jq '.assets[].name' | while read -r asset; do
-            if [[ "$asset" != "$NEW_NAME" ]]; then
+            if [[ "$asset" != "$ASCII_NAME" ]]; then
               gh release delete-asset latest "$asset" -y
             fi
           done
           gh release edit latest \
             --title "最新安装包（自动构建）" \
-            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i \"$NEW_NAME\""
-          echo "已发布资产: $NEW_NAME"
+            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i \"$ASCII_NAME\""
+          echo "已发布资产: $ASCII_NAME"
