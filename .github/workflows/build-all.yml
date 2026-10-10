@@ -1,0 +1,101 @@
+name: build-all-platforms
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - rehearse/electron-app-merge
+
+permissions:
+  contents: read
+
+jobs:
+  linux-deb:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 下载离线供应物
+        run: |
+          mkdir -p vendor
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
+          curl --fail --location --retry 3 -o vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz "$base/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz"
+          curl --fail --location --retry 3 -o vendor/electron-v33.4.11-linux-arm64.zip "$base/electron-v33.4.11-linux-arm64.zip"
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+      - name: 门禁测试
+        run: npm run verify:platform-contract
+      - name: 准备 SDK 与预编译 addon
+        run: |
+          mkdir -p sdk-extract output/linux
+          tar -xzf vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz -C sdk-extract
+          bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          cp packaging/prebuilt/wemeet_electron_sdk.arm64.node output/linux/wemeet_electron_sdk.node
+      - name: 组装 DEB
+        run: WEMEET_CI=1 bash scripts/build-deb.sh
+      - name: 校验 DEB
+        run: npm run check -- --deb
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-deb
+          path: dist-demo/*.deb
+          if-no-files-found: error
+
+  mac-dmg:
+    if: github.ref != 'refs/heads/main'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 下载 mac Framework 供应物
+        run: |
+          mkdir -p wemeet_sdk/mac/Frameworks/arm64 wemeet_sdk/mac/Frameworks/x86_64
+          curl --fail --location --retry 3 -o /tmp/TMSDK.framework.arm64.zip "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/TMSDK.framework.arm64.zip"
+          ditto -x -k /tmp/TMSDK.framework.arm64.zip wemeet_sdk/mac/Frameworks/arm64/
+          ln -s ../arm64/TMSDK.framework wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+      - name: 编译原生 addon（arm64）
+        run: npm run build:native:mac-arm64
+      - name: 打包 DMG（跳过签名）
+        run: SKIP_SIGN=1 npm run dist:mac:arm64
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  win-nsis:
+    if: github.ref != 'refs/heads/main'
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 下载 win SDK 运行时供应物
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path wemeet_sdk\win | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/wemeet-sdk-win-x64-runtime.zip" -OutFile win-runtime.zip
+          Expand-Archive -Path win-runtime.zip -DestinationPath wemeet_sdk\win -Force
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+      - name: 编译原生 addon（x64）
+        run: npm run build:native:win-x64
+      - name: 打包 NSIS
+        run: npm run dist:win:x64
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-x64-nsis
+          path: dist/*.exe
+          if-no-files-found: error
