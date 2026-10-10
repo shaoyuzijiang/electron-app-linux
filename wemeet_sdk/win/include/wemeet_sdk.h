@@ -162,6 +162,30 @@ public:
   virtual void ShowVoiceRecordView() = 0;
 
   /**
+*
+* @note 打开声纹录制窗口
+*/
+  virtual void ShowVoicePrintRecordView() = 0;
+
+  /**
+   * 删除当前用户已录入的声纹信息
+   *
+   * @param handler 删除结果回调，code 为 0 表示删除成功，非 0 表示失败
+   * @param user_data 回调透传数据
+   *
+   * @note 调用后异步删除，结果通过 handler 回调
+  */
+  virtual void DeleteVoicePrint(CompleteHandler handler, void* user_data) = 0;
+
+  /**
+   * 获取当前用户是否已录入声纹
+   *
+   * @param
+   * @note
+   */
+  virtual void CheckVoicePrintIsCollected(CompleteHandlerWithValue complete, void* user_data) = 0;
+
+  /**
   *
   * @note 预定会议时邀请用户
   */

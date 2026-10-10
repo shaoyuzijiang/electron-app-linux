@@ -425,13 +425,6 @@ public:
     }
   }
 
-// *** Debug Code Begin, These Code should only exist on dev_release ***
-  void GetUserInfo(char *buf, int buf_len) {
-    if (wemeet_instance_) {
-      wemeet_instance_->GetAccountService()->GetUserInfo(buf, buf_len);
-    }
-  }
-// *** Debug Code End, These Code should only exist on dev_release ***
 
   void GetCurrentMeetingInfo(char *buf, int buf_len) {
     if (wemeet_instance_) {
@@ -2184,16 +2177,6 @@ napi_value ShowMeetingSettingView(napi_env env, napi_callback_info info) {
   return res;
 }
 
-// *** Debug Code Begin, These Code should only exist on dev_release ***
-napi_value GetUserInfo(napi_env env, napi_callback_info info) {
-  log(__FUNCTION__);
-  napi_value word;
-  char buf[4096] = {0};
-  WemmetElectronWrapper::GetElectronInstance().GetUserInfo(buf, 4096);
-  napi_create_string_utf8(env, buf, strlen(buf), &word);
-  return word;
-}
-// *** Debug Code End, These Code should only exist on dev_release ***
 
 napi_value GetCurrentMeetingInfo(napi_env env, napi_callback_info info) {
   log(__FUNCTION__);
@@ -3299,10 +3282,6 @@ napi_value Init(napi_env env, napi_value exports) {
 
   desc = DECLARE_NAPI_METHOD("ParseMeetingInfoUrl", ParseMeetingInfoUrl);
   status = napi_define_properties(env, exports, 1, &desc);
-// *** Debug Code Begin, These Code should only exist on dev_release ***
-  desc = DECLARE_NAPI_METHOD("GetUserInfo", GetUserInfo);
-  status = napi_define_properties(env, exports, 1, &desc);
-// *** Debug Code End, These Code should only exist on dev_release ***
 
   desc = DECLARE_NAPI_METHOD("GetCurrentMeetingInfo", GetCurrentMeetingInfo);
   status = napi_define_properties(env, exports, 1, &desc);
