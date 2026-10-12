@@ -7,12 +7,19 @@ on:
       - main
       - rehearse/electron-app-merge
 
+# 三端发布流水线：
+#   - main push：三端并行构建，各自发布到 Release latest（每平台只保留最新一个资产）
+#   - 其他分支（如 rehearse/*）：只构建并上传 Actions 产物，不碰 Release
+#
+# 【一键回退到"仅 DEB 发布"模式】（两步，详见 docs/EXECUTION_PLAN.md 第十节）：
+#   1. 恢复 build-deb.yml 的 push: main 触发（该文件保留完整发布能力，只是触发放开）
+#   2. git checkout 277b09a -- .github/workflows/build-all.yml
+#      （277b09a 为本改造前版本：build-all 只做演练构建、build-deb 独占发布）
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   linux-deb:
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,9 +62,32 @@ jobs:
           name: linux-arm64-deb
           path: dist-demo/*.deb
           if-no-files-found: error
+      # 发布到 Release latest（仅 main）。清理只删旧 *.deb，不碰 dmg/exe（三端资产共存）。
+      # 资产删除一律按 id 操作（资产名可能以 - 开头，按名传参会误当选项）。
+      - name: 发布到 Release latest（仅 main）
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
+          DEB="$(ls dist-demo/*.deb)"
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-arm64.deb"
+          cp "$DEB" "dist-demo/$ASCII_NAME"
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "最新安装包（自动构建）" || true
+          gh release upload latest "dist-demo/$ASCII_NAME" --clobber
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | endswith(".deb")) | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r assetId assetName; do
+            if [[ "$assetName" != "$ASCII_NAME" ]]; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
+              echo "已清理旧 DEB: $assetName"
+            fi
+          done
+          echo "已发布资产: $ASCII_NAME"
 
   mac-dmg:
-    if: github.ref != 'refs/heads/main'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -82,9 +112,31 @@ jobs:
           name: mac-arm64-dmg
           path: dist/*.dmg
           if-no-files-found: error
+      # 发布到 Release latest（仅 main）。清理只删旧 *.dmg，不碰 deb/exe。
+      - name: 发布到 Release latest（仅 main）
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          DMG="$(ls dist/*.dmg | head -1)"
+          BUILD_DATE="$(basename "$DMG" | grep -oE '[0-9]{8}' | head -1)"
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-mac-arm64.dmg"
+          cp "$DMG" "dist/$ASCII_NAME"
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "最新安装包（自动构建）" || true
+          gh release upload latest "dist/$ASCII_NAME" --clobber
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | endswith(".dmg")) | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r assetId assetName; do
+            if [[ "$assetName" != "$ASCII_NAME" ]]; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
+              echo "已清理旧 DMG: $assetName"
+            fi
+          done
+          echo "已发布资产: $ASCII_NAME"
 
   win-nsis:
-    if: github.ref != 'refs/heads/main'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -109,3 +161,28 @@ jobs:
           name: win-x64-nsis
           path: dist/*.exe
           if-no-files-found: error
+      # 发布到 Release latest（仅 main）。清理只删旧 *.exe，不碰 deb/dmg。
+      # 用 bash 跑发布脚本（Git Bash 自带），复用与另两个 job 相同的 gh 用法
+      - name: 发布到 Release latest（仅 main）
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          EXE="$(ls dist/*.exe | head -1)"
+          BUILD_DATE="$(basename "$EXE" | grep -oE '[0-9]{8}' | head -1)"
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-win-x64.exe"
+          cp "$EXE" "dist/$ASCII_NAME"
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "最新安装包（自动构建）" || true
+          gh release upload latest "dist/$ASCII_NAME" --clobber
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | endswith(".exe")) | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r assetId assetName; do
+            if [[ "$assetName" != "$ASCII_NAME" ]]; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
+              echo "已清理旧 EXE: $assetName"
+            fi
+          done
+          echo "已发布资产: $ASCII_NAME"

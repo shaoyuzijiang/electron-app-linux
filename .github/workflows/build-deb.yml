@@ -1,12 +1,13 @@
 name: build-linux-deb
 
-# 推送即自动构建 Linux ARM64 DEB 安装包。
+# 【备用/回退流水线】仅手动触发的 Linux ARM64 DEB 构建+发布。
+# 三端自动发布已由 build-all.yml 承接（main push）。
+# 回退到"仅 DEB 发布"模式：放开下方 push 触发 + 恢复 build-all.yml 至 277b09a
+# （详见 docs/EXECUTION_PLAN.md 第十节）。
 # 一次性前置（见 docs/AUTOPACK_PLAN.md）：把 SDK 归档与 Electron zip
 # 作为 Release 附件上传到 tag `vendor-supplies`。
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: write
@@ -66,17 +67,14 @@ jobs:
           path: dist-demo/*.deb
           if-no-files-found: error
 
-      # main 分支的构建自动发布到 Release `latest`。
-      # 资产命名与 Mac/Windows 下载页对齐（<名称>-<版本>-<日期>-arm64.deb），
-      # 每次发布覆盖式更新：只保留最新一个资产，旧日期的自动清理。
+      # 手动构建发布到 Release `latest`。清理只删旧 *.deb，不碰 dmg/exe
+      # （三端资产共存；与 build-all.yml 的平台隔离清理策略一致）。
       - name: 发布到 Release 页
-        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
-          BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
           DEB="$(ls dist-demo/*.deb)"
           # GitHub 资产名不支持中文/空格，Release 侧用 ASCII 名；
           # 中文命名的原始产物保留在 Actions 产物 linux-arm64-deb 中（供下载页直接上传）
@@ -85,15 +83,13 @@ jobs:
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
           gh release upload latest "dist-demo/$ASCII_NAME" --clobber
-          # 清理旧日期资产，只保留本次
-          # 清理旧资产一律按 id 操作（资产名可能以 - 开头，按名传参会误当选项）
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" --jq '.assets[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r assetId assetName; do
+          # 清理旧 DEB（按 id 操作；资产名可能以 - 开头，按名传参会误当选项）
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | endswith(".deb")) | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r assetId assetName; do
             if [[ "$assetName" != "$ASCII_NAME" ]]; then
               gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
-              echo "已清理旧资产: $assetName"
+              echo "已清理旧 DEB: $assetName"
             fi
           done
-          gh release edit latest \
-            --title "最新安装包（自动构建）" \
-            --notes "版本 $VERSION ｜ 构建于 $BUILD_TIME ｜ 银河麒麟 V10 ARM64。安装：sudo dpkg -i \"$ASCII_NAME\""
           echo "已发布资产: $ASCII_NAME"
