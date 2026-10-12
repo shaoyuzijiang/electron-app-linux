@@ -457,6 +457,41 @@ jobs:
 
 ---
 
+## 十、发布流水线改造（2026-10-12，三端自动发布 + 一键回退）
+
+### 10.1 新行为
+
+| 触发 | 行为 |
+|---|---|
+| push main | 三端并行构建 → 各自发布到 Release `latest`，每平台只保留最新一个资产 |
+| push rehearse/* 或手动 | 三端构建，产物只挂 Actions Artifacts，不碰 Release |
+| build-deb.yml 手动触发 | 仅构建发布 DEB（备用通道，清理只删 `*.deb`） |
+
+- 资产命名：`tencent-meeting-sdk-demo-<版本>-<日期>-{arm64.deb, mac-arm64.dmg, win-x64.exe}`
+- 清理策略：**按平台后缀隔离**（DEB job 只删旧 `*.deb`，DMG 只删 `*.dmg`，EXE 只删 `*.exe`），
+  三端资产共存互不误删；按资产 id 删除（红线 N12）
+- 发布步骤均 `if: github.ref == 'refs/heads/main'`；Release 不存在时并发创建有 `|| true` 容错
+
+### 10.2 已知限制
+
+- mac DMG（ad-hoc 签名）与 win EXE（未签名）为内测形态：Gatekeeper/SmartScreen 会警告，
+  正式对外分发需配签名证书 + 公证（mac）与代码签名证书（win）
+- 私有仓库的 main push 会消耗 macos-14 / windows-2022 runner 分钟数额度
+
+### 10.3 一键回退到"仅 DEB 发布"模式（两步）
+
+改造前锚点：**`277b09a`**（build-all 只做演练构建不发布；build-deb 独占 push main 发布）。
+
+```bash
+# ① 恢复 build-deb.yml 的 push main 触发（编辑 on: 块，加回 push: branches: [main]）
+# ② 恢复 build-all.yml 到锚点版本
+git checkout 277b09a -- .github/workflows/build-all.yml
+git commit -m "ci: 回退为仅 DEB 发布模式" && git push
+```
+
+也可不依赖 git：build-deb.yml 文件头注释与 build-all.yml 文件头注释均已内嵌回退指引。
+注意：build-deb.yml 的 push 触发与 build-all 的发布步骤**不能同时启用**（会重复构建 DEB）。
+
 ## 附：完成定义（DoD，本轮范围）
 
 - [x] rehearse 分支推送，build-all.yml 三 job 可触发（T1-T2）
