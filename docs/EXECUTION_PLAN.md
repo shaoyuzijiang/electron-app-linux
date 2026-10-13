@@ -478,7 +478,44 @@ jobs:
   正式对外分发需配签名证书 + 公证（mac）与代码签名证书（win）
 - 私有仓库的 main push 会消耗 macos-14 / windows-2022 runner 分钟数额度
 
-### 10.3 一键回退到"仅 DEB 发布"模式（两步）
+### 10.3 验证记录（2026-10-12/13，方案四项 + 两条路径 + 备用通道全验证）
+
+| 验证项 | Run | 结果 |
+|---|---|---|
+| 方案四项落实（权限 write / 去守卫 / 三发布步骤 / deb 退位） | 代码核对 | ✅ |
+| rehearse 分支 push：三端构建绿、发布跳过、Release 零触碰 | 38251366127 | ✅ |
+| main push：三端绿 + latest 三资产 + 旧 DEB 清理 | 38252525260 | ✅ |
+| build-deb.yml 手动备用通道：发布当日 DEB，dmg/exe 不受影响 | 38342686416 | ✅ |
+
+当前 `latest` 资产：`...3.45.100-20261012-mac-arm64.dmg`、`...3.45.100-20261012-win-x64.exe`、
+`...3.45.100-20261013-arm64.deb`（备用通道验证时更新）。
+
+### 10.4 与原方案的实施差异（决策记录）
+
+1. win job 发布步骤用 `shell: bash`（Git Bash 自带 gh），三 job 复用同一套脚本逻辑
+2. 去掉方案中的 `gh release edit --notes`：三 job 并发改描述互相覆盖（坑 29），
+   标题仅在 create 时设置一次
+3. 资产删除一律按 id（坑 12），清理条件按平台后缀收窄（坑 28）
+
+### 10.5 Actions 额度实测（2026-10-13）
+
+- 计费倍率：Linux ×1、Windows ×2、**macOS ×10**
+- 本月（10/1–10/13）本仓库：Linux 92 + macOS 340 + Windows 118 ≈ **550 计费分钟**
+- 改造后每次 main push ≈ **130 计费分钟**（macOS job 占 80%）；每天推 main 月耗约 4,000，
+  超 Free（2,000/月）额度后 Actions 停摆。控制手段：降低 main push 频率、
+  发布改手动触发、或加自托管 runner
+- 精确账单需 `gh auth refresh -h github.com -s user` 后查 billing API
+
+### 10.6 签名问题溯源（原仓库方案 vs 现状）
+
+- 上游 mac：owner 本机用个人 Apple Development 证书（liuqi92）签名，**无公证**，
+  证书私钥不在 CI —— 分发到其他 Mac 仍弹"未知开发者"
+- 上游 win：**从未签名**（build-all-win.sh 无任何 signtool/证书逻辑）
+- 本仓库 CI ad-hoc 签名与其信任级别同级（内测形态）。正式分发需
+  Apple Developer Program（$99/年，Developer ID + 公证可进 CI Secrets）与
+  win 代码签名证书（OV/EV）；after-pack.js 已预留正式签名分支，届时仅需注入凭据
+
+### 10.7 一键回退到"仅 DEB 发布"模式（两步）
 
 改造前锚点：**`277b09a`**（build-all 只做演练构建不发布；build-deb 独占 push main 发布）。
 

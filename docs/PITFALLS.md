@@ -218,6 +218,47 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 
 ---
 
+### 28. 多平台资产共存时，Release 清理逻辑会互相误删
+
+- **症状**：三端（deb/dmg/exe）都发布到 Release `latest` 后，某平台发布成功，
+  另两平台的资产却消失了。
+- **原因**：旧 build-deb.yml 的清理逻辑是"删除所有不等于本次资产名的资产"——
+  单平台时代没问题，三端共存后每个 job 都会删光别人的资产。
+- **解决**：清理按**平台后缀隔离**：DEB job 只删旧 `*.deb`（`select(.name | endswith(".deb"))`），
+  DMG 只删 `*.dmg`，EXE 只删 `*.exe`；且一律按资产 id 删（坑 12/N12：
+  资产名以 `-` 开头会被 gh 误当选项）。
+- **教训**：凡"保留最新一个"的覆盖式清理，条件必须随资产集合的扩大而收窄，
+  否则新增资产类型即触发互删。
+
+---
+
+### 29. 三个 job 并发向同一 Release 发布：创建竞争与描述覆盖
+
+- **症状/风险**：三 job 同时跑 `gh release create latest` 会因已存在而报错；
+  若各自 `gh release edit --notes`，后完成的会覆盖先完成的描述。
+- **解决**：
+  - 创建用 `gh release view latest >/dev/null 2>&1 || gh release create latest ... || true`
+    （存在性检查 + `|| true` 容错并发竞争）；上传用 `--clobber` 天然幂等
+  - **不**在 job 内编辑 Release notes（`--title/--notes` 只在 create 时设置一次）
+- **教训**：并发写同一远端对象时，每个写操作都要么幂等、要么带存在性竞争容错；
+  "元数据描述"类字段不要多写方并发维护。
+
+---
+
+### 30. 跨平台 bash 脚本的 GNU/BSD 差异（update-linux-sdk.sh 踩坑）
+
+- **症状**：脚本在麒麟（bash 4.4/GNU 工具链）正常，在 macOS（bash 3.2/BSD 工具链）报错：
+  - `readarray: command not found`（bash 3.2 无 readarray）
+  - `find: -printf: unknown primary or operator`（`-printf` 是 GNU 扩展）
+- **解决**：
+  - `readarray -t arr < <(ls ...)` 改为 `count=$(ls ... | wc -l)` + `m=$(ls ... | head -1)`
+  - `find ... -printf '%f\n'` 改为 `basename "$(find ... | head -1)"`
+- **教训**：要在 macOS 上预览/维护的脚本（如 SDK 升级脚本），写法按"bash 3.2 + BSD 工具"兜底；
+  或者开头显式声明"仅在 Linux 执行完整流程"。另注意备份/恢复要保持原始文件名，
+  否则恢复出的文件不符合命名规范会绕过通配校验造成双归档残留。
+
+---
+
 ## 五、快速定位索引
 
 | 症状 | 优先查 |
@@ -233,3 +274,5 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 | push 被拒 | 坑 17、21（浅克隆/仓库损坏） |
 | CI 失败 | 坑 18、22、26（electron 元数据 / YAML / 隐式发布） |
 | mac 报"已损坏" | 坑 27（ad-hoc 签名兜底） |
+| Release 资产互删/并发发布 | 坑 28、29（后缀隔离清理 / 幂等创建） |
+| 脚本在 mac 上跑不了 | 坑 30（GNU/BSD 差异） |
