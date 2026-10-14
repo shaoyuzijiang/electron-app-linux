@@ -3,8 +3,10 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="33.4.11"
-ARCHIVE="$ROOT/vendor/node-v33.4.11-headers.tar.gz"
+# Electron 版本单一来源：package.json（升级 Electron 只改 package.json 一处）
+VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
+echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "无法从 package.json 解析 Electron 版本" >&2; exit 1; }
+ARCHIVE="$ROOT/vendor/node-v${VERSION}-headers.tar.gz"
 TARGET="$ROOT/.electron-headers"
 STAGE="$ROOT/.electron-headers.stage.$$"
 
@@ -13,7 +15,6 @@ cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
 
 [[ -f "$ARCHIVE" ]] || fail "缺少 $ARCHIVE"
-[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json Electron 版本与离线 headers 不一致"
 if ! tar -tzf "$ARCHIVE" | awk '$0 ~ /^\// { exit 1 } { n=split($0,p,"/"); for(i=1;i<=n;i++) if(p[i]=="..") exit 1 }'; then
   fail "headers 归档包含不安全路径"
 fi

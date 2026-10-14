@@ -6,6 +6,11 @@ on:
     branches:
       - main
       - rehearse/electron-app-merge
+    # 纯文档改动不触发构建（每次三端构建 ≈130 计费分钟，私有仓库额度有限）；
+    # 需要手动构建时用 workflow_dispatch
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 # 三端发布流水线：
 #   - main push：三端并行构建，各自发布到 Release latest（每平台只保留最新一个资产）
@@ -26,16 +31,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # Electron 版本单一来源：package.json（升级只改 package.json 一处）
+      - name: 解析 Electron 版本
+        run: echo "ELECTRON_VERSION=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_ENV"
       - name: 下载离线供应物
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p vendor
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
-          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名称随版本锁定
+          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名派生自 package.json
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
             -p 'TMSDK_*_arm64_default.publish.tar.gz' -D vendor
-          curl --fail --location --retry 3 -o vendor/electron-v33.4.11-linux-arm64.zip "$base/electron-v33.4.11-linux-arm64.zip"
+          curl --fail --location --retry 3 -o "vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" "$base/electron-v${ELECTRON_VERSION}-linux-arm64.zip"
+          # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
+          cd vendor
+          grep -E 'electron-v[0-9]|TMSDK_.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       # 门禁脚本 require('electron') 需要包元数据；--ignore-scripts 跳过了其安装脚本，
@@ -98,6 +110,9 @@ jobs:
         run: |
           mkdir -p wemeet_sdk/mac/Frameworks/arm64 wemeet_sdk/mac/Frameworks/x86_64
           curl --fail --location --retry 3 -o /tmp/TMSDK.framework.arm64.zip "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/TMSDK.framework.arm64.zip"
+          # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
+          curl --fail --location --retry 3 -o /tmp/SHA256SUMS "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/SHA256SUMS"
+          grep 'TMSDK.framework.arm64.zip' /tmp/SHA256SUMS | (cd /tmp && shasum -a 256 -c -)
           ditto -x -k /tmp/TMSDK.framework.arm64.zip wemeet_sdk/mac/Frameworks/arm64/
           ln -s ../arm64/TMSDK.framework wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework
       - name: 安装依赖
@@ -148,6 +163,11 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path wemeet_sdk\win | Out-Null
           Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/wemeet-sdk-win-x64-runtime.zip" -OutFile win-runtime.zip
+          # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
+          Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/SHA256SUMS" -OutFile SHA256SUMS
+          $expected = (Select-String -Path SHA256SUMS -Pattern 'wemeet-sdk-win-x64-runtime\.zip').Line.Split(' ')[0].Trim()
+          $actual = (Get-FileHash win-runtime.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "SHA256 校验失败: win-runtime.zip (期望 $expected, 实际 $actual)" }
           Expand-Archive -Path win-runtime.zip -DestinationPath wemeet_sdk\win -Force
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts

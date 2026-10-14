@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_NAME="tencent-meeting-sdk-linux-demo"
 APP_HOME="opt/$PACKAGE_NAME"
 VERSION="$(node -p "require('./package.json').version")"
+# Electron 版本单一来源：package.json
+ELECTRON_VERSION="$(node -p "require('./package.json').devDependencies.electron")"
 BUILD_DATE="$(date +%Y%m%d)"
 OUT_DIR="$ROOT/dist-demo"
 # 命名规范统一：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
@@ -25,14 +27,14 @@ fail() { echo "Demo DEB 构建失败: $*" >&2; exit 1; }
 [[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
 [[ "$(uname -m)" == aarch64 || -n "${WEMEET_CI:-}" ]] || fail "本机构建需要 aarch64（云端组装请设置 WEMEET_CI=1）"
 for command in unzip dpkg-deb npm node; do command -v "$command" >/dev/null 2>&1 || fail "缺少命令: $command"; done
-[[ -f "$ROOT/vendor/electron-v33.4.11-linux-arm64.zip" ]] || fail "缺少 Electron ARM64 runtime"
+[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" ]] || fail "缺少 Electron ARM64 runtime (v${ELECTRON_VERSION})"
 
 required_sdk=(wemeet_electron_sdk.node libwemeetsdk.so libwemeet_base.so Release)
 for item in "${required_sdk[@]}"; do [[ -e "$SDK_SOURCE/$item" ]] || fail "缺少本次构建产物: output/linux/$item"; done
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR" "$CONTROL" "$DATA/$APP_HOME/app" "$DATA/$APP_HOME/runtime" "$DATA/usr/bin" "$DATA/usr/share/applications"
-unzip -q "$ROOT/vendor/electron-v33.4.11-linux-arm64.zip" -d "$DATA/$APP_HOME/runtime"
+unzip -q "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" -d "$DATA/$APP_HOME/runtime"
 chmod 0755 "$DATA/$APP_HOME/runtime/electron" "$DATA/$APP_HOME/runtime/chrome-sandbox" 2>/dev/null || true
 install -m 0644 "$ROOT/renderer/assets/app.png" "$DATA/$APP_HOME/runtime/resources/app.png"
 
@@ -80,7 +82,7 @@ Depends: libc6 (>= 2.31), libstdc++6, libasound2, libatk-bridge2.0-0, libatk1.0-
 Recommends: xwayland
 Installed-Size: $(du -sk "$DATA" | awk '{print $1}')
 Description: 银河麒麟 ARM64 腾讯会议 SDK Electron Demo
- Demo package using Electron 33.4.11 and Tencent Meeting SDK $(basename "$(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | head -1)" 2>/dev/null | cut -d_ -f3).
+ Demo package using Electron ${ELECTRON_VERSION} and Tencent Meeting SDK $(basename "$(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | head -1)" 2>/dev/null | cut -d_ -f3).
  Backend security tests were not run for this demo artifact.
 EOF
 install -m 0755 "$ROOT/packaging/postinst" "$CONTROL/postinst"

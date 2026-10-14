@@ -3,8 +3,10 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ELECTRON_VERSION="33.4.11"
-HEADERS_FILE="node-v33.4.11-headers.tar.gz"
+# Electron 版本单一来源：package.json（升级 Electron 只改 package.json 一处；
+# package.json 内 build:native:* 的 --target 需人工同步，见 EXECUTION_PLAN 版本红线）
+ELECTRON_VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
+HEADERS_FILE="node-v${ELECTRON_VERSION}-headers.tar.gz"
 HEADERS="$ROOT/.electron-headers"
 OUT="$ROOT/output/linux"
 BUILT="$ROOT/build/Release/wemeet_electron_sdk.node"

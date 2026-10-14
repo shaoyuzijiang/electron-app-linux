@@ -3,8 +3,10 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="33.4.11"
-ARCHIVE="$ROOT/vendor/electron-v33.4.11-linux-arm64.zip"
+# Electron 版本单一来源：package.json（升级 Electron 只改 package.json 一处）
+VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
+echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "无法从 package.json 解析 Electron 版本" >&2; exit 1; }
+ARCHIVE="$ROOT/vendor/electron-v${VERSION}-linux-arm64.zip"
 PACKAGE_DIR="$ROOT/node_modules/electron"
 DIST_DIR="$PACKAGE_DIR/dist"
 PATH_FILE="$PACKAGE_DIR/path.txt"
@@ -28,7 +30,6 @@ trap rollback EXIT INT TERM
 for command in unzip readelf; do command -v "$command" >/dev/null 2>&1 || fail "缺少 $command"; done
 [[ -f "$ARCHIVE" ]] || fail "缺少离线运行时: $ARCHIVE"
 [[ -d "$PACKAGE_DIR" ]] || fail "请先执行离线 npm ci"
-[[ "$(node -p "require('$ROOT/package.json').devDependencies.electron")" == "$VERSION" ]] || fail "package.json Electron 版本与离线运行时不一致"
 if ! unzip -Z1 "$ARCHIVE" | awk '$0 ~ /^\// { exit 1 } { n=split($0,p,"/"); for(i=1;i<=n;i++) if(p[i]=="..") exit 1 }'; then
   fail "Electron ZIP 包含不安全路径"
 fi

@@ -22,18 +22,25 @@ jobs:
         with:
           node-version: '22'
 
+      # Electron 版本单一来源：package.json（升级只改 package.json 一处）
+      - name: 解析 Electron 版本
+        run: echo "ELECTRON_VERSION=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_ENV"
       - name: 下载离线供应物（SDK 归档 / Electron runtime）
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p vendor
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
-          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名称随版本锁定
+          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名派生自 package.json
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
             -p 'TMSDK_*_arm64_default.publish.tar.gz' -D vendor
           curl --fail --location --retry 3 \
-            -o vendor/electron-v33.4.11-linux-arm64.zip \
-            "$base/electron-v33.4.11-linux-arm64.zip"
+            -o "vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" \
+            "$base/electron-v${ELECTRON_VERSION}-linux-arm64.zip"
+          # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
+          cd vendor
+          grep -E 'electron-v[0-9]|TMSDK_.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
 
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts

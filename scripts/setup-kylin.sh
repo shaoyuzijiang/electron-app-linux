@@ -71,8 +71,9 @@ GLIBC_VERSION="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
 [[ "$GLIBC_VERSION" == "2.31" ]] || fail "正式目标基线固定 glibc 2.31，当前为 ${GLIBC_VERSION:-unknown}；请在银河麒麟 V10 SP1 基线机构建"
 
 STAGE="校验供应包"
-[[ -f "$ROOT/vendor/electron-v33.4.11-linux-arm64.zip" ]] || fail "缺少离线 Electron 运行时"
-[[ -f "$ROOT/vendor/node-v33.4.11-headers.tar.gz" ]] || fail "缺少离线 Electron headers"
+ELECTRON_VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
+[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" ]] || fail "缺少离线 Electron 运行时 (v${ELECTRON_VERSION})"
+[[ -f "$ROOT/vendor/node-v${ELECTRON_VERSION}-headers.tar.gz" ]] || fail "缺少离线 Electron headers (v${ELECTRON_VERSION})"
 [[ -d "$ROOT/vendor/npm-cache/_cacache" ]] || fail "缺少 npm 离线缓存"
 if ! tar -tzf "$ARCHIVE" | awk -F/ '$1 == "" { exit 1 } { for (i=1; i<=NF; i++) if ($i == "..") exit 1 }'; then
   fail "SDK 压缩包包含不安全路径"

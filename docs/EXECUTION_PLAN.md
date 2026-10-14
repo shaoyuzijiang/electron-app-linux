@@ -477,6 +477,10 @@ jobs:
 - mac DMG（ad-hoc 签名）与 win EXE（未签名）为内测形态：Gatekeeper/SmartScreen 会警告，
   正式对外分发需配签名证书 + 公证（mac）与代码签名证书（win）
 - 私有仓库的 main push 会消耗 macos-14 / windows-2022 runner 分钟数额度
+- **mac x64（Intel）无 CI 产物**：CI 只出 mac-arm64 DMG；Intel Mac 安装包需 owner 本机
+  `./build-all-mac.sh`（x64 framework 在 CI 中仅是软链占位）。需求出现前视为可接受
+- **runner/工具链生命周期未跟踪**：`macos-14`、`windows-2022`、`node 22` 都在 GitHub
+  弃用周期内，弃用公告发布后需手动更新 yaml（无自动提醒机制）
 
 ### 10.3 验证记录（2026-10-12/13，方案四项 + 两条路径 + 备用通道全验证）
 
@@ -528,6 +532,32 @@ git commit -m "ci: 回退为仅 DEB 发布模式" && git push
 
 也可不依赖 git：build-deb.yml 文件头注释与 build-all.yml 文件头注释均已内嵌回退指引。
 注意：build-deb.yml 的 push 触发与 build-all 的发布步骤**不能同时启用**（会重复构建 DEB）。
+
+### 10.8 版本一致性红线（N15 扩展为"四同步"，2026-10-14）
+
+升级任一组件时，以下四项必须同步核对，否则出现 ABI/打包行为错位：
+
+| # | 组件 | 单一来源 | 需同步处 |
+|---|---|---|---|
+| 1 | **Electron** | `package.json` devDependencies（唯一改动点） | ① `package.json` 内 5 处 npm scripts 的 `--target`（与 devDeps 同文件，
+    升级时全局搜 `33.4.11` 替换）② Linux 供应物 zip/headers 文件名（脚本与 CI 均已派生，无需改） |
+| 2 | **node-gyp --target** | 同上（与 1 同步） | 三端 npm scripts |
+| 3 | **预编译 Linux addon** | glibc 2.31 基线重编 + 回传 | `packaging/prebuilt/` |
+| 4 | **electron-builder** | `package.json`（已精确锁定 26.15.2，无 `^`） | 大版本升级可能改变 NSIS/DMG 工具链与签名行为，升级须单独 PR + 三端冒烟 |
+
+已完成的自动化（升级体验对等化）：
+- **SDK 归档**：`TMSDK_*` 通配，升级零 yaml/脚本改动（update-linux-sdk.sh 一条命令）
+- **Electron 版本**：Linux 侧 6 个脚本（build-deb/build-native/setup-kylin/
+  install-electron-runtime/headers/check）与 2 个 CI yaml 均派生自 package.json
+- **供应物完整性**：`vendor-supplies` 含 `SHA256SUMS`，三 job 下载后校验，
+  防 `--clobber` 误覆盖/传输损坏（替换供应物后必须重新生成并上传 SHA256SUMS）
+
+### 10.9 额度纪律（2026-10-14 起）
+
+- 每次 main push ≈ 130 计费分钟；**纯文档改动已通过 `paths-ignore` 免构建**
+  （只改 `**.md` / `docs/**` 的 push 不触发 build-all.yml）
+- 文档与代码混合提交、或大改动，仍按一次 130 分钟计；**攒批提交**
+- 注意：推 rehearse 分支同样是三 job 全跑（≈125 分钟，仅不发布），**并不省钱**
 
 ## 附：完成定义（DoD，本轮范围）
 
