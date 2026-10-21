@@ -36,7 +36,7 @@ version_le() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$2" ]
 if [[ "$ONLY_DEB" != pending ]]; then
   [[ "$(id -u)" -ne 0 ]] && ok "普通用户 $(id -un)" || fail_check "禁止使用 root/sudo 运行"
   [[ "$(uname -s)" == Linux ]] && ok "系统 Linux" || fail_check "当前不是 Linux"
-  [[ "$(uname -m)" == aarch64 ]] && ok "架构 aarch64" || fail_check "架构必须为 aarch64，当前 $(uname -m)"
+  case "$(uname -m)" in aarch64|x86_64) ok "架构 $(uname -m)" ;; *) fail_check "架构必须为 aarch64/x86_64，当前 $(uname -m)" ;; esac
   if [[ -f /etc/os-release ]] && grep -Eiq 'kylin|银河麒麟' /etc/os-release && grep -Eiq 'V10|VERSION_ID="?10' /etc/os-release; then
     ok "银河麒麟 V10"
   else
@@ -97,7 +97,7 @@ if [[ "$ONLY_DEB" != pending ]]; then
     grep -E '/libstdc\+\+\.so\.6$' "$TMP/system-libraries" | sort -u > "$TMP/libstdcxx.paths" || true
     while IFS= read -r -d '' file; do
       machine="$(readelf -h "$file" 2>/dev/null | awk -F: '/Machine:/ {gsub(/^[[:space:]]+/, "", $2); print $2}')"
-      [[ "$machine" == *AArch64* ]] || fail_check "架构错误 $file: ${machine:-unknown}"
+      case "$machine" in *AArch64*|*x86-64*) ;; *) fail_check "架构错误 $file: ${machine:-unknown}" ;; esac
       readelf --version-info "$file" 2>/dev/null | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBC_//' >> "$TMP/glibc.versions" || true
       readelf --version-info "$file" 2>/dev/null | grep -oE 'GLIBCXX_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBCXX_//' >> "$TMP/glibcxx.versions" || true
       readelf --version-info "$file" 2>/dev/null | grep -oE 'CXXABI_[0-9]+(\.[0-9]+)+' | sed 's/^CXXABI_//' >> "$TMP/cxxabi.versions" || true
@@ -164,7 +164,7 @@ if [[ -n "$ONLY_DEB" || ( -z "$ONLY_DEB" && -n "${DEB:-}" ) ]]; then
       CONTROL="$(dpkg-deb --field "$DEB")"
       grep -Fx "Package: $PACKAGE_NAME" <<<"$CONTROL" >/dev/null || fail_check "包名错误"
       grep -Fx "Version: $VERSION" <<<"$CONTROL" >/dev/null || fail_check "版本错误"
-      grep -Fx 'Architecture: arm64' <<<"$CONTROL" >/dev/null || fail_check "架构错误"
+      grep -Ex 'Architecture: (arm64|amd64)' <<<"$CONTROL" >/dev/null || fail_check "架构错误"
       grep -F 'Backend security tests were not run for this demo artifact.' <<<"$CONTROL" >/dev/null || fail_check "缺少 Demo 用途边界声明"
       CONTENTS="$(dpkg-deb --contents "$DEB")"
       for item in \

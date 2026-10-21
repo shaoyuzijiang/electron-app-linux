@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/output/linux"
 
-if [[ "$(uname -m)" != "aarch64" ]]; then
-  echo "当前仅支持 aarch64，实际架构: $(uname -m)"
+if [[ "$(uname -m)" != "aarch64" && "$(uname -m)" != "x86_64" ]]; then
+  echo "当前仅支持 aarch64 / x86_64，实际架构: $(uname -m)"
   exit 2
 fi
 

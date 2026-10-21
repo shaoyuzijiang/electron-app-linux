@@ -6,7 +6,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Electron 版本单一来源：package.json（升级 Electron 只改 package.json 一处）
 VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
 echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "无法从 package.json 解析 Electron 版本" >&2; exit 1; }
-ARCHIVE="$ROOT/vendor/electron-v${VERSION}-linux-arm64.zip"
+# 目标架构（arm64 | x64），默认 arm64
+EARCH="${TARGET_ARCH:-arm64}"
+case "$EARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) echo "TARGET_ARCH 仅支持 arm64|x64" >&2; exit 1 ;; esac
+ARCHIVE="$ROOT/vendor/electron-v${VERSION}-linux-${EARCH}.zip"
 PACKAGE_DIR="$ROOT/node_modules/electron"
 DIST_DIR="$PACKAGE_DIR/dist"
 PATH_FILE="$PACKAGE_DIR/path.txt"
@@ -26,7 +29,7 @@ trap rollback EXIT INT TERM
 
 [[ "$(id -u)" -ne 0 ]] || fail "禁止使用 root/sudo"
 [[ "$(uname -s)" == "Linux" ]] || fail "仅支持 Linux"
-[[ "$(uname -m)" == "aarch64" ]] || fail "需要 aarch64，当前为 $(uname -m)"
+[[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（目标 ${EARCH}），当前为 $(uname -m)"
 for command in unzip readelf; do command -v "$command" >/dev/null 2>&1 || fail "缺少 $command"; done
 [[ -f "$ARCHIVE" ]] || fail "缺少离线运行时: $ARCHIVE"
 [[ -d "$PACKAGE_DIR" ]] || fail "请先执行离线 npm ci"
@@ -38,7 +41,7 @@ mkdir -p "$STAGE"
 unzip -q "$ARCHIVE" -d "$STAGE"
 for item in electron chrome-sandbox resources locales; do [[ -e "$STAGE/$item" ]] || fail "ZIP 缺少顶层 $item"; done
 MACHINE="$(readelf -h "$STAGE/electron" | awk -F: '/Machine:/ {gsub(/^[[:space:]]+/, "", $2); print $2}')"
-[[ "$MACHINE" == *AArch64* ]] || fail "Electron 不是 AArch64: $MACHINE"
+[[ "$MACHINE" == *"${ELF_ARCH}"* ]] || fail "Electron 架构不是 ${ELF_ARCH}: $MACHINE"
 chmod +x "$STAGE/electron" "$STAGE/chrome-sandbox" "$STAGE/chrome_crashpad_handler" 2>/dev/null || true
 
 rm -rf "$BACKUP" "$PATH_BACKUP"

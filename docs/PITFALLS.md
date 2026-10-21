@@ -259,6 +259,30 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 
 ---
 
+### 31. `set -o pipefail` + glob 不匹配的 `ls` 管道 → 脚本静默退出（无任何报错）
+
+- **症状**：脚本走到一半直接消失，无错误输出、无失败信息，"上一个产物"看起来没变。
+- **原因**：`set -Eeuo pipefail` 下，`count="$(ls 不匹配的glob 2>/dev/null | wc -l)"` ——
+  `2>/dev/null` 只吞掉了 stderr，**ls 的非零退出码仍经 pipefail 传染整条管道**，
+  命令替换子 shell 立即退出，`set -e` 让整个脚本终止。
+- **解决**：glob 可能不匹配的统计/取值管道一律 `{ ls ... 2>/dev/null || true; } | wc -l`。
+- **教训**：`2>/dev/null` 只屏蔽输出不屏蔽退出码；pipefail 体系里"探测类"管道
+  必须显式 `|| true`。排查特征：`bash -x` 时脚本在探测行后无输出即消失。
+
+---
+
+### 32. macOS 本地组装 DEB 的 GNU/BSD 差异（第二弹）
+
+- **症状 1**：`install -D -m 0644 src dst` 报 "install: target directory ... does not exist"
+  —— BSD install 无 GNU `-D`（自动建父目录）扩展。
+- **解决**：GNU `-D` 在父目录已预先 `mkdir -p` 时本就多余，直接去掉即可兼容两端。
+- **症状 2**：brew 的 `dpkg-deb` 只能打包/解包（`-b/-R/--info`），不能 `dpkg -i` 安装
+  （提示 not configured to install software）——本地验证 DEB 结构够用，装包仍需真机。
+- **教训**：跨 GNU/BSD 的构建脚本，`install`/`cp`/`find`/`sed`/`readarray` 都是雷区
+  （坑 30 为第一弹）；写法按 BSD 兜底即可两端兼容。
+
+---
+
 ## 五、快速定位索引
 
 | 症状 | 优先查 |
@@ -273,6 +297,8 @@ Linux SDK 3.26 的 C++ 接口面比 3.43 小很多，以下接口在源码层被
 | 切页/退出刷 webview-hide 报错 | 坑 25（能力门禁 + 异步等待） |
 | push 被拒 | 坑 17、21（浅克隆/仓库损坏） |
 | CI 失败 | 坑 18、22、26（electron 元数据 / YAML / 隐式发布） |
+| 脚本静默退出 | 坑 31（pipefail + glob） |
+| mac 上构建报错 | 坑 30、32（GNU/BSD 差异） |
 | mac 报"已损坏" | 坑 27（ad-hoc 签名兜底） |
 | Release 资产互删/并发发布 | 坑 28、29（后缀隔离清理 / 幂等创建） |
 | 脚本在 mac 上跑不了 | 坑 30（GNU/BSD 差异） |

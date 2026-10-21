@@ -92,7 +92,7 @@ jobs:
           gh release upload latest "dist-demo/$ASCII_NAME" --clobber
           # 清理旧 DEB（按 id 操作；资产名可能以 - 开头，按名传参会误当选项）
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
-            --jq '.assets[] | select(.name | endswith(".deb")) | "\(.id)\t\(.name)"' | \
+            --jq '.assets[] | select(.name | endswith("-arm64.deb")) | "\(.id)\t\(.name)"' | \
           while IFS=$'\t' read -r assetId assetName; do
             if [[ "$assetName" != "$ASCII_NAME" ]]; then
               gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null

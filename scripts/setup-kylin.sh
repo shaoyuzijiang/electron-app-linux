@@ -3,14 +3,15 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# vendor 下应恰好有一个 Linux SDK 归档；版本号从文件名解析（升级 SDK 只需替换该文件）
-SDK_ARCHIVE_MATCHES=()
-if compgen -G "$ROOT/vendor/TMSDK_*_arm64_default.publish.tar.gz" >/dev/null; then
-  readarray -t SDK_ARCHIVE_MATCHES < <(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz)
-fi
-[[ ${#SDK_ARCHIVE_MATCHES[@]} -eq 1 && -f "${SDK_ARCHIVE_MATCHES[0]}" ]] \
-  || fail "vendor/ 下应恰好有一个 TMSDK_*_arm64_default.publish.tar.gz，当前 ${#SDK_ARCHIVE_MATCHES[@]} 个"
-ARCHIVE="${SDK_ARCHIVE_MATCHES[0]}"
+# 目标架构（arm64 | x64），默认 arm64；SDK 归档命名段：arm64 -> arm64；x64 -> x86_64
+TARGET_ARCH="${TARGET_ARCH:-arm64}"
+case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64" ;; x64) HOST_ARCH="x86_64" ;; *) echo "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" >&2; exit 1 ;; esac
+SDK_ARCH_NAME="${TARGET_ARCH}"; [[ "$SDK_ARCH_NAME" == "x64" ]] && SDK_ARCH_NAME="x86_64"
+# vendor 下应恰好有一个对应架构的 Linux SDK 归档；版本号从文件名解析（升级 SDK 只需替换该文件）
+SDK_ARCHIVE_COUNT="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
+ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
+[[ "$SDK_ARCHIVE_COUNT" -eq 1 && -f "$ARCHIVE" ]] \
+  || fail "vendor/ 下应恰好有一个 TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz，当前 ${SDK_ARCHIVE_COUNT:-0} 个"
 SDK_ARCHIVE_BASE="$(basename "$ARCHIVE" .tar.gz)"
 SDK_VERSION="$(echo "$SDK_ARCHIVE_BASE" | cut -d_ -f3)"
 BUILD_ONLY=0
@@ -49,7 +50,10 @@ bash "$ROOT/scripts/check.sh" || fail "麒麟构建环境不满足要求"
 STAGE="检查系统"
 [[ "$(id -u)" -ne 0 ]] || fail "禁止使用 root/sudo 运行，请在目标桌面普通用户下执行"
 [[ "$(uname -s)" == "Linux" ]] || fail "只能在 Linux 上运行"
-[[ "$(uname -m)" == "aarch64" ]] || fail "需要 aarch64，当前为 $(uname -m)"
+# 目标架构（arm64 | x64），默认 arm64；x64 需 x86 银河麒麟 V10 基线机
+
+case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64" ;; x64) HOST_ARCH="x86_64" ;; *) fail "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" ;; esac
+[[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（构建目标 ${TARGET_ARCH}），当前为 $(uname -m)"
 [[ -f /etc/os-release ]] || fail "缺少 /etc/os-release"
 grep -Eiq 'kylin|银河麒麟' /etc/os-release || fail "正式构建只允许银河麒麟基线机"
 grep -Eiq 'V10|VERSION_ID="?10' /etc/os-release || fail "正式构建要求银河麒麟 V10"
@@ -72,7 +76,7 @@ GLIBC_VERSION="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
 
 STAGE="校验供应包"
 ELECTRON_VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
-[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" ]] || fail "缺少离线 Electron 运行时 (v${ELECTRON_VERSION})"
+[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-${TARGET_ARCH}.zip" ]] || fail "缺少离线 Electron 运行时 (v${ELECTRON_VERSION} ${TARGET_ARCH})"
 [[ -f "$ROOT/vendor/node-v${ELECTRON_VERSION}-headers.tar.gz" ]] || fail "缺少离线 Electron headers (v${ELECTRON_VERSION})"
 [[ -d "$ROOT/vendor/npm-cache/_cacache" ]] || fail "缺少 npm 离线缓存"
 if ! tar -tzf "$ARCHIVE" | awk -F/ '$1 == "" { exit 1 } { for (i=1; i<=NF; i++) if ($i == "..") exit 1 }'; then
@@ -105,9 +109,11 @@ rm -rf "$OUTPUT_BACKUP" "$INCLUDE_BACKUP"
 [[ ! -e "$ROOT/output/linux" ]] || mv "$ROOT/output/linux" "$OUTPUT_BACKUP"
 [[ ! -e "$ROOT/native/include" ]] || mv "$ROOT/native/include" "$INCLUDE_BACKUP"
 STAGE="准备腾讯会议 SDK"
-bash "$ROOT/scripts/prepare-sdk.sh" "$SDK_DIR"
+export SDK_ARCH="$SDK_ARCH_NAME" # 供 prepare-sdk 选择对应架构归档
+bash "$ROOT/scripts/prepare-sdk.sh" "$SDK_DIR" # SDK_ARCH 由上方导出
 STAGE="编译原生 addon"
-bash "$ROOT/scripts/build-native.sh"
+export TARGET_ARCH # 供 build-native 选择目标架构
+bash "$ROOT/scripts/build-native.sh" # TARGET_ARCH 由上方导出
 STAGE="源码校验"
 npm run verify:platform-contract
 STAGE="构建产物检查"

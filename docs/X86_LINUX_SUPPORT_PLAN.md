@@ -83,7 +83,41 @@
 - 验收：**x86 Linux 使用方式与 ARM64 完全一致**——同一入口（GitHub Releases）、
   同一安装方式（`sudo dpkg -i`）、同一桌面图标启动、同一组功能
 
-## 七、验收标准（DoD）
+## 八、实施结果（阶段 A，本地验证 2026-10-21）
+
+> 分支 `feat/x86-linux`（**未推送 GitHub**，按约定本地先行）。10 文件改动。
+
+### 8.1 已完成与实测
+
+| 项 | 结果 |
+|---|---|
+| main.js x64 分派（复用 adapter） | ✅ |
+| binding.gyp linux/x64 条件块 | ✅（本机无法编 Linux addon，真编在基线机做） |
+| prepare-sdk 按 SDK_ARCH 双架构 | ✅ 实测：arm64→ARM aarch64 ELF / x86_64→x86-64 ELF |
+| build-deb.sh LINUX_ARCH 参数化 | ✅ 实测组装两种 DEB |
+| x64 DEB 本地出包 | ✅ 265MB；`dpkg-deb` 验证 Architecture=amd64、SDK lib 与 electron 均 x86-64、desktop/adapter 结构完整 |
+| **arm64 DEB 回归** | ✅ 全真素材组装成功，Architecture=arm64、SDK lib ARM aarch64 |
+| 门禁回归 | ✅ `verify:platform-contract` 全绿 |
+| update-linux-sdk.sh 双架构 | ✅ `--arch x86_64` dry-run + 非法 arch 拒绝 |
+| CI（build-all.yml） | ✅ 新增 linux-deb-x64 job：addon 未就位时 `::warning` 跳过组装（OUTPUT_EXISTS 门控），不阻塞其他平台；arm64/x64 清理后缀隔离（`-arm64.deb` / `-x64.deb`，坑 28 对策） |
+
+**说明**：本地 x64 DEB 内的 addon 为 arm64 占位文件（本机无 Linux 编译途径），
+仅验证打包流水线与结构；**真 x64 addon 必须由 x86 麒麟基线机产出（阶段 B，卡点 K1 未解）**。
+
+### 8.2 实施中新踩的坑（已回写 PITFALLS）
+
+- 坑 31：`set -o pipefail` + glob 不匹配的 `ls` 管道 → 脚本静默退出
+  （prepare-sdk/setup-kylin/update-linux-sdk 三处同款，已统一 `{ ls … \|\| true; }`）
+- 坑 32：macOS BSD `install` 无 `-D`（build-deb.sh 已去 `-D`）；brew `dpkg-deb` 只能打包不能安装
+
+### 8.3 待办（阶段 B/C）
+
+- [ ] K1：x86 麒麟基线机 → `TARGET_ARCH=x64 bash scripts/build-native.sh` → 回传
+      `packaging/prebuilt/wemeet_electron_sdk.x64.node`（**届时删除 arm64 占位**）
+- [ ] K4：electron-v33.4.11-linux-x64.zip 与 x86 SDK 归档上传 vendor-supplies + 重算 SHA256SUMS
+- [ ] x64 job 首跑全绿（main push 或手动触发）
+- [ ] K2：x86 真机全量冒烟（LINUX_TEST_PLAN）
+- [ ] 本分支评审后合入 main（首次 main push 将跑 4 个 Linux/mac/win job）
 
 - [ ] arm64 三端 CI 全绿（与改造前对照，零回归）
 - [ ] x64 job 全绿并稳定产出 `-x64.deb`

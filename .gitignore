@@ -33,3 +33,5 @@ wemeet_sdk/mac/Frameworks/arm64/*
 !wemeet_sdk/mac/Frameworks/x86_64/
 wemeet_sdk/mac/Frameworks/x86_64/*
 !wemeet_sdk/mac/Frameworks/x86_64/wemeet_electron_sdk.node
+# x86 链路实施期生成物（2026-10-21）
+native/include/

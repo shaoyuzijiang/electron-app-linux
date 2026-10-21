@@ -8,12 +8,20 @@ APP_HOME="opt/$PACKAGE_NAME"
 VERSION="$(node -p "require('./package.json').version")"
 # Electron 版本单一来源：package.json
 ELECTRON_VERSION="$(node -p "require('./package.json').devDependencies.electron")"
+# 目标架构（arm64 | x64），默认 arm64。
+#   x64 -> DEB Architecture: amd64（Debian 规范），产物名后缀 -x64.deb（与 win 命名对齐）
+LINUX_ARCH="${LINUX_ARCH:-arm64}"
+case "$LINUX_ARCH" in
+  arm64) DEB_ARCH="arm64"; ARCH_SUFFIX="arm64" ;;
+  x64)   DEB_ARCH="amd64"; ARCH_SUFFIX="x64" ;;
+  *) fail "LINUX_ARCH 仅支持 arm64|x64: $LINUX_ARCH" ;;
+esac
 BUILD_DATE="$(date +%Y%m%d)"
 OUT_DIR="$ROOT/dist-demo"
-# 命名规范统一：腾讯会议SDK Demo-<版本>-<日期>-arm64.deb
+# 命名规范统一：腾讯会议SDK Demo-<版本>-<日期>-<arm64|x64>.deb
 # （与 Mac/Windows 下载页完全一致；GitHub Release 资产名因平台限制
 #   不支持中文/空格，CI 上传时会自动派生 ASCII 名，见 build-deb.yml）
-ARTIFACT="$OUT_DIR/腾讯会议SDK Demo-${VERSION}-${BUILD_DATE}-arm64.deb"
+ARTIFACT="$OUT_DIR/腾讯会议SDK Demo-${VERSION}-${BUILD_DATE}-${ARCH_SUFFIX}.deb"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/${PACKAGE_NAME}.XXXXXX")"
 DATA="$WORK"
 CONTROL="$WORK/DEBIAN"
@@ -24,22 +32,22 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 fail() { echo "Demo DEB 构建失败: $*" >&2; exit 1; }
 
-[[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
+[[ "$(uname -s)" == Linux || -n "${WEMEET_CI:-}" ]] || fail "只能在 Linux 构建（云端/非目标机组装请设置 WEMEET_CI=1）"
 [[ "$(uname -m)" == aarch64 || -n "${WEMEET_CI:-}" ]] || fail "本机构建需要 aarch64（云端组装请设置 WEMEET_CI=1）"
 for command in unzip dpkg-deb npm node; do command -v "$command" >/dev/null 2>&1 || fail "缺少命令: $command"; done
-[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" ]] || fail "缺少 Electron ARM64 runtime (v${ELECTRON_VERSION})"
+[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-${LINUX_ARCH}.zip" ]] || fail "缺少 Electron ${LINUX_ARCH} runtime (v${ELECTRON_VERSION})"
 
 required_sdk=(wemeet_electron_sdk.node libwemeetsdk.so libwemeet_base.so Release)
 for item in "${required_sdk[@]}"; do [[ -e "$SDK_SOURCE/$item" ]] || fail "缺少本次构建产物: output/linux/$item"; done
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR" "$CONTROL" "$DATA/$APP_HOME/app" "$DATA/$APP_HOME/runtime" "$DATA/usr/bin" "$DATA/usr/share/applications"
-unzip -q "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" -d "$DATA/$APP_HOME/runtime"
+unzip -q "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-${LINUX_ARCH}.zip" -d "$DATA/$APP_HOME/runtime"
 chmod 0755 "$DATA/$APP_HOME/runtime/electron" "$DATA/$APP_HOME/runtime/chrome-sandbox" 2>/dev/null || true
 install -m 0644 "$ROOT/renderer/assets/app.png" "$DATA/$APP_HOME/runtime/resources/app.png"
 
 for relative in main.js main-darwin-win32.js ipc-handlers.js package.json package-lock.json; do
-  install -D -m 0644 "$ROOT/$relative" "$DATA/$APP_HOME/app/$relative"
+  install -m 0644 "$ROOT/$relative" "$DATA/$APP_HOME/app/$relative"
 done
 for directory in backend_api bootstrap common platform renderer sdk_mgmt utils; do
   cp -a "$ROOT/$directory" "$DATA/$APP_HOME/app/$directory"
@@ -74,7 +82,7 @@ done
 cat > "$CONTROL/control" <<EOF
 Package: $PACKAGE_NAME
 Version: $VERSION
-Architecture: arm64
+Architecture: ${DEB_ARCH}
 Section: net
 Priority: optional
 Maintainer: Tencent Meeting SDK Demo Team <noreply@example.invalid>

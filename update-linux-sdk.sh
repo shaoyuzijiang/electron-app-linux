@@ -5,7 +5,7 @@
 # 与 update-mac-sdk.sh / update-win-sdk.sh 对标，完成 SDK 分发包到项目的更新：
 #   1. 校验分发包结构 + 从文件名解析版本号
 #   2. 备份 vendor/ 旧 SDK 归档到 vendor/_backup/
-#   3. 替换 vendor/TMSDK_*_arm64_default.publish.tar.gz（唯一归档，先删后拷）
+#   3. 替换 vendor/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz（唯一归档，先删后拷）
 #   4. 麒麟 V10 环境下自动执行 npm run setup:kylin -- --build-only
 #      （环境体检 → 离线依赖 → prepare-sdk → addon 重编 → 全部门禁）
 #   5. addon 回传：output/linux/wemeet_electron_sdk.node -> packaging/prebuilt/
@@ -13,7 +13,7 @@
 #   6. 输出版本一致性与下一步清单（更新 vendor-supplies / 同步契约 mock 版本）
 #
 # 用法:
-#   ./update-linux-sdk.sh <TMSDK_*_arm64_default.publish.tar.gz | 解压后目录> [选项]
+#   ./update-linux-sdk.sh <TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz | 解压后目录> [选项]
 #
 # 选项:
 #   -y, --yes        跳过确认提示（非交互终端必加）
@@ -53,6 +53,7 @@ show_help() { awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"
 # 参数解析
 #------------------------------------------------------------------------------
 ARG_PKG=""
+SDK_ARCH_SEG="arm64"
 ASSUME_YES=0; DRYRUN=0; DO_REBUILD=1; UPLOAD_HINT=1; DO_ROLLBACK=0; DO_LIST=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRYRUN=1; shift ;;
     --no-rebuild) DO_REBUILD=0; shift ;;
     --no-upload-hint) UPLOAD_HINT=0; shift ;;
+    --arch) shift; SDK_ARCH_SEG="${1:-}"; shift ;;
     --rollback) DO_ROLLBACK=1; shift ;;
     --list-backups) DO_LIST=1; shift ;;
     -h|--help) show_help; exit 0 ;;
@@ -68,11 +70,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+SDK_ARCH_SEG="${SDK_ARCH_SEG:-arm64}"
+case "$SDK_ARCH_SEG" in arm64|x86_64) ;; *) fail "仅支持 --arch arm64|x86_64: $SDK_ARCH_SEG" ;; esac
+
 current_archive() {
   # 兼容 macOS 自带 bash 3.2（无 readarray）：用 ls+wc 统计，要求 vendor 下恰好一个
   local count m
-  count="$(ls "${VENDOR_DIR}"/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | wc -l | tr -d ' ')"
-  m="$(ls "${VENDOR_DIR}"/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | head -1)"
+  count="$( { ls "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
+  m="$( { ls "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
   [[ "${count}" -eq 1 && -n "${m}" ]] && { echo "${m}"; return 0; }
   return 1
 }
@@ -91,9 +96,9 @@ do_rollback() {
   for d in "${BACKUP_ROOT}"/linux-*.tar.gz; do [[ -f "$d" ]] || continue; latest="$d"; done
   [[ -n "${latest}" ]] || fail "没有可用备份"
   local old_count=0
-  old_count="$(ls "${VENDOR_DIR}"/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null | wc -l | tr -d ' ')"
+  old_count="$( { ls "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
   log "回滚: 恢复 $(basename "${latest}")，移除现有 ${old_count} 个归档"
-  rm -f "${VENDOR_DIR}"/TMSDK_*_arm64_default.publish.tar.gz
+  rm -f "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz
   cp "${latest}" "${VENDOR_DIR}/$(basename "${latest}" | sed -E 's/^linux-[0-9]{8}-[0-9]{6}-//')"
   ok "已恢复 vendor/ 归档。请在麒麟构建机上执行: npm run setup:kylin -- --build-only"
   exit 0
@@ -126,8 +131,8 @@ validate_payload() {
 if [[ -f "${ARG_PKG}" && "${ARG_PKG}" == *.tar.gz ]]; then
   PKG_ARCHIVE="$(cd "$(dirname "${ARG_PKG}")" && pwd)/$(basename "${ARG_PKG}")"
   PKG_NAME="$(basename "${PKG_ARCHIVE}")"
-  [[ "${PKG_NAME}" == TMSDK_*_arm64_default.publish.tar.gz ]] \
-    || fail "归档命名应为 TMSDK_*_arm64_default.publish.tar.gz: ${PKG_NAME}"
+  [[ "${PKG_NAME}" == TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz ]] \
+    || fail "归档命名应为 TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz: ${PKG_NAME}"
   NEW_VERSION_FULL="$(echo "${PKG_NAME}" | cut -d_ -f3)"
   [[ "${NEW_VERSION_FULL}" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "无法从文件名解析版本号: ${PKG_NAME}"
   if [[ "${DRYRUN}" -eq 0 ]]; then
@@ -193,8 +198,8 @@ else
     warn "vendor/ 下没有旧归档，跳过备份"
   fi
   # 先删后拷，保证 vendor 下唯一
-  compgen -G "${VENDOR_DIR}/TMSDK_*_arm64_default.publish.tar.gz" >/dev/null && \
-    rm -f "${VENDOR_DIR}"/TMSDK_*_arm64_default.publish.tar.gz
+  compgen -G "${VENDOR_DIR}/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz" >/dev/null && \
+    rm -f "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz
   cp "${PKG_ARCHIVE}" "${VENDOR_DIR}/$(basename "${PKG_ARCHIVE}")"
   ok "已替换 -> vendor/$(basename "${PKG_ARCHIVE}")"
 fi
@@ -252,7 +257,7 @@ echo "   旧 SDK:      ${OLD_VERSION_FULL}"
 echo "   vendor 归档: $(current_archive >/dev/null 2>&1 && basename "$(current_archive)" || echo '未就位')"
 echo ""
 echo "📋 变更:"
-echo "   vendor/TMSDK_*_arm64_default.publish.tar.gz"
+echo "   vendor/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz"
 [[ "${ADDON_BUILT}" -eq 1 ]] && echo "   packaging/prebuilt/wemeet_electron_sdk.arm64.node（已回传）"
 echo ""
 echo "🚀 下一步（缺一不可）:"

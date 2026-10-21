@@ -3,12 +3,15 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK_ROOT="${1:-${WEMEET_SDK_ROOT:-}}"
-# vendor 下应恰好有一个 Linux SDK 归档（文件名含版本号，升级 SDK 只需替换该文件）
-SDK_ARCHIVE_MATCHES=()
-if compgen -G "$ROOT/vendor/TMSDK_*_arm64_default.publish.tar.gz" >/dev/null; then
-  readarray -t SDK_ARCHIVE_MATCHES < <(ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz)
-fi
-SDK_ARCHIVE="${SDK_ARCHIVE_MATCHES[0]:-}"
+# 目标架构（arm64 | x86_64），默认 arm64；SDK 归档命名含架构段：
+#   arm64  -> TMSDK_*_arm64_default.publish.tar.gz
+#   x86_64 -> TMSDK_*_x86_64_default.publish.tar.gz
+SDK_ARCH="${SDK_ARCH:-arm64}"
+case "$SDK_ARCH" in arm64|x86_64) ;; *) echo "SDK_ARCH 仅支持 arm64|x86_64: $SDK_ARCH" >&2; exit 1 ;; esac
+# vendor 下该架构应恰好有一个 SDK 归档（显式传入 SDK_ROOT 时归档不参与本脚本，仅做信息提示）
+# 兼容 macOS bash 3.2（无 readarray）：用 ls+wc 统计
+SDK_ARCHIVE_COUNT="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
+SDK_ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH}_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
 OUTPUT="$ROOT/output/linux"
 INCLUDE="$ROOT/native/include"
 OUTPUT_STAGE="$ROOT/output/.linux-stage.$$"
@@ -19,8 +22,10 @@ cleanup() { rm -rf "$OUTPUT_STAGE" "$INCLUDE_STAGE"; }
 trap cleanup EXIT
 
 [[ -n "$SDK_ROOT" ]] || fail "SDK 准备参数缺失，请执行 npm run setup:kylin"
-[[ ${#SDK_ARCHIVE_MATCHES[@]} -eq 1 && -n "$SDK_ARCHIVE" ]] \
-  || fail "vendor/ 下应恰好有一个 TMSDK_*_arm64_default.publish.tar.gz，当前 ${#SDK_ARCHIVE_MATCHES[@]} 个"
+if [[ -z "${1:-}${WEMEET_SDK_ROOT:-}" ]]; then
+  [[ "$SDK_ARCHIVE_COUNT" -eq 1 && -n "$SDK_ARCHIVE" ]] \
+    || fail "vendor/ 下应恰好有一个 TMSDK_*_${SDK_ARCH}_default.publish.tar.gz，当前 ${SDK_ARCHIVE_COUNT:-0} 个"
+fi
 SDK_ROOT="$(cd "$SDK_ROOT" && pwd)"
 SOURCE_SDK="$SDK_ROOT/SDK"
 SOURCE_DEMO="$SDK_ROOT/Electron_Demo"

@@ -47,7 +47,7 @@ jobs:
           # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
           cd vendor
-          grep -E 'electron-v[0-9]|TMSDK_.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
+          grep -E 'electron-v[0-9]-linux-arm64|TMSDK_.*arm64.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       # 门禁脚本 require('electron') 需要包元数据；--ignore-scripts 跳过了其安装脚本，
@@ -89,12 +89,93 @@ jobs:
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）" || true
           gh release upload latest "dist-demo/$ASCII_NAME" --clobber
+          # 只清理旧 arm64 DEB（不碰 x64 deb / dmg / exe，坑 28：平台+架构隔离）
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
-            --jq '.assets[] | select(.name | endswith(".deb")) | "\(.id)\t\(.name)"' | \
+            --jq '.assets[] | select(.name | endswith("-arm64.deb")) | "\(.id)\t\(.name)"' | \
           while IFS=$'\t' read -r assetId assetName; do
             if [[ "$assetName" != "$ASCII_NAME" ]]; then
               gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
               echo "已清理旧 DEB: $assetName"
+            fi
+          done
+          echo "已发布资产: $ASCII_NAME"
+
+  linux-deb-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 解析 Electron 版本
+        run: echo "ELECTRON_VERSION=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_ENV"
+      - name: 下载 x86_64 供应物
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p vendor
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
+            -p 'TMSDK_*_x86_64_default.publish.tar.gz' -D vendor
+          curl --fail --location --retry 3 -o "vendor/electron-v${ELECTRON_VERSION}-linux-x64.zip" "$base/electron-v${ELECTRON_VERSION}-linux-x64.zip"
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
+          cd vendor
+          grep -E 'electron-v[0-9]-linux-x64|TMSDK_.*x86_64.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+      - name: 补齐 electron 包元数据
+        run: |
+          printf 'electron' > node_modules/electron/path.txt
+          mkdir -p node_modules/electron/dist
+      - name: 门禁测试
+        run: npm run verify:platform-contract
+      - name: 准备 x86_64 SDK 与预编译 addon
+        run: |
+          mkdir -p sdk-extract output/linux
+          tar -xzf vendor/TMSDK_*_x86_64_default.publish.tar.gz -C sdk-extract
+          SDK_ARCH=x86_64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          # x64 预编译 addon 需在 x86 麒麟基线机编译回传（K1）；
+          # 未就位时明确跳过组装（标黄提示），不影响其他平台
+          if [ -f packaging/prebuilt/wemeet_electron_sdk.x64.node ]; then
+            cp packaging/prebuilt/wemeet_electron_sdk.x64.node output/linux/wemeet_electron_sdk.node
+            echo "OUTPUT_EXISTS=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::packaging/prebuilt/wemeet_electron_sdk.x64.node 未就位（需 x86 基线机回传），跳过 x64 DEB 组装"
+            echo "OUTPUT_EXISTS=0" >> "$GITHUB_ENV"
+          fi
+      - name: 组装 x64 DEB
+        if: env.OUTPUT_EXISTS == '1'
+        run: LINUX_ARCH=x64 WEMEET_CI=1 bash scripts/build-deb.sh
+      - name: 校验 DEB
+        if: env.OUTPUT_EXISTS == '1'
+        run: npm run check -- --deb
+      - name: 上传产物
+        if: env.OUTPUT_EXISTS == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-deb
+          path: dist-demo/*.deb
+          if-no-files-found: error
+      - name: 发布到 Release latest（仅 main）
+        if: github.ref == 'refs/heads/main' && env.OUTPUT_EXISTS == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
+          DEB="$(ls dist-demo/*.deb)"
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-x64.deb"
+          cp "$DEB" "dist-demo/$ASCII_NAME"
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "最新安装包（自动构建）" || true
+          gh release upload latest "dist-demo/$ASCII_NAME" --clobber
+          # 只清理旧 x64 DEB（不碰 arm64 deb / dmg / exe）
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | endswith("-x64.deb")) | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r assetId assetName; do
+            if [[ "$assetName" != "$ASCII_NAME" ]]; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null
+              echo "已清理旧 x64 DEB: $assetName"
             fi
           done
           echo "已发布资产: $ASCII_NAME"
