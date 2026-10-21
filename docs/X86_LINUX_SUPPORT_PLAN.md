@@ -125,7 +125,48 @@
 - **待实测确认**：x86 麒麟 V10 的实际 glibc 版本。若 < 2.31，把容器镜像换成
   `ubuntu:18.04`（glibc 2.27，向下兼容面更大）重跑即可——workflow 注释已标注
 
-### 8.4 待办（阶段 B/C）
+### 8.4 实施结果终版（2026-10-21，阶段 A+B 完成）
+
+**CI 过程中修了 4 个问题**（全程记录）：
+
+1. ubuntu:20.04 无 `gh` 包 → 官方 keyring 源安装（已固化进 workflow）
+2. `node-v33.4.11-headers.tar.gz` 供应物从未上传 vendor-supplies → 已补传 + SHA256SUMS
+3. readelf Machine 输出 `X86-64`（大写 X）与校验 `*x86-64*` 大小写不匹配 → 校验改不敏感
+4. `check.sh:13` arm64 归档 glob 的 pipefail 静默退出（坑 31 漏网，x64 job 环境 vendor
+   只有 x86_64 归档时触发）→ 全局补 `|| true`；同款修复 build-deb.sh 描述行
+
+**最终验证（run 39568445076，四 job 全绿）**：
+
+| 项 | 结果 |
+|---|---|
+| 四端 CI | linux-deb / **linux-deb-x64** / mac-dmg / win-nsis 全绿 |
+| Release `latest` | 四资产共存：`…-arm64.deb`、`…-x64.deb`、`…-mac-arm64.dmg`、`…-win-x64.exe`，连续发布互不误删 |
+| x64 DEB 抽查 | addon / SDK lib / electron 三件二进制均 **ELF x86-64**；Architecture=amd64；Version=3.45.100 |
+| addon 真实性 | `wemeet_electron_sdk.x64.node`（435KB）来自 build-addon-x64 run 39565902447 容器产出，非占位 |
+
+### 8.5 x86 机器安装与运行指南
+
+```bash
+# 1. 下载（Releases → latest → tencent-meeting-sdk-demo-<版本>-<日期>-x64.deb）
+sudo dpkg -i tencent-meeting-sdk-demo-*.deb
+# 2. 依赖缺口自动补齐（DEB 已声明 Depends：libc6/libstdc++6/libgtk-3-0/libnss3/libasound2 等）
+sudo apt-get install -f
+# 3. 启动：桌面图标"腾讯会议SDK Demo"，或命令行
+tencent-meeting-sdk-linux-demo
+```
+
+**跑起来的前提**（缺一即用不了，均在真机首次验收时确认）：
+
+| 前提 | 说明 |
+|---|---|
+| glibc ≥ 2.31 | addon 以 ubuntu:20.04（glibc 2.31）编译。**若目标系统 glibc 更低**
+  （如麒麟 x86 V10 实测为 2.28），报 `GLIBC_2.31 not found`，
+  解决：build-addon-x64.yml 容器镜像换 ubuntu:18.04 重编（版本更低向下兼容面更大） |
+| 图形栈 | X11 或 Wayland+XWayland（与 arm64 相同经验，坑 6/7/8 图形三件套） |
+| 依赖库 | `sudo apt-get install -f` 自动补；离线环境需按 Depends 清单预置 |
+| 网络/后端 | 与 arm64 相同（后端 API 动态签发 Token） |
+
+### 8.6 待办（阶段 C）
 
 - [ ] 推送分支 → 手动触发 `build-addon-x64` → 回传 addon 提交（阶段 B 核心步）
 - [ ] K4：electron-v33.4.11-linux-x64.zip 与 x86 SDK 归档上传 vendor-supplies + 重算 SHA256SUMS
