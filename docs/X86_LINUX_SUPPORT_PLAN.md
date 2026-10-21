@@ -110,13 +110,27 @@
   （prepare-sdk/setup-kylin/update-linux-sdk 三处同款，已统一 `{ ls … \|\| true; }`）
 - 坑 32：macOS BSD `install` 无 `-D`（build-deb.sh 已去 `-D`）；brew `dpkg-deb` 只能打包不能安装
 
-### 8.3 待办（阶段 B/C）
+### 8.3 x64 addon 容器化 CI 产出（新增，替代"必须真机编译"）
 
-- [ ] K1：x86 麒麟基线机 → `TARGET_ARCH=x64 bash scripts/build-native.sh` → 回传
-      `packaging/prebuilt/wemeet_electron_sdk.x64.node`（**届时删除 arm64 占位**）
+**结论：x64 addon 不需要 x86 真机编译。** 新增 `.github/workflows/build-addon-x64.yml`
+（仅 `workflow_dispatch` 手动触发，不占 push 额度）：
+
+- `ubuntu:20.04` 容器 = **glibc 2.31 基线**，与 arm64 麒麟基线策略一致（N5）
+- 供应物三件套（x86 SDK 归档 / 离线 Electron headers / SHA256SUMS）均已在
+  `vendor-supplies`，CI 内校验后 `TARGET_ARCH=x64 bash scripts/build-native.sh` 编译
+- 基线防线不放宽：build-native.sh 新增 `ADDON_BASELINE_OVERRIDE` 开关——
+  跳过 Kylin 检查但 **glibc 2.31 检查永远保留**
+- 产物挂 Artifacts `linux-addon-x64`，人工回传
+  `packaging/prebuilt/wemeet_electron_sdk.x64.node` 提交后，deb job 自动激活
+- **待实测确认**：x86 麒麟 V10 的实际 glibc 版本。若 < 2.31，把容器镜像换成
+  `ubuntu:18.04`（glibc 2.27，向下兼容面更大）重跑即可——workflow 注释已标注
+
+### 8.4 待办（阶段 B/C）
+
+- [ ] 推送分支 → 手动触发 `build-addon-x64` → 回传 addon 提交（阶段 B 核心步）
 - [ ] K4：electron-v33.4.11-linux-x64.zip 与 x86 SDK 归档上传 vendor-supplies + 重算 SHA256SUMS
 - [ ] x64 job 首跑全绿（main push 或手动触发）
-- [ ] K2：x86 真机全量冒烟（LINUX_TEST_PLAN）
+- [ ] K2：x86 真机全量冒烟（LINUX_TEST_PLAN）+ 基线 glibc 版本实测
 - [ ] 本分支评审后合入 main（首次 main push 将跑 4 个 Linux/mac/win job）
 
 - [ ] arm64 三端 CI 全绿（与改造前对照，零回归）

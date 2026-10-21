@@ -18,7 +18,13 @@ TARGET_ARCH="${TARGET_ARCH:-arm64}"
 case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) fail "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" ;; esac
 [[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
 [[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（构建目标 ${TARGET_ARCH}），当前 $(uname -m)"
-[[ -f /etc/os-release ]] && grep -Eiq 'kylin|银河麒麟' /etc/os-release && grep -Eiq 'V10|VERSION_ID="?10' /etc/os-release || fail "正式 addon 只允许在银河麒麟 V10 基线机构建"
+# 基线防线：默认仅允许银河麒麟 V10；容器化 CI 构建可设 ADDON_BASELINE_OVERRIDE=1
+# 显式声明基线（glibc 2.31 检查永远保留，不因覆盖而放宽）
+if [[ -n "${ADDON_BASELINE_OVERRIDE:-}" ]]; then
+  echo "基线覆盖模式：${ADDON_BASELINE_OVERRIDE}（Kylin 检查跳过，glibc 检查保留）"
+else
+  [[ -f /etc/os-release ]] && grep -Eiq 'kylin|银河麒麟' /etc/os-release && grep -Eiq 'V10|VERSION_ID="?10' /etc/os-release || fail "正式 addon 只允许在银河麒麟 V10 基线机构建（容器 CI 可设 ADDON_BASELINE_OVERRIDE=<说明>）"
+fi
 GLIBC_VERSION="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
 [[ -z "${CFLAGS:-}${CXXFLAGS:-}${CPPFLAGS:-}${LDFLAGS:-}" ]] || fail "正式构建禁止外部 CFLAGS/CXXFLAGS/CPPFLAGS/LDFLAGS"
 [[ "$GLIBC_VERSION" == 2.31 ]] || fail "正式 addon 必须在 glibc 2.31 基线机构建，当前为 ${GLIBC_VERSION:-unknown}"

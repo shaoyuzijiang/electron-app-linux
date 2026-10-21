@@ -1,0 +1,60 @@
+name: build-addon-x64
+
+# x64 Linux 预编译 addon 产出（无需 x86 真机）：
+#   ubuntu:20.04 容器 = glibc 2.31 基线，与 arm64 麒麟基线策略一致。
+# 产物手动回传 packaging/prebuilt/wemeet_electron_sdk.x64.node 并提交后，
+# build-all.yml 的 linux-deb-x64 job 自动激活出包。
+# 注意：若 x86 麒麟真机实测 glibc < 2.31，把容器镜像改为 ubuntu:18.04 后重跑本 workflow。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安装构建工具
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential python3 curl gh file binutils ca-certificates
+      - name: 下载 x86_64 供应物（SDK 归档 / Electron headers）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p vendor sdk-extract
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
+            -p 'TMSDK_*_x86_64_default.publish.tar.gz' -D vendor
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
+            -p 'node-v*-headers.tar.gz' -D vendor
+          gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
+          cd vendor
+          grep -E 'TMSDK_.*x86_64.*\.tar\.gz$|node-v' SHA256SUMS | sha256sum -c -
+      - name: 安装依赖
+        run: npm ci --include=dev --ignore-scripts
+      - name: 准备 x86_64 SDK
+        run: |
+          tar -xzf vendor/TMSDK_*_x86_64_default.publish.tar.gz -C sdk-extract
+          SDK_ARCH=x86_64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+      - name: 离线安装 Electron headers
+        run: bash scripts/install-electron-headers.sh
+      - name: 编译 x64 addon
+        env:
+          TARGET_ARCH: x64
+          # 容器基线声明：Kylin 检查跳过，glibc 2.31 检查保留（N5 防线不放宽）
+          ADDON_BASELINE_OVERRIDE: ubuntu-20.04-glibc-2.31
+        run: bash scripts/build-native.sh
+      - name: 上传 addon 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-addon-x64
+          path: output/linux/wemeet_electron_sdk.node
+          if-no-files-found: error
