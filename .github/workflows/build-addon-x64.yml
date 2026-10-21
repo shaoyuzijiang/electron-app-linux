@@ -21,11 +21,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: 安装构建工具
+      - name: 安装构建工具（gh 需官方源，ubuntu:20.04 无此包）
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            build-essential python3 curl gh file binutils ca-certificates
+            build-essential python3 curl file binutils ca-certificates git
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+            && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gh
       - name: 下载 x86_64 供应物（SDK 归档 / Electron headers）
         env:
           GH_TOKEN: ${{ github.token }}

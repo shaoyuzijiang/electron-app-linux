@@ -7,10 +7,12 @@ on:
       - main
       - rehearse/electron-app-merge
     # 纯文档改动不触发构建（每次三端构建 ≈130 计费分钟，私有仓库额度有限）；
+    # workflow 文件改动也不触发（workflow 验证靠手动 dispatch 更直接）；
     # 需要手动构建时用 workflow_dispatch
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - '.github/workflows/**'
 
 # 三端发布流水线：
 #   - main push：三端并行构建，各自发布到 Release latest（每平台只保留最新一个资产）
