@@ -59,7 +59,10 @@ node_modules/.bin/node-gyp rebuild \
   --nodedir="$HEADERS"
 [[ -f "$BUILT" ]] || fail "未生成 $BUILT"
 MACHINE="$(readelf -h "$BUILT" | awk -F: '/Machine:/ {gsub(/^[[:space:]]+/, "", $2); print $2}')"
-[[ "$MACHINE" == *"${ELF_ARCH}"* ]] || fail "addon 架构不是 ${ELF_ARCH}: $MACHINE"
+# readelf Machine 命名大小写不一（AArch64 / X86-64），统一大小写不敏感匹配
+if ! echo "$MACHINE" | grep -qi "${ELF_ARCH}"; then
+  fail "addon 架构不是 ${ELF_ARCH}: $MACHINE"
+fi
 cp -f "$BUILT" "$TEMP_ADDON"
 mv -f "$TEMP_ADDON" "$OUT/wemeet_electron_sdk.node"
 
