@@ -557,9 +557,10 @@ git push origin main
 
 ### 10.10 2026-11-03 集成发布记录与回退锚点
 
-- **回退锚点**：远端 `backup/pre-20261103-integration` → `1932b86`；集成代码提交 `1982719`。如发布功能有回归，先保存故障 run 和 assets 清单，经确认后用 `git revert 1982719` 生成新提交（不 `reset --hard` / 强推）；该 revert 再次 push main 仍会触发四端构建并发布。若只想切换为“仅 ARM64 DEB 自动发布”，按 10.7 两步回退流程操作，**不是**整体回退业务代码。
+- **回退锚点**：远端 `backup/pre-20261103-integration` → `1932b86`；集成代码提交 `1982719`，随后 SDK 回退修复提交 `5a1c46b`（中间仅文档提交 `9d7547d`）。若整体回退业务代码，先保存 run/资产清单，在干净工作区按**逆序**运行 `git revert --no-edit 5a1c46b 1982719` 并检查 diff/文档，再推送新提交；不 `reset --hard` / 强推。revert 的 main push 仍会构建四端并发布；仅想回退到“ARM64 DEB 自动发布”则按 10.7，不要混淆两种回退。
 - 本轮未提交：本地 `dist-demo/` 安装包、`vendor/` SDK/运行时缓存、`backend_api/docs/client-update-api.md`（内部接口规格，`.gitignore` 已排除）；Mac/Win 与 Linux 安装包已排除 `backend_api/docs/` 和后端单元测试代码。原先就已入库的两个 Linux 预编译 addon、公开 Release 中的私有 SDK 供应物依然可被公网访问，**再分发授权仍需业务方确认**；历史上传不会因本轮忽略规则而消失。
 - 本地验证：`npm run verify`（契约、更新安全用例、后端安全测试）、Shell/JS 语法、Git diff、YAML AST 触发条件均通过；`build-all` 的四端 CI run **41567982118** 对应 `1982719`，四 job 全绿，四资产出现在 `latest`（20261103）；x64 DEB 独立下载后验证 `Architecture: amd64`、ELF addon 为 x86-64、包内无后端内部文档和单测；mac DMG `hdiutil verify` 和 `codesign --verify --deep --strict` 均通过。
+- 后续 `5a1c46b` 增加 Linux SDK 归档/addon 成对备份回退，在隔离目录模拟升级回滚通过；最终四端 CI run **41569368930** 对应 `5a1c46b`，四 job 全绿，`latest` 四资产已更新。最终 x64 DEB 独立下载检查为 `Architecture: amd64`、无后端内部 docs，SHA-256 `71452bfb627f92070db9248fd7874ffb1fb343b7b424f10464b024dd5c732bc8`。
 - **未验证边界**：Windows 安装/运行、x86/ARM 麒麟桌面摄像头与麦克风、更新服务在线发布者签名验证均未在本轮完成；“四 job 全绿”不等于实体设备功能完成。四端并行上传不是事务，若某 job 发布失败可产生混合版本资产，需核对每个平台文件名和实际 run 后再对外使用。
 
 ## 附：完成定义（DoD，本轮范围）

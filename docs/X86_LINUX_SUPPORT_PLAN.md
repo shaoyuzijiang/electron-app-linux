@@ -212,4 +212,4 @@ tencent-meeting-sdk-linux-demo
 
 ### 9.4 2026-11-03 构建与包结构回归（非真机结果）
 
-`main` 提交 `1982719` / run `41567982118`：Linux ARM64/x64、macOS ARM64、Windows x64 四 job 全绿，Release `latest` 有日期为 20261103 的四资产。独立下载 `-x64.deb` 后，`dpkg-deb` 确认 `Architecture: amd64`，包内 addon 为 ELF x86-64，包含更新器且不含后端内部接口文档与单测。该发布 x64 DEB 的 SHA-256 为 `a0fb368633c6a1b5da116382b8ac4bde0727883eaf96c2871d4dfd079812e478`。之前本地 20261027 包和 Release 20261021 包都是**不同构建批次**；在云服务器测试应使用明确指定的批次并重新验哈希。尚无来自目标麒麟 x86 真机的摄像头/麦克风与 GPU 兼容性证据。
+`main` 提交 `1982719` / run `41567982118`：Linux ARM64/x64、macOS ARM64、Windows x64 四 job 全绿，Release `latest` 有日期为 20261103 的四资产。独立下载 `-x64.deb` 后，`dpkg-deb` 确认 `Architecture: amd64`，包内 addon 为 ELF x86-64，包含更新器且不含后端内部接口文档与单测。该批次 x64 DEB 的 SHA-256 为 `a0fb368633c6a1b5da116382b8ac4bde0727883eaf96c2871d4dfd079812e478`（**已被下一批同名资产覆盖，仅作历史记录**）。后续 `main` 提交 `5a1c46b` / run `41569368930` 四 job 亦全绿，目前 `latest` 中 20261103 x64 DEB 的 SHA-256 为 `71452bfb627f92070db9248fd7874ffb1fb343b7b424f10464b024dd5c732bc8`。本地 20261027 包和旧 Release 20261021 包均为**不同构建批次**；在云服务器测试应使用明确指定的批次并重新验哈希。尚无来自目标麒麟 x86 真机的摄像头/麦克风与 GPU 兼容性证据。
