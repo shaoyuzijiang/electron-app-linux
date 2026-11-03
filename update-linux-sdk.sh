@@ -105,7 +105,14 @@ do_rollback() {
   log "回滚: 恢复 $(basename "${latest}")，移除现有 ${old_count} 个归档"
   rm -f "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz
   cp "${latest}" "${VENDOR_DIR}/$(basename "${latest}" | sed -E 's/^linux-[0-9]{8}-[0-9]{6}-//')"
-  ok "已恢复 vendor/ 归档。请在麒麟构建机上执行: LINUX_ARCH=${LINUX_ARCH} npm run setup:kylin -- --build-only"
+  local addon_backup="${latest%.tar.gz}.addon.node"
+  if [[ -f "$addon_backup" ]]; then
+    cp "$addon_backup" "${PROJECT_DIR}/packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node"
+    ok "已恢复该 SDK 对应的预编译 addon"
+  else
+    warn "无 addon 备份：发布前必须在目标麒麟基线机重编并回传对应架构 addon"
+  fi
+  ok "已恢复 vendor/ 归档。核查 SHA256SUMS / Release 供应物，并按需执行: LINUX_ARCH=${LINUX_ARCH} npm run setup:kylin -- --build-only"
   exit 0
 }
 
@@ -198,7 +205,11 @@ else
   if OLD_ARCHIVE="$(current_archive)"; then
     # 备份保留原始 TMSDK_* 文件名（回滚时据此还原规范名，保证 vendor 下唯一）
     cp "${OLD_ARCHIVE}" "${BACKUP_ROOT}/linux-${TS}-$(basename "${OLD_ARCHIVE}")"
-    ok "已备份 -> vendor/_backup/linux-${TS}-$(basename "${OLD_ARCHIVE}")"
+    if [[ -f "${PROJECT_DIR}/packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node" ]]; then
+      cp "${PROJECT_DIR}/packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node" \
+        "${BACKUP_ROOT}/linux-${TS}-$(basename "${OLD_ARCHIVE}" .tar.gz).addon.node"
+    fi
+    ok "已备份 -> vendor/_backup/linux-${TS}-$(basename "${OLD_ARCHIVE}")（含存在的旧 addon）"
   else
     warn "vendor/ 下没有旧归档，跳过备份"
   fi
@@ -268,8 +279,9 @@ echo ""
 echo "🚀 下一步（缺一不可）:"
 echo "   1. 检查 scripts/validate-linux-adapter.js 的 GetSDKVersion mock 是否需同步为 ${NEW_VERSION_FULL}"
 if [[ "$UPLOAD_HINT" -eq 1 ]]; then
-  echo "   2. 上传供应物（覆盖）:"
-  echo "      gh release upload vendor-supplies vendor/$(basename "$(current_archive)" 2>/dev/null || echo '<归档名>') --clobber"
+  echo "   2. 先核对公开仓库的 SDK 再分发授权，再将新归档上传 vendor-supplies。"
+  echo "      同步重算并上传 SHA256SUMS（含其它供应物的既有条目，不得只上传新归档）。"
+  echo "      注意：Release 是 PUBLIC；SDK 版本升级后必须重编、回传对应架构 addon。"
 else
   echo "   2. 已按 --no-upload-hint 隐藏供应物上传命令"
 fi
