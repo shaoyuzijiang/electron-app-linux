@@ -209,3 +209,7 @@ tencent-meeting-sdk-linux-demo
 - 如当前仅有 Apple Silicon Mac，建议借用一台 Intel/AMD 笔记本或申请可访问的 x86 物理测试机做最终设备验收；它**无需编译 addon**，只安装现有 DEB。若借不到设备，先做云端 x86 VM 基础测试，并如实保留音视频实体设备未验收的风险项。
 
 `docs/LINUX_TEST_PLAN.md` 原针对 ARM64；本次已将其中不存在的 `npm run doctor` 修正为 `bash scripts/check.sh`。其非 `--deb` 模式要求麒麟 V10 且 glibc 恰好 2.31，不可用来否定 glibc 更高系统的兼容性；x86 真机测试以本节为准。若需降基线，按 8.5 核对整个 DEB 与所有 ELF，不能仅重编 addon。
+
+### 9.4 2026-11-03 构建与包结构回归（非真机结果）
+
+`main` 提交 `1982719` / run `41567982118`：Linux ARM64/x64、macOS ARM64、Windows x64 四 job 全绿，Release `latest` 有日期为 20261103 的四资产。独立下载 `-x64.deb` 后，`dpkg-deb` 确认 `Architecture: amd64`，包内 addon 为 ELF x86-64，包含更新器且不含后端内部接口文档与单测。该发布 x64 DEB 的 SHA-256 为 `a0fb368633c6a1b5da116382b8ac4bde0727883eaf96c2871d4dfd079812e478`。之前本地 20261027 包和 Release 20261021 包都是**不同构建批次**；在云服务器测试应使用明确指定的批次并重新验哈希。尚无来自目标麒麟 x86 真机的摄像头/麦克风与 GPU 兼容性证据。
