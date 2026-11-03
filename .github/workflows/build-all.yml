@@ -6,7 +6,7 @@ on:
     branches:
       - main
       - rehearse/electron-app-merge
-    # 纯文档改动不触发构建（每次三端构建 ≈130 计费分钟，私有仓库额度有限）；
+    # 纯文档改动不触发构建（四端构建消耗 Actions 额度）；
     # workflow 文件改动也不触发（workflow 验证靠手动 dispatch 更直接）；
     # 需要手动构建时用 workflow_dispatch
     paths-ignore:
@@ -24,6 +24,11 @@ on:
 #      （277b09a 为本改造前版本：build-all 只做演练构建、build-deb 独占发布）
 permissions:
   contents: write
+
+concurrency:
+  group: build-all-${{ github.ref }}
+  # 不取消已开始发布的批次，避免旧 run 只发布部分资产就被新 run 中止
+  cancel-in-progress: false
 
 jobs:
   linux-deb:
@@ -49,7 +54,12 @@ jobs:
           # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
           cd vendor
-          grep -E 'electron-v[0-9]-linux-arm64|TMSDK_.*arm64.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
+          sdk="$(basename "$(ls TMSDK_*_arm64_default.publish.tar.gz)")"
+          for target in "electron-v${ELECTRON_VERSION}-linux-arm64.zip" "$sdk"; do
+            line="$(awk -v file="$target" '$2 == file || $2 == "*" file { print }' SHA256SUMS)"
+            [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] || { echo "SHA256SUMS 中目标条目不唯一: $target" >&2; exit 1; }
+            printf '%s\n' "$line" | sha256sum -c -
+          done
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       # 门禁脚本 require('electron') 需要包元数据；--ignore-scripts 跳过了其安装脚本，
@@ -59,7 +69,7 @@ jobs:
           printf 'electron' > node_modules/electron/path.txt
           mkdir -p node_modules/electron/dist
       - name: 门禁测试
-        run: npm run verify:platform-contract
+        run: npm run verify
       - name: 准备 SDK 与预编译 addon
         run: |
           mkdir -p sdk-extract output/linux
@@ -79,7 +89,7 @@ jobs:
       # 发布到 Release latest（仅 main）。清理只删旧 *.deb，不碰 dmg/exe（三端资产共存）。
       # 资产删除一律按 id 操作（资产名可能以 - 开头，按名传参会误当选项）。
       - name: 发布到 Release latest（仅 main）
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -122,7 +132,12 @@ jobs:
           curl --fail --location --retry 3 -o "vendor/electron-v${ELECTRON_VERSION}-linux-x64.zip" "$base/electron-v${ELECTRON_VERSION}-linux-x64.zip"
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
           cd vendor
-          grep -E 'electron-v[0-9]-linux-x64|TMSDK_.*x86_64.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
+          sdk="$(basename "$(ls TMSDK_*_x86_64_default.publish.tar.gz)")"
+          for target in "electron-v${ELECTRON_VERSION}-linux-x64.zip" "$sdk"; do
+            line="$(awk -v file="$target" '$2 == file || $2 == "*" file { print }' SHA256SUMS)"
+            [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] || { echo "SHA256SUMS 中目标条目不唯一: $target" >&2; exit 1; }
+            printf '%s\n' "$line" | sha256sum -c -
+          done
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       - name: 补齐 electron 包元数据
@@ -130,12 +145,12 @@ jobs:
           printf 'electron' > node_modules/electron/path.txt
           mkdir -p node_modules/electron/dist
       - name: 门禁测试
-        run: npm run verify:platform-contract
+        run: npm run verify
       - name: 准备 x86_64 SDK 与预编译 addon
         run: |
           mkdir -p sdk-extract output/linux
           tar -xzf vendor/TMSDK_*_x86_64_default.publish.tar.gz -C sdk-extract
-          SDK_ARCH=x86_64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          LINUX_ARCH=x64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
           # x64 预编译 addon 需在 x86 麒麟基线机编译回传（K1）；
           # 未就位时明确跳过组装（标黄提示），不影响其他平台
           if [ -f packaging/prebuilt/wemeet_electron_sdk.x64.node ]; then
@@ -159,7 +174,7 @@ jobs:
           path: dist-demo/*.deb
           if-no-files-found: error
       - name: 发布到 Release latest（仅 main）
-        if: github.ref == 'refs/heads/main' && env.OUTPUT_EXISTS == '1'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.OUTPUT_EXISTS == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -191,13 +206,14 @@ jobs:
           node-version: '22'
       - name: 下载 mac Framework 供应物
         run: |
-          mkdir -p wemeet_sdk/mac/Frameworks/arm64 wemeet_sdk/mac/Frameworks/x86_64
+          mkdir -p wemeet_sdk/mac/Frameworks/arm64
           curl --fail --location --retry 3 -o /tmp/TMSDK.framework.arm64.zip "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/TMSDK.framework.arm64.zip"
           # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
           curl --fail --location --retry 3 -o /tmp/SHA256SUMS "https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies/SHA256SUMS"
-          grep 'TMSDK.framework.arm64.zip' /tmp/SHA256SUMS | (cd /tmp && shasum -a 256 -c -)
+          line="$(awk '$2 == "TMSDK.framework.arm64.zip" || $2 == "*TMSDK.framework.arm64.zip" { print }' /tmp/SHA256SUMS)"
+          [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] || { echo 'SHA256SUMS 中 ARM Framework 条目不唯一' >&2; exit 1; }
+          printf '%s\n' "$line" | (cd /tmp && shasum -a 256 -c -)
           ditto -x -k /tmp/TMSDK.framework.arm64.zip wemeet_sdk/mac/Frameworks/arm64/
-          ln -s ../arm64/TMSDK.framework wemeet_sdk/mac/Frameworks/x86_64/TMSDK.framework
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       - name: 编译原生 addon（arm64）
@@ -212,7 +228,7 @@ jobs:
           if-no-files-found: error
       # 发布到 Release latest（仅 main）。清理只删旧 *.dmg，不碰 deb/exe。
       - name: 发布到 Release latest（仅 main）
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -248,7 +264,9 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/wemeet-sdk-win-x64-runtime.zip" -OutFile win-runtime.zip
           # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
           Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/vendor-supplies/SHA256SUMS" -OutFile SHA256SUMS
-          $expected = (Select-String -Path SHA256SUMS -Pattern 'wemeet-sdk-win-x64-runtime\.zip').Line.Split(' ')[0].Trim()
+          $matches = @(Get-Content SHA256SUMS | Where-Object { $_ -match '^[0-9a-fA-F]{64}\s+\*?wemeet-sdk-win-x64-runtime\.zip$' })
+          if ($matches.Count -ne 1) { throw "SHA256SUMS 中 Windows runtime 条目不唯一: $($matches.Count)" }
+          $expected = ($matches[0] -split '\s+')[0].ToLower()
           $actual = (Get-FileHash win-runtime.zip -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $expected) { throw "SHA256 校验失败: win-runtime.zip (期望 $expected, 实际 $actual)" }
           Expand-Archive -Path win-runtime.zip -DestinationPath wemeet_sdk\win -Force
@@ -267,7 +285,7 @@ jobs:
       # 发布到 Release latest（仅 main）。清理只删旧 *.exe，不碰 deb/dmg。
       # 用 bash 跑发布脚本（Git Bash 自带），复用与另两个 job 相同的 gh 用法
       - name: 发布到 Release latest（仅 main）
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

@@ -161,13 +161,15 @@ async function testBackendHandlers() {
     getEvents: async () => [],
     getFileUrl: (p) => `https://backend.example/files/${p}`,
     getWsUrl: () => 'wss://backend.example/ws',
+    downloadFile: async () => ({ buffer: Buffer.from('image'), contentType: 'image/png' }),
+    readLimitedResponseBody: async (response) => Buffer.from(await response.arrayBuffer()),
   };
   let tokenCalls = 0;
   const getValidAccessToken = async () => { tokenCalls += 1; return 'access-token'; };
   const logger = { writeLog: () => {} };
   const getMainWindow = () => null;
 
-  registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWindow, getValidAccessToken });
+  registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWindow, getValidAccessToken, assertTrustedIpc: () => {} });
 
   // 成功路径：返回形状必须与共享 Renderer 的消费方式一致
   const conversations = await registered.get('im-get-conversations')();
@@ -189,12 +191,29 @@ async function testBackendHandlers() {
   const ws = registered.get('get-ws-url')();
   assert(ws.url.startsWith('wss://'), 'WS 地址必须来自后端');
 
+  // 生产默认 IPC guard：只允许 renderer 目录中的本地主 Frame
+  const guardedMap = new Map();
+  registerBackendHandlers({
+    ipcMain: { handle: (channel, handler) => guardedMap.set(channel, handler), on: () => {} },
+    shell,
+    app: { ...app, getAppPath: () => '/opt/wemeet/app' },
+    api, logger, getMainWindow, getValidAccessToken,
+  });
+  const trustedFrame = { url: 'file:///opt/wemeet/app/renderer/index.html' };
+  const guardedWs = guardedMap.get('get-ws-url')({ senderFrame: trustedFrame, sender: { mainFrame: trustedFrame } });
+  assert(guardedWs.url.startsWith('wss://'));
+  const remoteFrame = { url: 'https://evil.example/index.html' };
+  assert.throws(
+    () => guardedMap.get('get-ws-url')({ senderFrame: remoteFrame, sender: { mainFrame: remoteFrame } }),
+    /拒绝非本地页面/,
+  );
+
   // 未登录路径：统一返回 401 语义提示（使用独立注册表，不污染后续用例）
   const failingToken = async () => { const e = new Error('未登录'); throw e; };
   const unauthorizedMap = new Map();
   registerBackendHandlers({
     ipcMain: { handle: (channel, handler) => unauthorizedMap.set(channel, handler), on: () => {} },
-    shell, app, api, logger, getMainWindow, getValidAccessToken: failingToken,
+    shell, app, api, logger, getMainWindow, getValidAccessToken: failingToken, assertTrustedIpc: () => {},
   });
   assert.strictEqual(tokenCalls >= 1, true);
   const unauthorized = await unauthorizedMap.get('im-get-conversations')();
@@ -207,6 +226,7 @@ async function testBackendHandlers() {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     assert(options.headers.Authorization === 'Bearer access-token', '图片下载必须携带 Access Token');
+    assert.strictEqual(options.redirect, 'error', '携带 Access Token 的下载必须拒绝重定向');
     assert(url.includes('test.png'));
     return {
       ok: true,

@@ -3,19 +3,17 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK_ROOT="${1:-${WEMEET_SDK_ROOT:-}}"
-# 目标架构（arm64 | x86_64），默认 arm64；SDK 归档命名含架构段：
-#   arm64  -> TMSDK_*_arm64_default.publish.tar.gz
-#   x86_64 -> TMSDK_*_x86_64_default.publish.tar.gz
-SDK_ARCH="${SDK_ARCH:-arm64}"
-case "$SDK_ARCH" in arm64|x86_64) ;; *) echo "SDK_ARCH 仅支持 arm64|x86_64: $SDK_ARCH" >&2; exit 1 ;; esac
+# 目标架构统一由 LINUX_ARCH 指定；SDK_ARCH 仅作向后兼容。
+LINUX_ARCH="${LINUX_ARCH:-${SDK_ARCH:-arm64}}"
+case "$LINUX_ARCH" in arm64) SDK_ARCH="arm64" ;; x64|x86_64) SDK_ARCH="x86_64" ;; *) echo "LINUX_ARCH 仅支持 arm64|x64: $LINUX_ARCH" >&2; exit 1 ;; esac
 # vendor 下该架构应恰好有一个 SDK 归档（显式传入 SDK_ROOT 时归档不参与本脚本，仅做信息提示）
 # 兼容 macOS bash 3.2（无 readarray）：用 ls+wc 统计
 SDK_ARCHIVE_COUNT="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
 SDK_ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH}_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
-OUTPUT="$ROOT/output/linux"
-INCLUDE="$ROOT/native/include"
-OUTPUT_STAGE="$ROOT/output/.linux-stage.$$"
-INCLUDE_STAGE="$ROOT/native/.include-stage.$$"
+OUTPUT="${WEMEET_OUTPUT_DIR:-$ROOT/output/linux}"
+INCLUDE="${WEMEET_INCLUDE_DIR:-$ROOT/native/include}"
+OUTPUT_STAGE="${OUTPUT}.stage.$$"
+INCLUDE_STAGE="${INCLUDE}.stage.$$"
 
 fail() { echo "SDK 准备失败: $*" >&2; exit 1; }
 cleanup() { rm -rf "$OUTPUT_STAGE" "$INCLUDE_STAGE"; }
@@ -27,6 +25,8 @@ if [[ -z "${1:-}${WEMEET_SDK_ROOT:-}" ]]; then
     || fail "vendor/ 下应恰好有一个 TMSDK_*_${SDK_ARCH}_default.publish.tar.gz，当前 ${SDK_ARCHIVE_COUNT:-0} 个"
 fi
 SDK_ROOT="$(cd "$SDK_ROOT" && pwd)"
+SDK_VERSION="$(basename "${SDK_ARCHIVE:-$SDK_ROOT}" .tar.gz | cut -d_ -f3)"
+[[ "$SDK_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] || SDK_VERSION="unknown"
 SOURCE_SDK="$SDK_ROOT/SDK"
 SOURCE_DEMO="$SDK_ROOT/Electron_Demo"
 for item in "$SOURCE_SDK/libwemeetsdk.so" "$SOURCE_SDK/libwemeet_base.so" \
@@ -50,7 +50,7 @@ fi
 chmod 0755 "$OUTPUT_STAGE/Release/QtWebEngineProcess" "$OUTPUT_STAGE/Release/tmsdkapp" || fail "无法设置 SDK 子进程可执行权限"
 [[ -x "$OUTPUT_STAGE/Release/QtWebEngineProcess" && -x "$OUTPUT_STAGE/Release/tmsdkapp" ]] || fail "SDK 子进程不可执行"
 
-mkdir -p "$ROOT/output" "$ROOT/native"
+mkdir -p "$(dirname "$OUTPUT")" "$(dirname "$INCLUDE")"
 rm -rf "$OUTPUT.old" "$INCLUDE.old"
 [[ ! -e "$OUTPUT" ]] || mv "$OUTPUT" "$OUTPUT.old"
 [[ ! -e "$INCLUDE" ]] || mv "$INCLUDE" "$INCLUDE.old"
@@ -61,4 +61,4 @@ if ! mv "$OUTPUT_STAGE" "$OUTPUT" || ! mv "$INCLUDE_STAGE" "$INCLUDE"; then
   fail "无法原子替换 SDK 目录"
 fi
 rm -rf "$OUTPUT.old" "$INCLUDE.old"
-echo "SDK 3.26 运行依赖已准备到: $OUTPUT"
+echo "SDK $SDK_VERSION Linux $LINUX_ARCH 运行依赖已准备到: $OUTPUT"

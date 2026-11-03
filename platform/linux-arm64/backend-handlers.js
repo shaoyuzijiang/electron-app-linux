@@ -8,11 +8,43 @@ const userPicker = require('../../sdk_mgmt/user-picker');
 // 全部走自建后端 HTTP/WS，零 SDK 依赖；通道名与 Mac/Windows 完全一致，
 // 共享 Renderer（im.js / calendar.js / contacts.js / user-picker.html）无需任何改动。
 
-function registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWindow, getValidAccessToken }) {
+function registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWindow, getValidAccessToken, assertTrustedIpc: injectedGuard }) {
   const required = { ipcMain, shell, app, api, logger, getMainWindow, getValidAccessToken };
   for (const [name, value] of Object.entries(required)) {
     if (!value) throw new TypeError(`registerBackendHandlers 缺少依赖：${name}`);
   }
+
+  const rendererRoot = injectedGuard ? null : path.resolve(app.getAppPath(), 'renderer');
+  const assertTrustedIpc = injectedGuard || ((event) => {
+    const frame = event && event.senderFrame;
+    if (!frame || frame !== event.sender.mainFrame) throw new Error('拒绝非主 Frame 的 IPC 调用');
+    let filePath;
+    try {
+      const parsed = new URL(frame.url);
+      if (parsed.protocol !== 'file:') throw new Error('not file');
+      filePath = path.resolve(decodeURIComponent(parsed.pathname));
+    } catch {
+      throw new Error('拒绝非本地页面的 IPC 调用');
+    }
+    if (filePath !== rendererRoot && !filePath.startsWith(`${rendererRoot}${path.sep}`)) {
+      throw new Error('拒绝非应用页面的 IPC 调用');
+    }
+  });
+  const rawIpcMain = ipcMain;
+  ipcMain = {
+    handle(channel, handler) {
+      rawIpcMain.handle(channel, (event, ...args) => {
+        assertTrustedIpc(event);
+        return handler(event, ...args);
+      });
+    },
+    on(channel, listener) {
+      rawIpcMain.on(channel, (event, ...args) => {
+        assertTrustedIpc(event);
+        return listener(event, ...args);
+      });
+    },
+  };
 
   const CACHE_DIR = path.join(app.getPath('userData'), 'cache', 'uploads');
   function ensureCacheDir() {
@@ -86,11 +118,7 @@ function registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWind
 
   const MIME_MAP = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' };
   async function downloadFile(serverPath) {
-    const accessToken = await getValidAccessToken();
-    const url = api.getFileUrl(serverPath);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return { buffer: Buffer.from(await res.arrayBuffer()), contentType: res.headers['content-type'] || '' };
+    return api.downloadFile(await getValidAccessToken(), serverPath);
   }
 
   ipcMain.handle('fetch-image-data', wrap(async (_event, { path: serverPath } = {}) => {
@@ -159,14 +187,10 @@ function registerBackendHandlers({ ipcMain, shell, app, api, logger, getMainWind
     api.setMemberRole(accessToken, conversationId, userId, role).then((data) => ({ success: true, data }))));
   ipcMain.handle('im-get-unread-count', withToken((accessToken) => api.getUnreadCount(accessToken).then((data) => ({ success: true, data }))));
   ipcMain.handle('im-get-online-users', withToken((accessToken) => api.getOnlineUsers(accessToken).then((data) => ({ success: true, data }))));
-  ipcMain.handle('im-upload-file', withToken(async (accessToken, { filePath, filename, mimetype, fileData } = {}) => {
-    let fileBuffer;
-    if (fileData && fileData.byteLength) {
-      fileBuffer = Buffer.from(fileData);
-    } else {
-      if (!filePath) throw new Error('未提供文件路径或数据');
-      fileBuffer = fs.readFileSync(filePath);
-    }
+  ipcMain.handle('im-upload-file', withToken(async (accessToken, { filename, mimetype, fileData } = {}) => {
+    if (!fileData || !fileData.byteLength) throw new Error('未提供文件数据');
+    if (fileData.byteLength > api.MAX_FILE_DOWNLOAD_BYTES) throw new Error('文件大小超过 100 MB 限制');
+    const fileBuffer = Buffer.from(fileData);
     const data = await api.uploadFile(accessToken, fileBuffer, filename, mimetype);
     return { success: true, data };
   }));

@@ -1165,40 +1165,17 @@ async function sendMeetingInvite() {
 
   try {
     // 1. 调用腾讯会议 SDK 快速会议接口
+    //    （主进程 Promise 化：等待 OnJoinMeeting 回调后返回，成功时直接携带 meeting_code）
     const quickResult = await window.electronAPI.quickMeeting();
     if (!quickResult.success) {
       alert(quickResult.message || '发起快速会议失败');
       return;
     }
 
-    // 2. 等待 OnJoinMeeting 回调获取 meeting_code
-    const meetingCode = await new Promise((resolve) => {
-      let done = false;
-
-      const timer = setTimeout(() => {
-        done = true;
-        resolve(null);
-      }, 30000);
-
-      function handler(rawMsg) {
-        if (done) return;
-        try {
-          const cb = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
-          // SDK 回调中 code 是字符串 "0" 表示成功
-          if (cb.func === 'OnJoinMeeting' && String(cb.code) === '0') {
-            done = true;
-            clearTimeout(timer);
-            const code = (cb.param && cb.param.meeting_code) || cb.meeting_code || cb.meetingCode || '';
-            resolve(code);
-          }
-        } catch {}
-      }
-
-      window.electronAPI.onSdkCallback(handler);
-    });
-
+    // 2. 使用回调返回的会议号（无需再自行等待回调）
+    const meetingCode = quickResult.meetingCode || '';
     if (!meetingCode) {
-      alert('已发起快速会议，但未收到入会成功回调，无法获取会议号');
+      alert('已发起快速会议，但未收到会议号，无法发送邀请卡片');
       return;
     }
 

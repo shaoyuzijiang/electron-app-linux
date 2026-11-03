@@ -9,6 +9,25 @@ function normalizeError(error) {
   return error && error.message ? error.message : '操作失败';
 }
 
+function validateExternalUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (!host || host === 'localhost' || host.endsWith('.localhost') || host === '::1') return null;
+    if (host.includes(':') && (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd'))) return null;
+    const octets = host.split('.').map(Number);
+    if (octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+      const [a, b] = octets;
+      if ([0, 9, 10, 11, 21, 30, 127].includes(a) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224) return null;
+    }
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 function validateMeetingId(value) {
   const id = String(value || '').trim();
   if (!MEETING_ID_PATTERN.test(id)) throw new Error('会议 ID 格式无效');
@@ -49,25 +68,29 @@ function validateMeetingPayload(input, isCreate) {
   return payload;
 }
 
-function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings, httpClient, getMainWindow, showPage, getValidAccessToken, beginAuthOperation, invalidateAuth, isAuthOperationCurrent, refreshMeetingList, stopMeetingPolling, appRoot, handleScheme, getPendingSchemeUrl, consumePendingSchemeUrl }) {
-  const required = { ipcMain, app, api, adapter, tokenStore, appSettings, httpClient, getMainWindow, showPage, getValidAccessToken, beginAuthOperation, invalidateAuth, isAuthOperationCurrent, refreshMeetingList, stopMeetingPolling, appRoot, handleScheme, getPendingSchemeUrl, consumePendingSchemeUrl };
+function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings, httpClient, updater, aboutDialogWindowAPI, getMainWindow, showPage, getValidAccessToken, beginAuthOperation, invalidateAuth, isAuthOperationCurrent, refreshMeetingList, stopMeetingPolling, appRoot, handleScheme, getPendingSchemeUrl, consumePendingSchemeUrl }) {
+  const required = { ipcMain, app, api, adapter, tokenStore, appSettings, httpClient, updater, aboutDialogWindowAPI, getMainWindow, showPage, getValidAccessToken, beginAuthOperation, invalidateAuth, isAuthOperationCurrent, refreshMeetingList, stopMeetingPolling, appRoot, handleScheme, getPendingSchemeUrl, consumePendingSchemeUrl };
   for (const [name, value] of Object.entries(required)) if (!value) throw new TypeError(`Linux IPC 缺少依赖：${name}`);
 
-  const allowedPages = new Set(['login.html', 'index.html', 'meeting-settings.html'].map((file) => new URL(`file://${path.join(appRoot, 'renderer', file)}`).href));
+  const mainPages = new Set(['login.html', 'index.html', 'meeting-settings.html'].map((file) => new URL(`file://${path.join(appRoot, 'renderer', file)}`).pathname));
+  const aboutPage = new URL(`file://${path.join(appRoot, 'renderer', 'about-dialog.html')}`).pathname;
   function trusted(event) {
-    const win = getMainWindow();
     const frame = event.senderFrame;
-    if (!win || win.isDestroyed() || event.sender !== win.webContents || !frame || frame !== event.sender.mainFrame || !allowedPages.has(frame.url)) {
-      throw new Error('拒绝未授权的 IPC 调用');
-    }
+    const win = getMainWindow();
+    const aboutWin = aboutDialogWindowAPI.getAboutWindow();
+    let page = '';
+    try { page = new URL(frame && frame.url).pathname; } catch {}
+    const isMain = win && !win.isDestroyed() && event.sender === win.webContents && mainPages.has(page);
+    const isAbout = aboutWin && !aboutWin.isDestroyed() && event.sender === aboutWin.webContents && page === aboutPage;
+    if (!frame || frame !== event.sender.mainFrame || (!isMain && !isAbout)) throw new Error('拒绝未授权的 IPC 调用');
   }
 
   async function sdkAction(event, action) {
     trusted(event);
     try {
       await adapter.ensureLoggedIn(getValidAccessToken);
-      await action();
-      return { success: true };
+      const result = await action();
+      return result && typeof result === 'object' ? { success: true, ...result } : { success: true };
     } catch (error) { return { success: false, message: normalizeError(error) }; }
   }
 
@@ -223,10 +246,29 @@ function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings,
     catch (error) { return { success: false, message: normalizeError(error) }; }
   });
 
+  ipcMain.handle('check-app-update', async (event) => {
+    trusted(event);
+    try { return await updater.checkUpdate(); }
+    catch (error) { return { success: false, message: normalizeError(error) }; }
+  });
+  ipcMain.handle('download-app-update', async (event, { versionInfo } = {}) => {
+    trusted(event);
+    const aboutWin = aboutDialogWindowAPI.getAboutWindow();
+    aboutDialogWindowAPI.setAboutDownloading(true);
+    try { return await updater.downloadUpdate(versionInfo, null, aboutWin); }
+    catch (error) { return { success: false, message: normalizeError(error) }; }
+    finally { aboutDialogWindowAPI.setAboutDownloading(false); }
+  });
+  ipcMain.handle('open-update-installer', async (event, { filePath } = {}) => {
+    trusted(event);
+    return updater.openInstaller(filePath);
+  });
+
   ipcMain.handle('open-external', async (event, { url } = {}) => {
     trusted(event);
-    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('拒绝打开非 http(s) 链接');
-    await shell.openExternal(url);
+    const safeUrl = validateExternalUrl(url);
+    if (!safeUrl) return { success: false, message: '仅允许打开公网 HTTPS 链接' };
+    await shell.openExternal(safeUrl);
     return { success: true };
   });
 
@@ -238,16 +280,24 @@ function registerLinuxIpc({ ipcMain, app, api, adapter, tokenStore, appSettings,
     if (!win || win.isDestroyed()) return { success: false, message: '主窗口不可用' };
     const { response } = await dialog.showMessageBox(win, {
       type: 'none',
-      buttons: ['退出登录', '上传日志', '修改密码', '取消'],
-      defaultId: 3,
-      cancelId: 3,
+      buttons: ['退出登录', '上传日志', '修改密码', '关于', '取消'],
+      defaultId: 4,
+      cancelId: 4,
       title: '账号',
       message: '账号操作',
     });
-    const actions = ['logout', 'upload-logs', 'change-password'];
+    const actions = ['logout', 'upload-logs', 'change-password', 'about'];
     const action = actions[response];
     if (!action) return { success: true };
     if (action === 'upload-logs') return sdkAction(event, () => adapter.openView('uploadLogs'));
+    if (action === 'about') {
+      aboutDialogWindowAPI.showAboutDialog(win, {
+        appName: app.getName(),
+        appVersion: app.getVersion(),
+        sdkVersion: adapter.getStatus().version || '',
+      });
+      return { success: true };
+    }
     win.webContents.send('avatar-menu-action', action);
     return { success: true };
   });

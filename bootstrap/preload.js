@@ -109,6 +109,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('set-appearance-mode', { mode }),
   getAppearanceMode: () =>
     ipcRenderer.invoke('get-appearance-mode'),
+  // 应用更新（「关于」弹窗入口）
+  checkAppUpdate: () => ipcRenderer.invoke('check-app-update'),
+  downloadAppUpdate: (versionInfo) =>
+    ipcRenderer.invoke('download-app-update', { versionInfo }),
+  openUpdateInstaller: (filePath) =>
+    ipcRenderer.invoke('open-update-installer', { filePath }),
+  // 更新下载进度事件（主进程推送）
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on('app-update-progress', (_event, progress) => callback(progress));
+  },
   setUserConfigValue: (key, value) =>
     ipcRenderer.invoke('set-user-config-value', { key, value }),
   setProxyInfo: (proxyInfo) =>

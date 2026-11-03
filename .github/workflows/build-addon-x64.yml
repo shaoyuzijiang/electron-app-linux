@@ -37,24 +37,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p vendor sdk-extract
+          ELECTRON_VERSION="$(node -p "require('./package.json').devDependencies.electron")"
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
             -p 'TMSDK_*_x86_64_default.publish.tar.gz' -D vendor
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
-            -p 'node-v*-headers.tar.gz' -D vendor
+            -p "node-v${ELECTRON_VERSION}-headers.tar.gz" -D vendor
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
           cd vendor
-          grep -E 'TMSDK_.*x86_64.*\.tar\.gz$|node-v' SHA256SUMS | sha256sum -c -
+          sdk="$(basename "$(ls TMSDK_*_x86_64_default.publish.tar.gz)")"
+          headers="$(basename "$(ls node-v*-headers.tar.gz)")"
+          for target in "$sdk" "$headers"; do
+            line="$(awk -v file="$target" '$2 == file || $2 == "*" file { print }' SHA256SUMS)"
+            [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] || { echo "SHA256SUMS 中目标条目不唯一: $target" >&2; exit 1; }
+            printf '%s\n' "$line" | sha256sum -c -
+          done
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
       - name: 准备 x86_64 SDK
         run: |
           tar -xzf vendor/TMSDK_*_x86_64_default.publish.tar.gz -C sdk-extract
-          SDK_ARCH=x86_64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          LINUX_ARCH=x64 bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
       - name: 离线安装 Electron headers
         run: bash scripts/install-electron-headers.sh
       - name: 编译 x64 addon
         env:
-          TARGET_ARCH: x64
+          LINUX_ARCH: x64
           # 容器基线声明：Kylin 检查跳过，glibc 2.31 检查保留（N5 防线不放宽）
           ADDON_BASELINE_OVERRIDE: ubuntu-20.04-glibc-2.31
         run: bash scripts/build-native.sh

@@ -8,7 +8,9 @@
  */
 
 const crypto = require('crypto');
-const { BASE_URL, request } = require('./httpClient');
+const { getBaseUrl, request, fetchSafeResponse } = require('./httpClient');
+
+const MAX_FILE_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
 /**
  * 获取会话列表
@@ -16,7 +18,7 @@ const { BASE_URL, request } = require('./httpClient');
  * @returns {Array<ConversationListItem>}
  */
 async function getConversations(accessToken) {
-  return await request(`${BASE_URL}/api/chat/conversations`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -28,7 +30,7 @@ async function getConversations(accessToken) {
  * @returns {{ id: string }}
  */
 async function createConversation(accessToken, params) {
-  return await request(`${BASE_URL}/api/chat/conversations`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -42,7 +44,7 @@ async function createConversation(accessToken, params) {
  * @returns {ConversationDetail}
  */
 async function getConversationDetail(accessToken, conversationId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -60,7 +62,7 @@ async function getMessages(accessToken, conversationId, options = {}) {
   if (options.after) params.append('after', options.after);
   if (options.limit) params.append('limit', options.limit);
   const qs = params.toString() ? '?' + params : '';
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/messages${qs}`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/messages${qs}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -73,7 +75,7 @@ async function getMessages(accessToken, conversationId, options = {}) {
  * @returns {Message}
  */
 async function sendMessageHttp(accessToken, conversationId, params) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/messages`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -86,7 +88,7 @@ async function sendMessageHttp(accessToken, conversationId, params) {
  * @param {string} conversationId
  */
 async function markConversationRead(accessToken, conversationId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/read`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/read`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -98,7 +100,7 @@ async function markConversationRead(accessToken, conversationId) {
  * @param {string} conversationId
  */
 async function getConversationMembers(accessToken, conversationId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/members`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/members`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -110,7 +112,7 @@ async function getConversationMembers(accessToken, conversationId) {
  * @param {string} userId
  */
 async function addConversationMember(accessToken, conversationId, userId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/members`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/members`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId }),
@@ -124,7 +126,7 @@ async function addConversationMember(accessToken, conversationId, userId) {
  * @param {string} userId
  */
 async function removeConversationMember(accessToken, conversationId, userId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/members/${userId}`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/members/${userId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -138,7 +140,7 @@ async function removeConversationMember(accessToken, conversationId, userId) {
  * @param {object} params - { name?: string, avatar?: string }，至少传一项
  */
 async function updateConversation(accessToken, conversationId, params) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -152,7 +154,7 @@ async function updateConversation(accessToken, conversationId, params) {
  * @param {string} conversationId
  */
 async function dissolveConversation(accessToken, conversationId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -166,7 +168,7 @@ async function dissolveConversation(accessToken, conversationId) {
  * @param {string} userId - 新群主的用户ID（必须是当前群成员）
  */
 async function transferOwnership(accessToken, conversationId, userId) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/transfer`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/transfer`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId }),
@@ -182,7 +184,7 @@ async function transferOwnership(accessToken, conversationId, userId) {
  * @param {string} role - "admin"（设为管理员）或 "member"（取消管理员）
  */
 async function setMemberRole(accessToken, conversationId, userId, role) {
-  return await request(`${BASE_URL}/api/chat/conversations/${conversationId}/members/${userId}/role`, {
+  return await request(`${getBaseUrl()}/api/chat/conversations/${conversationId}/members/${userId}/role`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ role }),
@@ -195,7 +197,7 @@ async function setMemberRole(accessToken, conversationId, userId, role) {
  * @returns {{ count: number }}
  */
 async function getUnreadCount(accessToken) {
-  return await request(`${BASE_URL}/api/chat/unread/count`, {
+  return await request(`${getBaseUrl()}/api/chat/unread/count`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -205,7 +207,7 @@ async function getUnreadCount(accessToken) {
  * @param {string} accessToken
  */
 async function getOnlineUsers(accessToken) {
-  return await request(`${BASE_URL}/api/chat/online`, {
+  return await request(`${getBaseUrl()}/api/chat/online`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -221,21 +223,19 @@ async function getOnlineUsers(accessToken) {
 async function uploadFile(accessToken, fileBuffer, filename, mimetype) {
   // 手动构造 multipart/form-data，避免 FormData/Blob 在 Electron 主进程的兼容问题
   const boundary = '----FormBoundary' + crypto.randomBytes(16).toString('hex');
+  const safeFilename = String(filename || 'file').replace(/[\r\n"]/g, '_');
+  const safeMimetype = /^[\w.+-]+\/[\w.+-]+$/.test(mimetype) ? mimetype : 'application/octet-stream';
   const header = Buffer.from(
     `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-    `Content-Type: ${mimetype}\r\n\r\n`,
+    `Content-Disposition: form-data; name="file"; filename="${safeFilename}"\r\n` +
+    `Content-Type: ${safeMimetype}\r\n\r\n`,
     'utf8'
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
   const body = Buffer.concat([header, fileBuffer, footer]);
 
-  const url = `${BASE_URL}/api/chat/upload`;
-  console.log(`[API] >>> POST ${url} (multipart upload: ${filename}, ${mimetype}, size=${fileBuffer.length})`);
-
-  let res;
   try {
-    res = await fetch(url, {
+    return await request(`${getBaseUrl()}/api/chat/upload`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -247,19 +247,6 @@ async function uploadFile(accessToken, fileBuffer, filename, mimetype) {
   } catch (err) {
     throw new Error(`文件上传失败：${err.message}`);
   }
-
-  if (!res.ok && res.status !== 400) {
-    const respText = await res.text().catch(() => '');
-    console.error(`[API] <<< POST ${url} HTTP ${res.status}`, respText);
-    throw new Error(`服务器返回 HTTP ${res.status}${respText ? ': ' + respText.substring(0, 200) : ''}`);
-  }
-
-  const json = await res.json();
-  console.log(`[API] <<< POST ${url} HTTP ${res.status}`, JSON.stringify(json, null, 2));
-  if (json.code !== 0) {
-    throw new Error(json.message || '上传失败');
-  }
-  return json.data;
 }
 
 /**
@@ -267,7 +254,7 @@ async function uploadFile(accessToken, fileBuffer, filename, mimetype) {
  * @returns {string}
  */
 function getWsUrl() {
-  return BASE_URL.replace(/^http/, 'ws') + '/ws/chat';
+  return getBaseUrl().replace(/^http/, 'ws') + '/ws/chat';
 }
 
 /**
@@ -276,9 +263,64 @@ function getWsUrl() {
  * @returns {string}
  */
 function getFileUrl(path) {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return BASE_URL + path;
+  if (typeof path !== 'string' || !path.startsWith('/uploads/')) {
+    throw new Error('文件路径必须是 /uploads/ 下的相对路径');
+  }
+  const baseUrl = getBaseUrl();
+  const parsed = new URL(path, `${baseUrl}/`);
+  if (parsed.origin !== new URL(baseUrl).origin || !parsed.pathname.startsWith('/uploads/') || parsed.search || parsed.hash) {
+    throw new Error('文件路径无效或不属于当前服务端');
+  }
+  return parsed.toString();
+}
+
+function getResponseHeader(response, name) {
+  if (!response || !response.headers) return '';
+  if (typeof response.headers.get === 'function') return response.headers.get(name) || '';
+  return response.headers[String(name).toLowerCase()] || response.headers[name] || '';
+}
+
+/**
+ * 流式读取下载响应并限制总大小；同时校验可信的 Content-Length 声明。
+ */
+async function readLimitedResponseBody(response, maxBytes = MAX_FILE_DOWNLOAD_BYTES) {
+  const contentLength = getResponseHeader(response, 'content-length');
+  if (contentLength) {
+    const declaredBytes = Number(contentLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0 || declaredBytes > maxBytes) {
+      throw new Error(`文件大小超过 ${maxBytes} 字节限制`);
+    }
+  }
+
+  if (!response.body || typeof response.body[Symbol.asyncIterator] !== 'function') {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > maxBytes) throw new Error(`文件大小超过 ${maxBytes} 字节限制`);
+    return buffer;
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  for await (const chunk of response.body) {
+    const buffer = Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes) {
+      if (typeof response.body.destroy === 'function') response.body.destroy();
+      throw new Error(`文件大小超过 ${maxBytes} 字节限制`);
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
+async function downloadFile(accessToken, serverPath) {
+  const response = await fetchSafeResponse(getFileUrl(serverPath), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return {
+    buffer: await readLimitedResponseBody(response),
+    contentType: getResponseHeader(response, 'content-type'),
+  };
 }
 
 module.exports = {
@@ -300,4 +342,7 @@ module.exports = {
   uploadFile,
   getWsUrl,
   getFileUrl,
+  downloadFile,
+  readLimitedResponseBody,
+  MAX_FILE_DOWNLOAD_BYTES,
 };

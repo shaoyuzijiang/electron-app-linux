@@ -17,7 +17,7 @@ async function run() {
     Logout: () => 0,
     RefreshSDKToken: () => 0,
     JoinMeeting(...args) { calls.push('join'); joinArgsHistory.push(args); callback(JSON.stringify({ func: 'OnJoinMeeting', code: 0 })); return 0; },
-    QuickMeeting() { calls.push('quick'); callback(JSON.stringify({ func: 'OnJoinMeeting', code: 0 })); return 0; },
+    QuickMeeting() { calls.push('quick'); callback(JSON.stringify({ func: 'OnJoinMeeting', code: 0, param: { meeting_code: '987654321' } })); return 0; },
     LeaveMeeting() { calls.push('leave'); callback(JSON.stringify({ func: 'OnLeaveMeeting', code: 0 })); return 0; },
     ParseMeetingInfoUrl(url) { calls.push(`parse:${url}`); return 0; },
     ForceQuit() { calls.push('quit'); callback(JSON.stringify({ func: 'OnSDKUninitializeResult', code: 0 })); return 0; },
@@ -54,6 +54,9 @@ async function run() {
   assert.strictEqual(joinArgsHistory[1][5], false, 'cameraOn=false 必须显式关闭入会视频');
   await adapter.leaveMeeting();
   assert.strictEqual(adapter.getStatus().inMeeting, false);
+  const quickResult = await adapter.quickMeeting();
+  assert.deepStrictEqual(quickResult, { meetingCode: '987654321' }, '快速会议必须回传 meetingCode');
+  await adapter.leaveMeeting();
 
   // 入会链接解析：OnParseMeetingInfoUrl 回调 Promise 化，msg 为会议信息 JSON
   const parsePromise = adapter.parseMeetingUrl('wemeetsdk://page/meeting-info?meeting_code=12345678');
@@ -77,6 +80,24 @@ async function run() {
   assert.throws(() => validateMeetingPayload({ subject: '', start_time: 1, end_time: 2 }, true), /主题/);
   assert.strictEqual(validateSsoUrl('https://meeting.qq.com/cidp/test').startsWith('https://'), true);
   assert.throws(() => validateSsoUrl('https://evil.example/cidp/test'), /不受信任/);
+
+  const adapterOptions = {
+    app: { getPath: () => '/tmp/tm-sdk-test', getName: () => 'Tencent Meeting SDK Demo' },
+    api: { getSdkToken: async () => ({}), getIdToken: async () => ({}) },
+    getSdkRoot: () => '/tmp/sdk',
+    requireAddon: () => addon,
+  };
+  const x64Adapter = createLinuxSdkAdapter({ ...adapterOptions, runtime: { platform: 'linux', arch: 'x64' } });
+  assert.strictEqual(await x64Adapter.load(), addon, 'Linux x64 必须允许加载 addon');
+
+  for (const runtime of [
+    { platform: 'linux', arch: 'ia32' },
+    { platform: 'darwin', arch: 'arm64' },
+  ]) {
+    const unsupported = createLinuxSdkAdapter({ ...adapterOptions, runtime });
+    assert.strictEqual(await unsupported.load(), null);
+    assert.match(unsupported.getStatus().error, /仅支持 Linux arm64\/x64/);
+  }
   console.log('Linux SDK adapter 与安全 IPC DTO 校验通过。');
 }
 

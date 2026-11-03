@@ -457,26 +457,25 @@ jobs:
 
 ---
 
-## 十、发布流水线改造（2026-10-12，三端自动发布 + 一键回退）
+## 十、发布流水线改造（2026-10-12，四种安装包自动发布 + 一键回退）
 
 ### 10.1 新行为
 
 | 触发 | 行为 |
 |---|---|
-| push main | 三端并行构建 → 各自发布到 Release `latest`，每平台只保留最新一个资产 |
-| push rehearse/* 或手动 | 三端构建，产物只挂 Actions Artifacts，不碰 Release |
-| build-deb.yml 手动触发 | 仅构建发布 DEB（备用通道，清理只删 `*.deb`） |
+| push main（代码变化） | 四 job 构建 Linux arm64/x64、mac arm64、win x64，分别发布到 Release `latest` |
+| push rehearse/electron-app-merge 或手动运行 build-all | 四 job 构建、产物只挂 Actions Artifacts，不碰 Release；其他分支不会自动触发 |
+| build-deb.yml 手动触发 | 指定 arm64 或 x64 单独构建并发布 DEB（备用通道，仅清理同架构旧资产） |
 
-- 资产命名：`tencent-meeting-sdk-demo-<版本>-<日期>-{arm64.deb, mac-arm64.dmg, win-x64.exe}`
-- 清理策略：**按平台后缀隔离**（DEB job 只删旧 `*.deb`，DMG 只删 `*.dmg`，EXE 只删 `*.exe`），
-  三端资产共存互不误删；按资产 id 删除（红线 N12）
-- 发布步骤均 `if: github.ref == 'refs/heads/main'`；Release 不存在时并发创建有 `|| true` 容错
+- 资产命名：`tencent-meeting-sdk-demo-<版本>-<日期>-{arm64.deb, x64.deb, mac-arm64.dmg, win-x64.exe}`。
+- 清理策略：arm64 DEB 只删旧 `*-arm64.deb`、x64 DEB 只删旧 `*-x64.deb`；DMG/EXE 各仅清理同后缀资产，均按资产 id 删除（N12）。
+- 发布步骤仅在 `github.event_name == 'push' && github.ref == 'refs/heads/main'` 运行；手动 dispatch main 只构建不发布。并行发布若有单 job 失败仍可能出现混合批次，验收时必须核对四个资产和 run。
 
 ### 10.2 已知限制
 
 - mac DMG（ad-hoc 签名）与 win EXE（未签名）为内测形态：Gatekeeper/SmartScreen 会警告，
   正式对外分发需配签名证书 + 公证（mac）与代码签名证书（win）
-- 私有仓库的 main push 会消耗 macos-14 / windows-2022 runner 分钟数额度
+- 本仓库目前为 **PUBLIC**：GitHub-hosted Actions 标准 runner 的公共仓库额度与私有仓库计费不同，历史按私有仓库推算的 130 计费分钟/次不可当作现时账单；仍用 paths-ignore 减少无意义构建。`vendor-supplies` Release 和入库的 addon 对公网可访问，上线前核对 SDK/Framework 的再分发授权。
 - **mac x64（Intel）无 CI 产物**：CI 只出 mac-arm64 DMG；Intel Mac 安装包需 owner 本机
   `./build-all-mac.sh`（x64 framework 在 CI 中仅是软链占位）。需求出现前视为可接受
 - **runner/工具链生命周期未跟踪**：`macos-14`、`windows-2022`、`node 22` 都在 GitHub
@@ -491,8 +490,7 @@ jobs:
 | main push：三端绿 + latest 三资产 + 旧 DEB 清理 | 38252525260 | ✅ |
 | build-deb.yml 手动备用通道：发布当日 DEB，dmg/exe 不受影响 | 38342686416 | ✅ |
 
-当前 `latest` 资产：`...3.45.100-20261012-mac-arm64.dmg`、`...3.45.100-20261012-win-x64.exe`、
-`...3.45.100-20261013-arm64.deb`（备用通道验证时更新）。
+上表为 2026-10-12/13 的历史验证记录，不代表当前 Release；以 `gh release view latest --json assets` 查询实时四种资产。
 
 ### 10.4 与原方案的实施差异（决策记录）
 
@@ -501,14 +499,11 @@ jobs:
    标题仅在 create 时设置一次
 3. 资产删除一律按 id（坑 12），清理条件按平台后缀收窄（坑 28）
 
-### 10.5 Actions 额度实测（2026-10-13）
+### 10.5 Actions 历史耗时与现时计费（2026-11-03 修正）
 
-- 计费倍率：Linux ×1、Windows ×2、**macOS ×10**
-- 本月（10/1–10/13）本仓库：Linux 92 + macOS 340 + Windows 118 ≈ **550 计费分钟**
-- 改造后每次 main push ≈ **130 计费分钟**（macOS job 占 80%）；每天推 main 月耗约 4,000，
-  超 Free（2,000/月）额度后 Actions 停摆。控制手段：降低 main push 频率、
-  发布改手动触发、或加自托管 runner
-- 精确账单需 `gh auth refresh -h github.com -s user` 后查 billing API
+- 2026-10-13 曾按私有仓库倍率估算 Linux 92 + macOS 340 + Windows 118 ≈ 550 计费分钟；这是历史推算，**并非官方账单**。
+- 现核实仓库为 PUBLIC：标准 GitHub-hosted runner 的公共仓库计费规则不等于上述私有仓库倍率；准确资源/额度以 GitHub 账单与当下价格为准。仍限制纯文档和 workflow 文件 push 触发构建，避免重复发布与占用 runner。
+- 若日后改回 PRIVATE，再重新核对套餐分钟、runner 倍率和实际消耗，不能沿用旧估值。
 
 ### 10.6 签名问题溯源（原仓库方案 vs 现状）
 
@@ -524,14 +519,16 @@ jobs:
 改造前锚点：**`277b09a`**（build-all 只做演练构建不发布；build-deb 独占 push main 发布）。
 
 ```bash
-# ① 恢复 build-deb.yml 的 push main 触发（编辑 on: 块，加回 push: branches: [main]）
-# ② 恢复 build-all.yml 到锚点版本
+# ① 在 .github/workflows/build-deb.yml 的 on: 块恢复 push: branches: [main]
+#    此文件已给无 inputs 的 push 提供 arm64 默认值（LINUX_ARCH / Artifact 名）。
+# ② 恢复 build-all.yml 到锚点版本，避免与备用流程同时发布
 git checkout 277b09a -- .github/workflows/build-all.yml
-git commit -m "ci: 回退为仅 DEB 发布模式" && git push
+git add .github/workflows/build-deb.yml .github/workflows/build-all.yml
+git commit -m "ci: 回退为仅 ARM64 DEB 自动发布模式"
+git push origin main
 ```
 
-也可不依赖 git：build-deb.yml 文件头注释与 build-all.yml 文件头注释均已内嵌回退指引。
-注意：build-deb.yml 的 push 触发与 build-all 的发布步骤**不能同时启用**（会重复构建 DEB）。
+执行前先确认工作区无其他未提交更改；回退仍会触发一次 main push，请核查工作流与 Release 资产。`277b09a` 早于 x64 job，回退后 x64/mac/win 不再随 main 自动更新，已有资产可能仍留在 Release；若要撤回旧资产须单独审查并取得确认，**不要自动删其他平台资产**。build-deb.yml 的 push 与 build-all 的发布步骤不可同时启用。
 
 ### 10.8 版本一致性红线（N15 扩展为"四同步"，2026-10-14）
 
@@ -552,12 +549,11 @@ git commit -m "ci: 回退为仅 DEB 发布模式" && git push
 - **供应物完整性**：`vendor-supplies` 含 `SHA256SUMS`，三 job 下载后校验，
   防 `--clobber` 误覆盖/传输损坏（替换供应物后必须重新生成并上传 SHA256SUMS）
 
-### 10.9 额度纪律（2026-10-14 起）
+### 10.9 构建与发布纪律（2026-11-03 修正）
 
-- 每次 main push ≈ 130 计费分钟；**纯文档改动已通过 `paths-ignore` 免构建**
-  （只改 `**.md` / `docs/**` 的 push 不触发 build-all.yml）
-- 文档与代码混合提交、或大改动，仍按一次 130 分钟计；**攒批提交**
-- 注意：推 rehearse 分支同样是三 job 全跑（≈125 分钟，仅不发布），**并不省钱**
+- main 的代码 push 会触发四 job 并发布；仅 `.md`、`docs/**`、`.github/workflows/**` 改动的 push 不触发 `build-all.yml`；**混合修改仍会触发**。
+- 手动 dispatch main 只上传 Artifacts，不碰 Release；验证工作流改动时可用它，但完整四 job 仍会占用 runner 时间。
+- 本仓库为 PUBLIC，私有仓库的计费分钟估值不适用于现时；若转私有须重新核价。把代码与文档攒批一次推送，减少多轮昂贵/重复发布。
 
 ## 附：完成定义（DoD，本轮范围）
 

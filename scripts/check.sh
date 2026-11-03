@@ -10,15 +10,19 @@ export LC_ALL=C
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/output/linux"
 ELECTRON_DIST="$ROOT/node_modules/electron/dist"
-SDK_ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_arm64_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
 FAILED=0
 VERBOSE=0
+DEB_ONLY=0
 ONLY_DEB=""
-for arg in "$@"; do
-  case "$arg" in
-    --verbose) VERBOSE=1 ;;
-    --deb) ONLY_DEB="pending" ;;
-    *) if [[ "$ONLY_DEB" == "pending" ]]; then ONLY_DEB="$arg"; else echo "未知参数: $arg" >&2; exit 2; fi ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verbose) VERBOSE=1; shift ;;
+    --deb)
+      DEB_ONLY=1
+      shift
+      if [[ $# -gt 0 && "$1" != --* ]]; then ONLY_DEB="$1"; shift; fi
+      ;;
+    *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
 done
 
@@ -33,7 +37,7 @@ require_exec() { [[ -x "$1" ]] && ok "$1" || fail_check "不可执行 $1"; }
 version_le() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$2" ]]; }
 
 # ---------- 1. 环境 ----------
-if [[ "$ONLY_DEB" != pending ]]; then
+if [[ "$DEB_ONLY" -eq 0 ]]; then
   [[ "$(id -u)" -ne 0 ]] && ok "普通用户 $(id -un)" || fail_check "禁止使用 root/sudo 运行"
   [[ "$(uname -s)" == Linux ]] && ok "系统 Linux" || fail_check "当前不是 Linux"
   case "$(uname -m)" in aarch64|x86_64) ok "架构 $(uname -m)" ;; *) fail_check "架构必须为 aarch64/x86_64，当前 $(uname -m)" ;; esac
@@ -147,50 +151,91 @@ if [[ "$ONLY_DEB" != pending ]]; then
 fi
 
 # ---------- 3. DEB ----------
-if [[ "$ONLY_DEB" == pending ]]; then
-  DEB="$(ls "$ROOT"/dist-demo/*.deb 2>/dev/null | head -1 || true)"
-elif [[ -n "$ONLY_DEB" ]]; then
-  DEB="$ONLY_DEB"
-else
-  DEB="$(ls "$ROOT"/dist-demo/*.deb 2>/dev/null | head -1 || true)"
-fi
-if [[ -n "$ONLY_DEB" || ( -z "$ONLY_DEB" && -n "${DEB:-}" ) ]]; then
+DEB="${ONLY_DEB:-$(ls "$ROOT"/dist-demo/*.deb 2>/dev/null | head -1 || true)}"
+if [[ "$DEB_ONLY" -eq 1 || -n "$DEB" ]]; then
   PACKAGE_NAME="tencent-meeting-sdk-linux-demo"
   VERSION="$(node -p "require('$ROOT/package.json').version")"
-  [[ -n "${DEB:-}" && -f "$DEB" ]] || fail_check "找不到 DEB（dist-demo/ 下无产物）"
-  if [[ -n "${DEB:-}" && -f "$DEB" ]]; then
-    command -v dpkg-deb >/dev/null 2>&1 || fail_check "缺少 dpkg-deb"
-    if command -v dpkg-deb >/dev/null 2>&1; then
-      CONTROL="$(dpkg-deb --field "$DEB")"
-      grep -Fx "Package: $PACKAGE_NAME" <<<"$CONTROL" >/dev/null || fail_check "包名错误"
-      grep -Fx "Version: $VERSION" <<<"$CONTROL" >/dev/null || fail_check "版本错误"
-      grep -Ex 'Architecture: (arm64|amd64)' <<<"$CONTROL" >/dev/null || fail_check "架构错误"
-      grep -F 'Backend security tests were not run for this demo artifact.' <<<"$CONTROL" >/dev/null || fail_check "缺少 Demo 用途边界声明"
-      CONTENTS="$(dpkg-deb --contents "$DEB")"
-      for item in \
-        "./opt/$PACKAGE_NAME/runtime/electron" \
-        "./opt/$PACKAGE_NAME/runtime/resources/wemeet-sdk/linux/wemeet_electron_sdk.node" \
-        "./opt/$PACKAGE_NAME/runtime/resources/wemeet-sdk/linux/libwemeetsdk.so" \
-        "./opt/$PACKAGE_NAME/runtime/resources/wemeet-sdk/linux/Release/QtWebEngineProcess" \
-        "./opt/$PACKAGE_NAME/app/main.js" \
-        "./opt/$PACKAGE_NAME/app/platform/linux-arm64/main.js" \
-        "./opt/$PACKAGE_NAME/app/platform/linux-arm64/sdk-adapter.js" \
-        "./opt/$PACKAGE_NAME/app/bootstrap/preload.js" \
-        "./opt/$PACKAGE_NAME/app/renderer/index.html" \
-        "./opt/$PACKAGE_NAME/graphics-env.sh" \
-        "./opt/$PACKAGE_NAME/DEMO_BUILD_ONLY.txt" \
-        "./usr/bin/$PACKAGE_NAME"; do
-        grep -F " $item" <<<"$CONTENTS" >/dev/null || fail_check "缺少运行文件: $item"
+  [[ -n "$DEB" && -f "$DEB" ]] || fail_check "找不到 DEB（请传入路径或先在 dist-demo/ 生成产物）"
+  command -v dpkg-deb >/dev/null 2>&1 || fail_check "缺少 dpkg-deb，无法静态检查 DEB"
+  if [[ -f "$DEB" ]] && command -v dpkg-deb >/dev/null 2>&1; then
+    CONTROL="$(dpkg-deb --field "$DEB")"
+    grep -Fx "Package: $PACKAGE_NAME" <<<"$CONTROL" >/dev/null || fail_check "包名错误"
+    grep -Fx "Version: $VERSION" <<<"$CONTROL" >/dev/null || fail_check "版本错误"
+    DEB_ARCH="$(awk -F': ' '$1 == "Architecture" { print $2 }' <<<"$CONTROL")"
+    case "$DEB_ARCH" in
+      arm64) EXPECTED_LINUX_ARCH="arm64"; EXPECTED_ELF_PATTERN='AArch64|ARM aarch64'; EXPECTED_SUFFIX='-arm64.deb' ;;
+      amd64) EXPECTED_LINUX_ARCH="x64"; EXPECTED_ELF_PATTERN='X86-64|x86-64|x86_64'; EXPECTED_SUFFIX='-x64.deb' ;;
+      *) EXPECTED_LINUX_ARCH=""; EXPECTED_ELF_PATTERN='a^'; EXPECTED_SUFFIX=''; fail_check "架构错误: ${DEB_ARCH:-missing}" ;;
+    esac
+    [[ -n "$EXPECTED_SUFFIX" && "$(basename "$DEB")" == *"$EXPECTED_SUFFIX" ]] || fail_check "文件名与 Architecture 不一致: $(basename "$DEB") / $DEB_ARCH"
+    grep -F "Description: 银河麒麟 ${EXPECTED_LINUX_ARCH} 腾讯会议 SDK Electron Demo" <<<"$CONTROL" >/dev/null || fail_check "Description 架构错误"
+    for dependency in libegl1 libpulse0; do
+      grep -E "^Depends: .*(^|, )${dependency}(,|$)" <<<"$CONTROL" >/dev/null || fail_check "缺少 SDK 运行依赖: $dependency"
+    done
+    CONTROL_SDK_VERSION="$(sed -n 's/^ Demo package using Electron .* and Tencent Meeting SDK \([0-9][0-9.]*\)\.$/\1/p' <<<"$CONTROL")"
+    [[ -n "$CONTROL_SDK_VERSION" ]] || fail_check "Description 缺少 SDK 版本"
+    grep -F 'Backend security tests were not run for this demo artifact.' <<<"$CONTROL" >/dev/null || fail_check "缺少 Demo 用途边界声明"
+
+    DEB_ROOT="$TMP/deb-root"
+    mkdir -p "$DEB_ROOT"
+    dpkg-deb -x "$DEB" "$DEB_ROOT"
+    APP_ROOT="$DEB_ROOT/opt/$PACKAGE_NAME"
+    required=(
+      "$APP_ROOT/runtime/electron"
+      "$APP_ROOT/runtime/resources/wemeet-sdk/linux/wemeet_electron_sdk.node"
+      "$APP_ROOT/runtime/resources/wemeet-sdk/linux/libwemeetsdk.so"
+      "$APP_ROOT/runtime/resources/wemeet-sdk/linux/libwemeet_base.so"
+      "$APP_ROOT/runtime/resources/wemeet-sdk/linux/Release/QtWebEngineProcess"
+      "$APP_ROOT/runtime/resources/wemeet-sdk/linux/Release/tmsdkapp"
+      "$APP_ROOT/app/main.js"
+      "$APP_ROOT/app/platform/linux-arm64/main.js"
+      "$APP_ROOT/app/platform/linux-arm64/sdk-adapter.js"
+      "$APP_ROOT/app/bootstrap/preload.js"
+      "$APP_ROOT/app/renderer/index.html"
+      "$APP_ROOT/graphics-env.sh"
+      "$APP_ROOT/DEMO_BUILD_ONLY.txt"
+      "$DEB_ROOT/usr/bin/$PACKAGE_NAME"
+    )
+    for item in "${required[@]}"; do [[ -e "$item" || -L "$item" ]] || fail_check "缺少运行文件: ${item#"$DEB_ROOT"}"; done
+    grep -F "Linux $EXPECTED_LINUX_ARCH build" "$APP_ROOT/DEMO_BUILD_ONLY.txt" >/dev/null || fail_check "DEMO_BUILD_ONLY 架构错误"
+    grep -F "Tencent Meeting SDK $CONTROL_SDK_VERSION;" "$APP_ROOT/DEMO_BUILD_ONLY.txt" >/dev/null || fail_check "DEMO_BUILD_ONLY SDK 版本与 Description 不一致"
+
+    ELF_TOOLS=0
+    command -v readelf >/dev/null 2>&1 && ELF_TOOLS=1
+    command -v file >/dev/null 2>&1 && ELF_TOOLS=1
+    command -v objdump >/dev/null 2>&1 && ELF_TOOLS=1
+    if [[ "$ELF_TOOLS" -eq 1 && -n "$EXPECTED_LINUX_ARCH" ]]; then
+      for elf in \
+        "$APP_ROOT/runtime/electron" \
+        "$APP_ROOT/runtime/resources/wemeet-sdk/linux/wemeet_electron_sdk.node" \
+        "$APP_ROOT/runtime/resources/wemeet-sdk/linux/libwemeetsdk.so" \
+        "$APP_ROOT/runtime/resources/wemeet-sdk/linux/libwemeet_base.so" \
+        "$APP_ROOT/runtime/resources/wemeet-sdk/linux/Release/QtWebEngineProcess" \
+        "$APP_ROOT/runtime/resources/wemeet-sdk/linux/Release/tmsdkapp"; do
+        [[ -f "$elf" ]] || continue
+        if command -v readelf >/dev/null 2>&1; then
+          ELF_INFO="$(readelf -h "$elf" 2>/dev/null | awk -F: '/Machine:/ {gsub(/^[[:space:]]+/, "", $2); print $2}')"
+        elif command -v file >/dev/null 2>&1; then
+          ELF_INFO="$(file -b "$elf" 2>/dev/null || true)"
+        else
+          ELF_INFO="$(objdump -f "$elf" 2>/dev/null | awk '/file format/ {print $NF}')"
+        fi
+        echo "$ELF_INFO" | grep -Eiq "$EXPECTED_ELF_PATTERN" \
+          && ok "ELF 架构 $EXPECTED_LINUX_ARCH: ${elf#"$DEB_ROOT"}" \
+          || fail_check "ELF 架构不一致: ${elf#"$DEB_ROOT"} (${ELF_INFO:-unknown})"
       done
-      if grep -Ei '(/| )(\.env|saas_sdk_env\.json|[^ ]+\.(pem|key|p12|pfx))$' <<<"$CONTENTS" >/dev/null; then
-        fail_check "发现禁止的凭据文件"
-      fi
-      ok "DEB 结构与凭据检查通过"
+    else
+      echo "WARN  缺少 readelf/file/objdump，跳过 ELF 架构检查"
     fi
+    if find "$DEB_ROOT" -type f \( -name saas_sdk_env.json -o -name '.env' -o -name '*.pem' -o -name '*.key' -o -name '*.p12' -o -name '*.pfx' \) | grep -q .; then
+      fail_check "发现禁止的凭据文件"
+    fi
+    ok "DEB metadata、结构、架构与凭据检查完成（未执行包内二进制）"
   fi
 fi
 
 # ---------- 4. 图形要点 ----------
+if [[ "$DEB_ONLY" -eq 0 ]]; then
 PATCH="/opt/x11-wayland/x11-ext.sh"
 if [[ -r "$PATCH" ]]; then
   ok "X11-Wayland 厂商补丁可读: $PATCH"
@@ -208,6 +253,7 @@ if [[ "$VERBOSE" == 1 && -d "$OUT" ]]; then
   printf 'effective: QT_QPA_PLATFORM=%s EGL_PLATFORM=%s LD_PRELOAD=%s\n' \
     "${QT_QPA_PLATFORM:-<unset>}" "${EGL_PLATFORM:-<unset>}" "${LD_PRELOAD:-<unset>}"
   echo '---- 详细诊断结束（如需加载库追踪：LD_DEBUG=libs npm start）----'
+fi
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

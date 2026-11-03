@@ -25,8 +25,11 @@ wemeet_prepare_x11_wayland() {
         fi
       fi
     else
-      echo "警告：当前为 Wayland 会话，但缺少麒麟补丁 $patch；请安装或联系麒麟厂商补齐，不要在应用层继续加参数。" >&2
+      echo "错误：当前为 Wayland 会话，但缺少麒麟/UOS 厂商补丁 $patch。Linux SDK 不支持原生 Wayland，已停止启动；请安装系统对应架构补丁或切换 X11。" >&2
     fi
+  fi
+  if [[ "$was_wayland" -eq 1 && "${WEMEET_X11_WAYLAND_PATCH:-}" != 1 ]]; then
+    return 4
   fi
 
   # 官方手册要求：SDK 私有路径必须排在 LD_LIBRARY_PATH 最前，防止 Release/lib

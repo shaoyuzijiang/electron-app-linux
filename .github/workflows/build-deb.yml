@@ -1,6 +1,6 @@
 name: build-linux-deb
 
-# 【备用/回退流水线】仅手动触发的 Linux ARM64 DEB 构建+发布。
+# 【备用/回退流水线】仅手动触发的 Linux arm64/x64 DEB 构建+发布。
 # 三端自动发布已由 build-all.yml 承接（main push）。
 # 回退到"仅 DEB 发布"模式：放开下方 push 触发 + 恢复 build-all.yml 至 277b09a
 # （详见 docs/EXECUTION_PLAN.md 第十节）。
@@ -8,6 +8,15 @@ name: build-linux-deb
 # 作为 Release 附件上传到 tag `vendor-supplies`。
 on:
   workflow_dispatch:
+    inputs:
+      linux_arch:
+        description: Linux 目标架构
+        required: true
+        default: arm64
+        type: choice
+        options:
+          - arm64
+          - x64
 
 permissions:
   contents: write
@@ -15,6 +24,9 @@ permissions:
 jobs:
   build-deb:
     runs-on: ubuntu-latest
+    env:
+      # 回退时若恢复 push: main，push 无 inputs，必须回退到 arm64
+      LINUX_ARCH: ${{ inputs.linux_arch || 'arm64' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,16 +43,25 @@ jobs:
         run: |
           mkdir -p vendor
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/vendor-supplies"
-          # SDK 归档按通配下载（升级 SDK 版本无需改本文件）；Electron zip 名派生自 package.json
+          case "$LINUX_ARCH" in
+            arm64) sdk_arch=arm64; prebuilt_arch=arm64 ;;
+            x64) sdk_arch=x86_64; prebuilt_arch=x64 ;;
+            *) echo "不支持的架构: $LINUX_ARCH" >&2; exit 1 ;;
+          esac
+          echo "SDK_ARCH=$sdk_arch" >> "$GITHUB_ENV"
+          echo "PREBUILT_ARCH=$prebuilt_arch" >> "$GITHUB_ENV"
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" \
-            -p 'TMSDK_*_arm64_default.publish.tar.gz' -D vendor
-          curl --fail --location --retry 3 \
-            -o "vendor/electron-v${ELECTRON_VERSION}-linux-arm64.zip" \
-            "$base/electron-v${ELECTRON_VERSION}-linux-arm64.zip"
-          # 供应物完整性校验（防 --clobber 误覆盖/传输损坏）
+            -p "TMSDK_*_${sdk_arch}_default.publish.tar.gz" -D vendor
+          electron="electron-v${ELECTRON_VERSION}-linux-${LINUX_ARCH}.zip"
+          curl --fail --location --retry 3 -o "vendor/$electron" "$base/$electron"
           gh release download vendor-supplies -R "$GITHUB_REPOSITORY" -p 'SHA256SUMS' -O vendor/SHA256SUMS
           cd vendor
-          grep -E 'electron-v[0-9]|TMSDK_.*\.tar\.gz$' SHA256SUMS | sha256sum -c -
+          sdk="$(basename "$(ls TMSDK_*_${sdk_arch}_default.publish.tar.gz)")"
+          for target in "$electron" "$sdk"; do
+            line="$(awk -v file="$target" '$2 == file || $2 == "*" file { print }' SHA256SUMS)"
+            [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] || { echo "SHA256SUMS 中目标条目不唯一: $target" >&2; exit 1; }
+            printf '%s\n' "$line" | sha256sum -c -
+          done
 
       - name: 安装依赖
         run: npm ci --include=dev --ignore-scripts
@@ -52,17 +73,17 @@ jobs:
           mkdir -p node_modules/electron/dist
 
       - name: 门禁测试
-        run: npm run verify:platform-contract
+        run: npm run verify
 
       - name: 准备 SDK 运行时与预编译 addon
         run: |
           mkdir -p sdk-extract
-          tar -xzf vendor/TMSDK_0300000000_3.26.100.14_arm64_default.publish.tar.gz -C sdk-extract
-          bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
-          cp packaging/prebuilt/wemeet_electron_sdk.arm64.node output/linux/wemeet_electron_sdk.node
+          tar -xzf vendor/TMSDK_*_${SDK_ARCH}_default.publish.tar.gz -C sdk-extract
+          LINUX_ARCH="$LINUX_ARCH" bash scripts/prepare-sdk.sh "$(echo sdk-extract/TMSDK_*)"
+          cp "packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node" output/linux/wemeet_electron_sdk.node
 
       - name: 组装 DEB
-        run: WEMEET_CI=1 bash scripts/build-deb.sh
+        run: LINUX_ARCH="$LINUX_ARCH" WEMEET_CI=1 bash scripts/build-deb.sh
 
       - name: 校验 DEB
         run: npm run check -- --deb
@@ -70,7 +91,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: linux-arm64-deb
+          name: linux-${{ inputs.linux_arch || 'arm64' }}-deb
           path: dist-demo/*.deb
           if-no-files-found: error
 
@@ -84,15 +105,15 @@ jobs:
           BUILD_DATE="$(ls dist-demo/*.deb | grep -oE '[0-9]{8}' | head -1)"
           DEB="$(ls dist-demo/*.deb)"
           # GitHub 资产名不支持中文/空格，Release 侧用 ASCII 名；
-          # 中文命名的原始产物保留在 Actions 产物 linux-arm64-deb 中（供下载页直接上传）
-          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-arm64.deb"
+          # 中文命名的原始产物保留在对应架构 Actions 产物中（供下载页直接上传）
+          ASCII_NAME="tencent-meeting-sdk-demo-${VERSION}-${BUILD_DATE}-${LINUX_ARCH}.deb"
           cp "$DEB" "dist-demo/$ASCII_NAME"
           gh release view latest >/dev/null 2>&1 || \
             gh release create latest --title "最新安装包（自动构建）"
           gh release upload latest "dist-demo/$ASCII_NAME" --clobber
           # 清理旧 DEB（按 id 操作；资产名可能以 - 开头，按名传参会误当选项）
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" \
-            --jq '.assets[] | select(.name | endswith("-arm64.deb")) | "\(.id)\t\(.name)"' | \
+            --jq ".assets[] | select(.name | endswith(\"-${LINUX_ARCH}.deb\")) | \"\\(.id)\\t\\(.name)\"" | \
           while IFS=$'\t' read -r assetId assetName; do
             if [[ "$assetName" != "$ASCII_NAME" ]]; then
               gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$assetId" >/dev/null

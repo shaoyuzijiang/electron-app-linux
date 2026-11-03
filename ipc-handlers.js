@@ -1,9 +1,11 @@
 const { shell, app } = require('electron');
 const path = require('path');
+const { fileURLToPath } = require('url');
 const fs = require('fs');
 const api = require('./backend_api/api');
 const httpApi = require('./backend_api/httpClient');
 const appSettings = require('./utils/app-settings');
+const updater = require('./utils/updater');
 const tokenStore = require('./utils/token-store');
 const accountStore = require('./utils/account-store');
 const logger = require('./utils/logger');
@@ -43,6 +45,25 @@ function getClientType() {
       return 'linux';
     default:
       return 'desktop';
+  }
+}
+
+function validateExternalUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (!host || host === 'localhost' || host.endsWith('.localhost') || host === '::1') return null;
+    if (host.includes(':') && (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd'))) return null;
+    const octets = host.split('.').map(Number);
+    if (octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+      const [a, b] = octets;
+      if ([0, 9, 10, 11, 21, 30, 127].includes(a) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224) return null;
+    }
+    return parsed.href;
+  } catch {
+    return null;
   }
 }
 
@@ -171,6 +192,38 @@ function register(ipcMain, deps) {
     sdkEvents,
   } = deps;
 
+  const rawIpcMain = ipcMain;
+  const rendererRoot = path.resolve(__dirname, 'renderer');
+  const assertTrustedIpc = (event) => {
+    const frame = event && event.senderFrame;
+    if (!frame || frame !== event.sender.mainFrame) throw new Error('拒绝非主 Frame 的 IPC 调用');
+    let filePath;
+    try {
+      const parsed = new URL(frame.url);
+      if (parsed.protocol !== 'file:') throw new Error('not file');
+      filePath = path.resolve(fileURLToPath(parsed));
+    } catch {
+      throw new Error('拒绝非本地页面的 IPC 调用');
+    }
+    if (filePath !== rendererRoot && !filePath.startsWith(`${rendererRoot}${path.sep}`)) {
+      throw new Error('拒绝非应用页面的 IPC 调用');
+    }
+  };
+  ipcMain = {
+    handle(channel, handler) {
+      rawIpcMain.handle(channel, (event, ...args) => {
+        assertTrustedIpc(event);
+        return handler(event, ...args);
+      });
+    },
+    on(channel, listener) {
+      rawIpcMain.on(channel, (event, ...args) => {
+        assertTrustedIpc(event);
+        return listener(event, ...args);
+      });
+    },
+  };
+
   // ========== 通用接口 ==========
 
   // 渲染进程日志转发到主进程文件日志
@@ -178,8 +231,11 @@ function register(ipcMain, deps) {
     logger.writeLog(level, ['[Renderer]', message]);
   });
 
-  ipcMain.handle('open-external', async (_event, { url }) => {
-    await shell.openExternal(url);
+  ipcMain.handle('open-external', async (_event, { url } = {}) => {
+    const safeUrl = validateExternalUrl(url);
+    if (!safeUrl) return { success: false, message: '仅允许打开公网 HTTPS 链接' };
+    await shell.openExternal(safeUrl);
+    return { success: true };
   });
 
   // ========== 服务端 URL 设置 ==========
@@ -189,7 +245,8 @@ function register(ipcMain, deps) {
   });
 
   // 设置服务端 URL（运行时更新 httpClient 的 BASE_URL）
-  ipcMain.handle('set-server-url', async (_event, { url }) => {
+  ipcMain.handle('set-server-url', async (_event, { url } = {}) => {
+    if (tokenStore.getTokens() || isSdkLoggedIn()) return { success: false, message: '请退出登录后再切换服务端' };
     const result = appSettings.setBaseUrl(url);
     if (result.success) {
       httpApi.updateBaseUrl(result.baseUrl);
@@ -199,6 +256,7 @@ function register(ipcMain, deps) {
 
   // 重置为默认服务端 URL
   ipcMain.handle('reset-server-url', async () => {
+    if (tokenStore.getTokens() || isSdkLoggedIn()) return { success: false, message: '请退出登录后再恢复默认服务端' };
     const result = appSettings.resetBaseUrl();
     if (result.success) {
       httpApi.updateBaseUrl(result.baseUrl);
@@ -468,16 +526,30 @@ function register(ipcMain, deps) {
   // 这里 Promise 化（按回调中的 meeting_code 匹配，超时 15s）
   const pendingJoinMeetings = new Map(); // meeting_code -> { resolve, timer }
   sdkEvents.on('callback', ({ func, code, msg, param }) => {
-    if (func !== 'OnJoinMeeting' || !pendingJoinMeetings.size) return;
+    if (func !== 'OnJoinMeeting') return;
     const meetingCode = param && param.meeting_code ? String(param.meeting_code) : '';
     const pending = pendingJoinMeetings.get(meetingCode);
     if (pending) {
+      // 会议号入会：回调中的 meeting_code 与传入值匹配
       clearTimeout(pending.timer);
       pendingJoinMeetings.delete(meetingCode);
       if (code === 0) {
         pending.resolve({ success: true });
       } else {
         pending.resolve({ success: false, message: msg || `入会失败 (code=${code})` });
+      }
+      return;
+    }
+    // 快速会议：会议号由 SDK 动态创建，无法预先按 code 匹配，用专用 pending 兜底
+    if (pendingQuickMeeting) {
+      const p = pendingQuickMeeting;
+      pendingQuickMeeting = null;
+      clearTimeout(p.timer);
+      if (code === 0) {
+        p.resolve({ success: true, meetingCode });
+      } else {
+        // 如 -1078 user is joining in meeting（上一次入会未完成时 SDK 明确拒绝）
+        p.resolve({ success: false, message: msg || `发起快速会议失败 (code=${code})` });
       }
     }
   });
@@ -514,16 +586,35 @@ function register(ipcMain, deps) {
     });
   });
 
+  // 快速会议：Promise 化，等待 OnJoinMeeting 回调后返回（含 meeting_code）
+  // 背景：快速会议内部需先发 schedule 类 xmpp 请求创建会议获取会议号，该类请求有
+  // 本地频控（每周期 10 次），超限后 SDK 静默拦截（无回调）——上层必须控制调用节奏：
+  // 未收到上次回调前不允许再次调用。这里在主进程做串行保护，并等待回调反馈结果
+  // （如 -1078 user is joining in meeting 会在回调中明确返回）。
+  let pendingQuickMeeting = null; // { resolve, timer }
+  const QUICK_MEETING_TIMEOUT_MS = 30000;
+
   ipcMain.handle('quick-meeting', async () => {
     if (!(await ensureSDKLoggedIn())) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
     }
-    try {
-      wemeetSdk.QuickMeeting();
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: err.message };
+    if (pendingQuickMeeting) {
+      return { success: false, message: '快速会议正在发起中，请等待完成后再试' };
     }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingQuickMeeting = null;
+        resolve({ success: false, message: '未收到入会结果（回调超时）' });
+      }, QUICK_MEETING_TIMEOUT_MS);
+      pendingQuickMeeting = { resolve, timer };
+      try {
+        wemeetSdk.QuickMeeting();
+      } catch (err) {
+        clearTimeout(timer);
+        pendingQuickMeeting = null;
+        resolve({ success: false, message: err.message });
+      }
+    });
   });
 
   ipcMain.handle('leave-meeting', async (_event, { leaveType }) => {
@@ -774,6 +865,45 @@ function register(ipcMain, deps) {
   });
 
   // 打开 Rooms 控制器界面（SDK ShowRoomsControllerView）
+  // ========== 应用更新（入口在「关于」弹窗） ==========
+  // 更新门户部署在独立分发服务（utils/updater.js 的 UPDATE_BASE_URL），
+  // 接口规范见 backend_api/docs/client-update-api.md
+
+  // 检查更新
+  ipcMain.handle('check-app-update', async () => {
+    try {
+      return await updater.checkUpdate();
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  });
+
+  // 下载更新（进度通过 'app-update-progress' 事件推送给关于窗口）
+  ipcMain.handle('download-app-update', async (_event, { versionInfo }) => {
+    if (!versionInfo || !versionInfo.downloadUrl) {
+      return { success: false, message: '版本信息不完整' };
+    }
+    const aboutWin = aboutDialogWindowAPI ? aboutDialogWindowAPI.getAboutWindow() : null;
+    if (aboutDialogWindowAPI && aboutDialogWindowAPI.setAboutDownloading) {
+      aboutDialogWindowAPI.setAboutDownloading(true);
+    }
+    let result;
+    try {
+      result = await updater.downloadUpdate(versionInfo, null, aboutWin);
+    } catch (err) {
+      result = { success: false, message: err.message };
+    }
+    if (aboutDialogWindowAPI && aboutDialogWindowAPI.setAboutDownloading) {
+      aboutDialogWindowAPI.setAboutDownloading(false);
+    }
+    return result;
+  });
+
+  // 打开已下载的安装包（触发安装）
+  ipcMain.handle('open-update-installer', async (_event, { filePath }) => {
+    return updater.openInstaller(filePath);
+  });
+
   ipcMain.handle('show-rooms-controller-view', async () => {
     if (!(await ensureSDKLoggedIn())) {
       return { success: false, message: 'SDK 未就绪，请重新登录' };
@@ -1227,15 +1357,11 @@ function register(ipcMain, deps) {
       }
 
       // 2. 从服务器下载
-      const accessToken = await getValidAccessToken();
-      const url = api.getFileUrl(serverPath);
-      console.log(`[IM] fetch-image-data: GET ${url}`);
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buffer = Buffer.from(await res.arrayBuffer());
-      const contentType = res.headers['content-type'] || 'image/png';
+      const { buffer, contentType: downloadedContentType } = await api.downloadFile(
+        await getValidAccessToken(),
+        serverPath,
+      );
+      const contentType = downloadedContentType || 'image/png';
 
       // 3. 写入本地缓存
       const name = getCacheFilename(serverPath);
@@ -1263,14 +1389,7 @@ function register(ipcMain, deps) {
 
       // 2. 没有缓存则从服务器下载
       if (!cachePath) {
-        const accessToken = await getValidAccessToken();
-        const url = api.getFileUrl(serverPath);
-        console.log(`[IM] open-cached-file: GET ${url}`);
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buffer = Buffer.from(await res.arrayBuffer());
+        const { buffer } = await api.downloadFile(await getValidAccessToken(), serverPath);
         const name = getCacheFilename(serverPath);
         if (name) {
           cachePath = path.join(CACHE_DIR, name);
@@ -1513,23 +1632,13 @@ function register(ipcMain, deps) {
   });
 
   // 上传文件
-  ipcMain.handle('im-upload-file', async (_event, { filePath, filename, mimetype, fileData }) => {
+  ipcMain.handle('im-upload-file', async (_event, { filename, mimetype, fileData } = {}) => {
     try {
       const accessToken = await getValidAccessToken();
-      console.log('[IM-Upload] 开始上传:', { filePath, filename, mimetype, hasFileData: !!fileData, dataSize: fileData?.byteLength || 'N/A', tokenPrefix: accessToken?.substring(0, 20) + '...' });
-
-      let fileBuffer;
-      if (fileData && fileData.byteLength) {
-        // 前端通过 FileReader 读取的数据（ArrayBuffer）
-        fileBuffer = Buffer.from(fileData);
-        console.log('[IM-Upload] 使用前端数据，buffer大小:', fileBuffer.length);
-      } else {
-        // 回退到从磁盘路径读取
-        const fs = require('fs');
-        if (!filePath) throw new Error('未提供文件路径或数据');
-        fileBuffer = fs.readFileSync(filePath);
-        console.log('[IM-Upload] 从磁盘读取文件，buffer大小:', fileBuffer.length);
-      }
+      if (!fileData || !fileData.byteLength) throw new Error('未提供文件数据');
+      if (fileData.byteLength > api.MAX_FILE_DOWNLOAD_BYTES) throw new Error('文件大小超过 100 MB 限制');
+      const fileBuffer = Buffer.from(fileData);
+      console.log('[IM-Upload] 开始上传:', { filename, mimetype, dataSize: fileBuffer.length });
       const data = await api.uploadFile(accessToken, fileBuffer, filename, mimetype);
       return { success: true, data };
     } catch (err) {

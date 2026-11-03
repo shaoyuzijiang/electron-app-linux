@@ -6,7 +6,7 @@
  *       /sso/redirect?ticket=xxx -> 服务端 302 + Set-Cookie -> 目标页
  */
 
-const { BASE_URL, request } = require('./httpClient');
+const { getBaseUrl, request } = require('./httpClient');
 
 /**
  * 颁发一次性 SSO Ticket
@@ -25,7 +25,7 @@ async function requestSsoTicket(accessToken, { audience, target, nonce } = {}) {
   const body = { audience, target };
   if (nonce) body.nonce = nonce;
 
-  return await request(`${BASE_URL}/api/auth/sso/ticket`, {
+  return await request(`${getBaseUrl()}/api/auth/sso/ticket`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

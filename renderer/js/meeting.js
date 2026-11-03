@@ -486,12 +486,23 @@ submitJoinMeetingBtn.addEventListener('click', async () => {
   }
 });
 
-document.getElementById('btnQuick').addEventListener('click', async () => {
+// 快速会议：防连点——SDK 内部对 schedule 请求有本地频控（每周期 10 次），
+// 超限会被静默拦截（无回调），必须等上次回调完成后才允许再次发起
+document.getElementById('btnQuick').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  const labelEl = btn.querySelector('.label');
+  const originalLabel = labelEl.textContent;
+  btn.disabled = true;
+  labelEl.textContent = '发起中...';
   try {
     const result = await window.electronAPI.quickMeeting();
     if (!result.success) alert(result.message || '无法发起快速会议');
   } catch (err) {
     alert('操作失败: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    labelEl.textContent = originalLabel;
   }
 });
 

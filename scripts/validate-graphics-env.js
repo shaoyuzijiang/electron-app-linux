@@ -48,11 +48,14 @@ function run() {
   const root = path.resolve(__dirname, '..');
   const sourceLauncher = fs.readFileSync(path.join(root, 'scripts', 'start-linux.sh'), 'utf8');
   const packageLauncher = fs.readFileSync(path.join(root, 'packaging', 'launcher.sh'), 'utf8');
+  const graphicsShell = fs.readFileSync(path.join(root, 'packaging', 'graphics-env.sh'), 'utf8');
   const linuxMain = fs.readFileSync(path.join(root, 'platform', 'linux-arm64', 'main.js'), 'utf8');
   const debBuilder = fs.readFileSync(path.join(root, 'scripts', 'build-deb.sh'), 'utf8');
-  assert(sourceLauncher.includes('/opt/x11-wayland/x11-ext.sh') || fs.readFileSync(path.join(root, 'packaging', 'graphics-env.sh'), 'utf8').includes('/opt/x11-wayland/x11-ext.sh'), '源码启动链路必须加载麒麟 XWayland 补丁');
-  assert(packageLauncher.includes('/opt/x11-wayland/x11-ext.sh') || fs.readFileSync(path.join(root, 'packaging', 'graphics-env.sh'), 'utf8').includes('/opt/x11-wayland/x11-ext.sh'), '安装版启动链路必须加载麒麟 XWayland 补丁');
-  assert(sourceLauncher.includes('LD_PRELOAD=') || fs.readFileSync(path.join(root, 'packaging', 'graphics-env.sh'), 'utf8').includes('LD_PRELOAD='), '源码启动链路必须清空 LD_PRELOAD');
+  assert(sourceLauncher.includes('/opt/x11-wayland/x11-ext.sh') || graphicsShell.includes('/opt/x11-wayland/x11-ext.sh'), '源码启动链路必须加载麒麟 XWayland 补丁');
+  assert(packageLauncher.includes('/opt/x11-wayland/x11-ext.sh') || graphicsShell.includes('/opt/x11-wayland/x11-ext.sh'), '安装版启动链路必须加载麒麟 XWayland 补丁');
+  assert(sourceLauncher.includes('LD_PRELOAD=') || graphicsShell.includes('LD_PRELOAD='), '源码启动链路必须清空 LD_PRELOAD');
+  assert(/was_wayland[\s\S]*WEMEET_X11_WAYLAND_PATCH[\s\S]*return 4/.test(graphicsShell),
+    '原生 Wayland 缺少厂商补丁时必须停止启动，不能带风险继续运行');
   assert(sourceLauncher.includes('wemeet_prepare_x11_wayland "$OUT"'), '源码启动器必须应用 Mesa 补丁环境');
   assert(packageLauncher.includes('wemeet_prepare_x11_wayland "$SDK_ROOT"'), '安装版启动器必须应用 Mesa 补丁环境');
   assert(linuxMain.includes('configureGraphicsEnvironment'), 'Linux 主进程必须在加载 Electron 前配置 Mesa 环境');

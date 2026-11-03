@@ -1,6 +1,6 @@
 #!/bin/bash
 #===============================================================================
-# update-linux-sdk.sh — 腾讯会议 Linux(ARM64/麒麟) SDK 一键升级脚本
+# update-linux-sdk.sh — 腾讯会议 Linux(arm64/x64，麒麟) SDK 一键升级脚本
 #
 # 与 update-mac-sdk.sh / update-win-sdk.sh 对标，完成 SDK 分发包到项目的更新：
 #   1. 校验分发包结构 + 从文件名解析版本号
@@ -20,12 +20,13 @@
 #   --dry-run        预览模式，不修改任何文件
 #   --no-rebuild     只替换 vendor 归档，不触发构建（跨机升级时用）
 #   --no-upload-hint 结束时不打印 Release 上传命令
-#   --rollback       回滚到最近一次备份
+#   --arch ARCH      目标架构：arm64 或 x64（兼容 x86_64）
+#   --rollback       回滚到该架构最近一次备份
 #   --list-backups   列出所有备份
 #   -h, --help       显示帮助
 #
 # 分发包要求（腾讯会议官方 Linux 发布包）:
-#   TMSDK_<产品ID>_<版本>_arm64_default.publish.tar.gz，解压后:
+#   TMSDK_<产品ID>_<版本>_<arm64|x86_64>_default.publish.tar.gz，解压后:
 #     <目录>/SDK/libwemeetsdk.so + libwemeet_base.so + Release/ + include/wemeet_sdk.h
 #     <目录>/Electron_Demo/include/json/json.h
 #
@@ -61,7 +62,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRYRUN=1; shift ;;
     --no-rebuild) DO_REBUILD=0; shift ;;
     --no-upload-hint) UPLOAD_HINT=0; shift ;;
-    --arch) shift; SDK_ARCH_SEG="${1:-}"; shift ;;
+    --arch) [[ $# -ge 2 ]] || fail "--arch 缺少参数"; SDK_ARCH_SEG="$2"; shift 2 ;;
     --rollback) DO_ROLLBACK=1; shift ;;
     --list-backups) DO_LIST=1; shift ;;
     -h|--help) show_help; exit 0 ;;
@@ -71,7 +72,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 SDK_ARCH_SEG="${SDK_ARCH_SEG:-arm64}"
-case "$SDK_ARCH_SEG" in arm64|x86_64) ;; *) fail "仅支持 --arch arm64|x86_64: $SDK_ARCH_SEG" ;; esac
+case "$SDK_ARCH_SEG" in
+  arm64) LINUX_ARCH="arm64"; HOST_ARCH="aarch64"; PREBUILT_ARCH="arm64" ;;
+  x64|x86_64) SDK_ARCH_SEG="x86_64"; LINUX_ARCH="x64"; HOST_ARCH="x86_64"; PREBUILT_ARCH="x64" ;;
+  *) fail "仅支持 --arch arm64|x64: $SDK_ARCH_SEG" ;;
+esac
 
 current_archive() {
   # 兼容 macOS 自带 bash 3.2（无 readarray）：用 ls+wc 统计，要求 vendor 下恰好一个
@@ -93,14 +98,14 @@ list_backups() {
 
 do_rollback() {
   local latest="" d
-  for d in "${BACKUP_ROOT}"/linux-*.tar.gz; do [[ -f "$d" ]] || continue; latest="$d"; done
+  for d in "${BACKUP_ROOT}"/linux-*TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz; do [[ -f "$d" ]] || continue; latest="$d"; done
   [[ -n "${latest}" ]] || fail "没有可用备份"
   local old_count=0
   old_count="$( { ls "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
   log "回滚: 恢复 $(basename "${latest}")，移除现有 ${old_count} 个归档"
   rm -f "${VENDOR_DIR}"/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz
   cp "${latest}" "${VENDOR_DIR}/$(basename "${latest}" | sed -E 's/^linux-[0-9]{8}-[0-9]{6}-//')"
-  ok "已恢复 vendor/ 归档。请在麒麟构建机上执行: npm run setup:kylin -- --build-only"
+  ok "已恢复 vendor/ 归档。请在麒麟构建机上执行: LINUX_ARCH=${LINUX_ARCH} npm run setup:kylin -- --build-only"
   exit 0
 }
 
@@ -154,7 +159,7 @@ elif [[ -d "${ARG_PKG}" ]]; then
   # 目录形式：由本脚本代为打包成 vendor 规范归档名
   if [[ "${DRYRUN}" -eq 0 ]]; then
     STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/linux-sdk-update.XXXXXX")"
-    PKG_ARCHIVE="${STAGE_DIR}/TMSDK_0300000000_${NEW_VERSION_FULL}_arm64_default.publish.tar.gz"
+    PKG_ARCHIVE="${STAGE_DIR}/TMSDK_0300000000_${NEW_VERSION_FULL}_${SDK_ARCH_SEG}_default.publish.tar.gz"
     log "  打包分发包目录为 vendor 规范归档..."
     tar --no-same-owner --no-same-permissions -czf "${PKG_ARCHIVE}" -C "$(dirname "${ARG_PKG%/}")" "${PKG_NAME}"
     ok "规范归档已生成"
@@ -206,7 +211,7 @@ fi
 
 if [[ "${DRYRUN}" -eq 1 ]]; then
   echo ""; echo "=== 预览结束，未修改任何文件 ==="
-  echo "  执行: ./update-linux-sdk.sh ${ARG_PKG} -y"
+  echo "  执行: ./update-linux-sdk.sh ${ARG_PKG} --arch ${LINUX_ARCH} -y"
   exit 0
 fi
 
@@ -215,19 +220,19 @@ fi
 #------------------------------------------------------------------------------
 ADDON_BUILT=0
 IS_KYLIN_BUILD_ENV=0
-if [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "aarch64" ]] \
+if [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "$HOST_ARCH" ]] \
    && [[ -f /etc/os-release ]] && grep -Eiq 'kylin|银河麒麟' /etc/os-release; then
   IS_KYLIN_BUILD_ENV=1
 fi
 
 if [[ "${DO_REBUILD}" -eq 0 ]]; then
-  warn "已跳过构建（--no-rebuild）。请在麒麟构建机执行: npm run setup:kylin -- --build-only"
+  warn "已跳过构建（--no-rebuild）。请在麒麟构建机执行: LINUX_ARCH=${LINUX_ARCH} npm run setup:kylin -- --build-only"
 elif [[ "${IS_KYLIN_BUILD_ENV}" -eq 0 ]]; then
-  warn "当前非麒麟 aarch64 环境（$(uname -s)/$(uname -m)），跳过构建"
-  echo "        请在麒麟构建机执行: npm run setup:kylin -- --build-only"
+  warn "当前非麒麟 ${HOST_ARCH} 环境（$(uname -s)/$(uname -m)），跳过构建"
+  echo "        请在麒麟构建机执行: LINUX_ARCH=${LINUX_ARCH} npm run setup:kylin -- --build-only"
 else
-  log "步骤 2: 执行离线构建 + 门禁（setup:kylin --build-only）..."
-  npm run setup:kylin -- --build-only || fail "构建失败；vendor 归档已替换，可 --rollback 回退后排查"
+  log "步骤 2: 执行 ${LINUX_ARCH} 离线构建 + 门禁（setup:kylin --build-only）..."
+  LINUX_ARCH="$LINUX_ARCH" npm run setup:kylin -- --build-only || fail "构建失败；vendor 归档已替换，可 --arch ${LINUX_ARCH} --rollback 回退后排查"
   ADDON_BUILT=1
 fi
 
@@ -239,8 +244,8 @@ if [[ "${ADDON_BUILT}" -eq 1 ]]; then
   [[ -f "${PROJECT_DIR}/output/linux/wemeet_electron_sdk.node" ]] \
     || fail "未找到编译产物 output/linux/wemeet_electron_sdk.node"
   cp "${PROJECT_DIR}/output/linux/wemeet_electron_sdk.node" \
-     "${PROJECT_DIR}/packaging/prebuilt/wemeet_electron_sdk.arm64.node"
-  ok "已回传 -> packaging/prebuilt/wemeet_electron_sdk.arm64.node"
+     "${PROJECT_DIR}/packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node"
+  ok "已回传 -> packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node"
 fi
 
 #------------------------------------------------------------------------------
@@ -258,15 +263,19 @@ echo "   vendor 归档: $(current_archive >/dev/null 2>&1 && basename "$(current
 echo ""
 echo "📋 变更:"
 echo "   vendor/TMSDK_*_${SDK_ARCH_SEG}_default.publish.tar.gz"
-[[ "${ADDON_BUILT}" -eq 1 ]] && echo "   packaging/prebuilt/wemeet_electron_sdk.arm64.node（已回传）"
+[[ "${ADDON_BUILT}" -eq 1 ]] && echo "   packaging/prebuilt/wemeet_electron_sdk.${PREBUILT_ARCH}.node（已回传）"
 echo ""
 echo "🚀 下一步（缺一不可）:"
 echo "   1. 检查 scripts/validate-linux-adapter.js 的 GetSDKVersion mock 是否需同步为 ${NEW_VERSION_FULL}"
-echo "   2. 上传供应物（覆盖）:"
-echo "      gh release upload vendor-supplies vendor/$(basename "$(current_archive)" 2>/dev/null || echo '<归档名>') --clobber"
+if [[ "$UPLOAD_HINT" -eq 1 ]]; then
+  echo "   2. 上传供应物（覆盖）:"
+  echo "      gh release upload vendor-supplies vendor/$(basename "$(current_archive)" 2>/dev/null || echo '<归档名>') --clobber"
+else
+  echo "   2. 已按 --no-upload-hint 隐藏供应物上传命令"
+fi
 echo "   3. 提交变更并 push → CI 自动出包（CI 按 TMSDK_* 通配下载，无需改 yaml）"
 if [[ -n "$(ls "${BACKUP_ROOT}"/linux-${TS}-*.tar.gz 2>/dev/null)" ]]; then
   echo ""
-  echo "   回滚: ./update-linux-sdk.sh --rollback"
+  echo "   回滚: ./update-linux-sdk.sh --arch ${LINUX_ARCH} --rollback"
 fi
 echo "================================================================"

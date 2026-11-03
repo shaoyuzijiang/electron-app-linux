@@ -8,7 +8,7 @@
  * 架构约束见 backend_api/calendar.md
  */
 
-const { BASE_URL, request } = require('./httpClient');
+const { getBaseUrl, request } = require('./httpClient');
 
 /**
  * 创建日程
@@ -17,7 +17,7 @@ const { BASE_URL, request } = require('./httpClient');
  * @returns {Event}
  */
 async function createEvent(accessToken, params) {
-  return await request(`${BASE_URL}/api/calendar/events`, {
+  return await request(`${getBaseUrl()}/api/calendar/events`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -36,7 +36,7 @@ async function getEvents(accessToken, options = {}) {
   if (options.endDate) params.append('endDate', options.endDate);
   if (options.status) params.append('status', options.status);
   const qs = params.toString() ? '?' + params : '';
-  return await request(`${BASE_URL}/api/calendar/events${qs}`, {
+  return await request(`${getBaseUrl()}/api/calendar/events${qs}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -48,7 +48,7 @@ async function getEvents(accessToken, options = {}) {
  * @returns {Event}
  */
 async function getEventDetail(accessToken, eventId) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -62,7 +62,7 @@ async function getEventDetail(accessToken, eventId) {
  * @returns {Event}
  */
 async function updateEvent(accessToken, eventId, params) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -76,7 +76,7 @@ async function updateEvent(accessToken, eventId, params) {
  * @returns {{ message: string }}
  */
 async function cancelEvent(accessToken, eventId) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -90,7 +90,7 @@ async function cancelEvent(accessToken, eventId) {
  * @returns {{ message: string, participant: Participant }}
  */
 async function addEventParticipant(accessToken, eventId, userId) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}/participants`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}/participants`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId }),
@@ -105,7 +105,7 @@ async function addEventParticipant(accessToken, eventId, userId) {
  * @returns {{ message: string }}
  */
 async function removeEventParticipant(accessToken, eventId, userId) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}/participants/${userId}`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}/participants/${userId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -118,7 +118,7 @@ async function removeEventParticipant(accessToken, eventId, userId) {
  * @returns {Array<Participant>}
  */
 async function getEventParticipants(accessToken, eventId) {
-  return await request(`${BASE_URL}/api/calendar/events/${eventId}/participants`, {
+  return await request(`${getBaseUrl()}/api/calendar/events/${eventId}/participants`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -135,7 +135,7 @@ async function getFreeBusy(accessToken, params) {
     startTime: params.startTime,
     endTime: params.endTime,
   }).toString();
-  return await request(`${BASE_URL}/api/calendar/freebusy?${qs}`, {
+  return await request(`${getBaseUrl()}/api/calendar/freebusy?${qs}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

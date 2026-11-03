@@ -35,3 +35,6 @@ wemeet_sdk/mac/Frameworks/x86_64/*
 !wemeet_sdk/mac/Frameworks/x86_64/wemeet_electron_sdk.node
 # x86 链路实施期生成物（2026-10-21）
 native/include/
+
+# 内部下载服务的原始接口规范只在本地交接，不进入公开仓库或安装包
+backend_api/docs/client-update-api.md

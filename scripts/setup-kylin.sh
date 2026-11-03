@@ -3,10 +3,12 @@ set -Eeuo pipefail
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# 目标架构（arm64 | x64），默认 arm64；SDK 归档命名段：arm64 -> arm64；x64 -> x86_64
-TARGET_ARCH="${TARGET_ARCH:-arm64}"
-case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64" ;; x64) HOST_ARCH="x86_64" ;; *) echo "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" >&2; exit 1 ;; esac
-SDK_ARCH_NAME="${TARGET_ARCH}"; [[ "$SDK_ARCH_NAME" == "x64" ]] && SDK_ARCH_NAME="x86_64"
+# 目标架构统一由 LINUX_ARCH 指定；TARGET_ARCH 仅作向后兼容。
+LINUX_ARCH="${LINUX_ARCH:-${TARGET_ARCH:-arm64}}"
+case "$LINUX_ARCH" in arm64) HOST_ARCH="aarch64"; SDK_ARCH_NAME="arm64" ;; x64) HOST_ARCH="x86_64"; SDK_ARCH_NAME="x86_64" ;; *) echo "LINUX_ARCH 仅支持 arm64|x64: $LINUX_ARCH" >&2; exit 1 ;; esac
+TARGET_ARCH="$LINUX_ARCH"
+STAGE="启动"
+fail() { echo "错误[$STAGE]: $*" >&2; exit 1; }
 # vendor 下应恰好有一个对应架构的 Linux SDK 归档；版本号从文件名解析（升级 SDK 只需替换该文件）
 SDK_ARCHIVE_COUNT="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz 2>/dev/null || true; } | wc -l | tr -d ' ')"
 ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz 2>/dev/null || true; } | head -1)"
@@ -15,13 +17,10 @@ ARCHIVE="$( { ls "$ROOT"/vendor/TMSDK_*_${SDK_ARCH_NAME}_default.publish.tar.gz 
 SDK_ARCHIVE_BASE="$(basename "$ARCHIVE" .tar.gz)"
 SDK_VERSION="$(echo "$SDK_ARCHIVE_BASE" | cut -d_ -f3)"
 BUILD_ONLY=0
-STAGE="启动"
 TRANSACTION_ACTIVE=0
 BUILD_COMMITTED=0
 OUTPUT_BACKUP="$ROOT/output/.linux-backup.$$"
 INCLUDE_BACKUP="$ROOT/native/.include-backup.$$"
-
-fail() { echo "错误[$STAGE]: $*" >&2; exit 1; }
 rollback_build() {
   [[ "$TRANSACTION_ACTIVE" -eq 1 && "$BUILD_COMMITTED" -ne 1 ]] || return
   rm -rf "$ROOT/output/linux" "$ROOT/native/include"
@@ -50,10 +49,8 @@ bash "$ROOT/scripts/check.sh" || fail "麒麟构建环境不满足要求"
 STAGE="检查系统"
 [[ "$(id -u)" -ne 0 ]] || fail "禁止使用 root/sudo 运行，请在目标桌面普通用户下执行"
 [[ "$(uname -s)" == "Linux" ]] || fail "只能在 Linux 上运行"
-# 目标架构（arm64 | x64），默认 arm64；x64 需 x86 银河麒麟 V10 基线机
-
-case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64" ;; x64) HOST_ARCH="x86_64" ;; *) fail "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" ;; esac
-[[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（构建目标 ${TARGET_ARCH}），当前为 $(uname -m)"
+# x64 需 x86 银河麒麟 V10 基线机。
+[[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（构建目标 ${LINUX_ARCH}），当前为 $(uname -m)"
 [[ -f /etc/os-release ]] || fail "缺少 /etc/os-release"
 grep -Eiq 'kylin|银河麒麟' /etc/os-release || fail "正式构建只允许银河麒麟基线机"
 grep -Eiq 'V10|VERSION_ID="?10' /etc/os-release || fail "正式构建要求银河麒麟 V10"
@@ -76,7 +73,7 @@ GLIBC_VERSION="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
 
 STAGE="校验供应包"
 ELECTRON_VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
-[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-${TARGET_ARCH}.zip" ]] || fail "缺少离线 Electron 运行时 (v${ELECTRON_VERSION} ${TARGET_ARCH})"
+[[ -f "$ROOT/vendor/electron-v${ELECTRON_VERSION}-linux-${LINUX_ARCH}.zip" ]] || fail "缺少离线 Electron 运行时 (v${ELECTRON_VERSION} ${LINUX_ARCH})"
 [[ -f "$ROOT/vendor/node-v${ELECTRON_VERSION}-headers.tar.gz" ]] || fail "缺少离线 Electron headers (v${ELECTRON_VERSION})"
 [[ -d "$ROOT/vendor/npm-cache/_cacache" ]] || fail "缺少 npm 离线缓存"
 if ! tar -tzf "$ARCHIVE" | awk -F/ '$1 == "" { exit 1 } { for (i=1; i<=NF; i++) if ($i == "..") exit 1 }'; then
@@ -99,7 +96,7 @@ cd "$ROOT"
 STAGE="离线安装 npm 依赖"
 npm ci --ignore-scripts --include=dev --offline --cache "$ROOT/vendor/npm-cache" --engine-strict=true
 STAGE="离线安装 Electron"
-bash "$ROOT/scripts/install-electron-runtime.sh"
+LINUX_ARCH="$LINUX_ARCH" bash "$ROOT/scripts/install-electron-runtime.sh"
 STAGE="离线安装 Electron headers"
 bash "$ROOT/scripts/install-electron-headers.sh"
 
@@ -109,11 +106,10 @@ rm -rf "$OUTPUT_BACKUP" "$INCLUDE_BACKUP"
 [[ ! -e "$ROOT/output/linux" ]] || mv "$ROOT/output/linux" "$OUTPUT_BACKUP"
 [[ ! -e "$ROOT/native/include" ]] || mv "$ROOT/native/include" "$INCLUDE_BACKUP"
 STAGE="准备腾讯会议 SDK"
-export SDK_ARCH="$SDK_ARCH_NAME" # 供 prepare-sdk 选择对应架构归档
-bash "$ROOT/scripts/prepare-sdk.sh" "$SDK_DIR" # SDK_ARCH 由上方导出
+export LINUX_ARCH
+bash "$ROOT/scripts/prepare-sdk.sh" "$SDK_DIR"
 STAGE="编译原生 addon"
-export TARGET_ARCH # 供 build-native 选择目标架构
-bash "$ROOT/scripts/build-native.sh" # TARGET_ARCH 由上方导出
+bash "$ROOT/scripts/build-native.sh"
 STAGE="源码校验"
 npm run verify:platform-contract
 STAGE="构建产物检查"

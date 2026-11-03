@@ -34,6 +34,8 @@ function start() {
   const appSettings = require('../../utils/app-settings');
   const tokenStore = require('../../utils/token-store');
   const meetingPolling = require('../../backend_api/meeting-polling');
+  const updater = require('../../utils/updater');
+  const aboutDialogWindow = require('../../utils/about-dialog-window');
   const { createLinuxSdkAdapter } = require('./sdk-adapter');
   const { registerLinuxIpc } = require('./ipc');
 
@@ -180,7 +182,7 @@ function start() {
         preload: path.join(__dirname, '..', '..', 'bootstrap', 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        additionalArguments: [`--is-dev=${app.isPackaged ? '0' : '1'}`, '--runtime-platform=linux-arm64'],
+        additionalArguments: [`--is-dev=${app.isPackaged ? '0' : '1'}`, `--runtime-platform=linux-${process.arch}`],
       },
     });
     mainWindow.setMenu(null);
@@ -246,6 +248,7 @@ function start() {
 
     registerLinuxIpc({
       ipcMain, app, api, adapter, tokenStore, appSettings, httpClient,
+      updater, aboutDialogWindowAPI: aboutDialogWindow,
       getMainWindow, showPage, getValidAccessToken, beginAuthOperation, invalidateAuth, isAuthOperationCurrent,
       refreshMeetingList: meetingPolling.scheduleMeetingListRefresh, stopMeetingPolling: meetingPolling.stopMeetingListPolling,
       appRoot: path.resolve(__dirname, '..', '..'),

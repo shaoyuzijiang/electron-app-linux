@@ -1,7 +1,6 @@
-# 腾讯会议 SDK Demo（Linux ARM64 / 银河麒麟）
+# 腾讯会议 SDK Demo（Linux ARM64 / x86_64、macOS ARM64、Windows x64）
 
-基于 Electron 33.4.11 + 腾讯会议 Linux SDK 3.26 的桌面会议应用，运行于银河麒麟 V10 SP1（ARM64）。
-与 Mac/Windows 版本共享同一套渲染层、能力契约与后端接口，按平台能力自动降级 UI。
+基于 Electron 33.4.11 的跨平台桌面会议 Demo。Linux ARM64/x86_64 使用各自的腾讯会议 Linux SDK 3.26 供应物，macOS/Windows 使用 3.45 SDK；共享渲染层、能力契约与后端接口，按平台能力适配 UI。麒麟 ARM64 为既有测试基线，x86 麒麟桌面及实体音视频设备仍需真机验收。
 
 ---
 
@@ -9,17 +8,17 @@
 
 ### 1. 获取安装包
 
-**构建产物命名统一为：`腾讯会议SDK Demo-<版本>-<日期>-arm64.deb`**（与 Mac/Windows 下载页一致）。
+Release `latest` 包含 `-arm64.deb`（Linux ARM64）、`-x64.deb`（Linux x86_64）、`-mac-arm64.dmg`（macOS）和 `-win-x64.exe`（Windows）；**选择与机器架构匹配的单个资产**。Actions 的 `linux-arm64-deb`、`linux-x64-deb` 保留中文命名原始产物。
 
 **方式 A：Release 页下载**
 
-打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases) → 下载最新构建的
-`tencent-meeting-sdk-demo-<版本>-<日期>-arm64.deb`。
-（GitHub 资产名不支持中文/空格，Release 上是 ASCII 名；中文名原始产物在
-Actions 运行页的 `linux-arm64-deb` 产物内，上传自有下载页时直接使用。）
+打开 [Releases · 最新安装包](https://github.com/shaoyuzijiang/electron-app-linux/releases/tag/latest)，按平台与架构选择。命令行只下载对应包，例如 ARM64 用：
 
-> 也可以用命令行直接拉最新版：
-> `gh release download latest -R shaoyuzijiang/electron-app-linux`
+```bash
+gh release download latest -R shaoyuzijiang/electron-app-linux -p '*-arm64.deb'
+```
+
+x86_64 则使用 `-p '*-x64.deb'`；不要省略 `-p` 后下载并误装其他架构。GitHub 发布的是 ASCII 名，中文名原包见对应 Actions Artifact。
 
 ### 2. 安装
 
@@ -30,7 +29,7 @@ Actions 运行页的 `linux-arm64-deb` 产物内，上传自有下载页时直�
 cd ~/Downloads
 
 # 安装（文件名以实际下载的日期版本为准）
-sudo dpkg -i tencent-meeting-sdk-demo-*.deb
+sudo dpkg -i ./tencent-meeting-sdk-demo-*-arm64.deb
 ```
 
 安装脚本会自动完成：
@@ -53,7 +52,7 @@ tencent-meeting-sdk-linux-demo
 
 ```bash
 # 升级：下载新版 deb 后直接覆盖安装，用户数据不受影响
-sudo dpkg -i tencent-meeting-sdk-demo-*.deb
+sudo dpkg -i ./tencent-meeting-sdk-demo-*-arm64.deb
 
 # 卸载应用（保留个人数据）
 sudo dpkg -r tencent-meeting-sdk-linux-demo
@@ -171,16 +170,16 @@ sudo dpkg -i dist-demo/*.deb
 
 ### 自动化打包（CI）
 
-推送代码到 main 分支后自动构建 DEB 并发布到 Release `latest`，无需麒麟参与。
+向 `main` 推送非纯文档改动后，Actions 自动构建 Linux ARM64/x86_64 DEB、macOS ARM64 DMG、Windows x64 EXE，并各自发布到 Release `latest`；手动运行 `build-all-platforms` 仅上传 Actions Artifacts。构建成功是出包验证，不等于麒麟 x86 真机及摄像头验收通过。仓库为公开仓库，上传供应物前需确认 SDK 再分发授权。
 方案、开通步骤与 addon 重编时机见 [`docs/AUTOPACK_PLAN.md`](./docs/AUTOPACK_PLAN.md)。
 
 ### 项目结构（关键目录）
 
 ```
 ├── main.js                      # 统一入口：按平台分派主进程
-├── main-darwin-win32.js         # Mac/Windows 主进程（3.43 SDK）
+├── main-darwin-win32.js         # Mac/Windows 主进程（3.45 SDK）
 ├── ipc-handlers.js              # Mac/Windows IPC 注册
-├── binding.gyp                  # 原生 addon 编译配置（linux-arm64 / mac / win）
+├── binding.gyp                  # 原生 addon 编译配置（Linux arm64/x64、mac、win）
 ├── common/contracts/            # 跨平台能力契约（21 项）
 ├── platform/
 │   ├── linux-arm64/             # Linux 主进程 / SDK 3.26 adapter / 安全 IPC / 后端通道
@@ -198,5 +197,5 @@ sudo dpkg -i dist-demo/*.deb
     ├── MERGE_REHEARSAL_PLAN.md  # 合并 electron-app 演练方案（施工图）
     ├── PLATFORM_MERGE_PROPOSAL.md # mac/win 平台差异评估与合并架构建议
     ├── SDK_UPGRADE_FLOW.md      # SDK 升级流程与自动化可行性调研
-    └── PITFALLS.md              # 踩坑记录（25 个问题：症状 → 原因 → 解决）
+    └── PITFALLS.md              # 踩坑记录（症状 → 原因 → 解决）
 ```

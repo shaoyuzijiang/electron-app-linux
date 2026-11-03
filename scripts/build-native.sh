@@ -13,9 +13,10 @@ BUILT="$ROOT/build/Release/wemeet_electron_sdk.node"
 TEMP_ADDON="$OUT/.wemeet_electron_sdk.node.$$"
 
 fail() { echo "原生 addon 编译失败: $*" >&2; exit 1; }
-# 目标架构（arm64 | x64），默认 arm64；x64 需在 x86 银河麒麟基线机构建
-TARGET_ARCH="${TARGET_ARCH:-arm64}"
-case "$TARGET_ARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) fail "TARGET_ARCH 仅支持 arm64|x64: $TARGET_ARCH" ;; esac
+# 目标架构统一由 LINUX_ARCH 指定；TARGET_ARCH 仅作向后兼容。
+LINUX_ARCH="${LINUX_ARCH:-${TARGET_ARCH:-arm64}}"
+case "$LINUX_ARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) fail "LINUX_ARCH 仅支持 arm64|x64: $LINUX_ARCH" ;; esac
+TARGET_ARCH="$LINUX_ARCH"
 [[ "$(uname -s)" == Linux ]] || fail "只能在 Linux 构建"
 [[ "$(uname -m)" == "$HOST_ARCH" ]] || fail "需要 ${HOST_ARCH}（构建目标 ${TARGET_ARCH}），当前 $(uname -m)"
 # 基线防线：默认仅允许银河麒麟 V10；容器化 CI 构建可设 ADDON_BASELINE_OVERRIDE=1

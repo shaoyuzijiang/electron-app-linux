@@ -1,7 +1,6 @@
-# x86 Linux 支持方案（调研与设计 · 待评审）
+# x86 Linux 支持方案与验收状态
 
-> 目标：新增 x86_64 Linux demo 链路，使用方式与现有 ARM64（银河麒麟 V10）完全一致；
-> **ARM64 现有链路零回归**。本文档为实施依据，评审通过后按分期执行。
+> 目标：新增 x86_64 Linux demo，与 ARM64 共用应用链路且不破坏原有功能。第 1–6 节是 2026-10-21 的历史调研/设计快照；阶段 A/B 已在第八节交付，当前待验的是第九节目标机运行、实体音视频。仓库为 PUBLIC，供应物下载和二进制再分发授权须另核实。
 
 ## 一、调研结论（基于实物核验，2026-10-21）
 
@@ -157,7 +156,8 @@
 
 ```bash
 # 1. 下载（Releases → latest → tencent-meeting-sdk-demo-<版本>-<日期>-x64.deb）
-sudo dpkg -i tencent-meeting-sdk-demo-*.deb
+# 先确保目录仅有一个目标 x64 安装包；不可匹配 arm64.deb
+sudo dpkg -i ./tencent-meeting-sdk-demo-*-x64.deb
 # 2. 依赖缺口自动补齐（DEB 已声明 Depends：libc6/libstdc++6/libgtk-3-0/libnss3/libasound2 等）
 sudo apt-get install -f
 # 3. 启动：桌面图标"腾讯会议SDK Demo"，或命令行
@@ -168,24 +168,44 @@ tencent-meeting-sdk-linux-demo
 
 | 前提 | 说明 |
 |---|---|
-| glibc ≥ 2.31 | addon 以 ubuntu:20.04（glibc 2.31）编译。**若目标系统 glibc 更低**
-  （如麒麟 x86 V10 实测为 2.28），报 `GLIBC_2.31 not found`，
-  解决：build-addon-x64.yml 容器镜像换 ubuntu:18.04 重编（版本更低向下兼容面更大） |
+| glibc ≥ 2.31 | DEB 显式声明 `libc6 (>= 2.31)`，addon 按 ubuntu:20.04/glibc 2.31 基线构建。若目标系统更低，会在安装或运行时失败；不能只换 ubuntu:18.04 重编 addon，还须核对 DEB 依赖、Electron/SDK 及所有 ELF 版本需求。 |
 | 图形栈 | X11 或 Wayland+XWayland（与 arm64 相同经验，坑 6/7/8 图形三件套） |
 | 依赖库 | `sudo apt-get install -f` 自动补；离线环境需按 Depends 清单预置 |
 | 网络/后端 | 与 arm64 相同（后端 API 动态签发 Token） |
 
-### 8.6 待办（阶段 C）
+### 8.6 剩余待办（阶段 C，仅运行时验收）
 
-- [ ] 推送分支 → 手动触发 `build-addon-x64` → 回传 addon 提交（阶段 B 核心步）
-- [ ] K4：electron-v33.4.11-linux-x64.zip 与 x86 SDK 归档上传 vendor-supplies + 重算 SHA256SUMS
-- [ ] x64 job 首跑全绿（main push 或手动触发）
-- [ ] K2：x86 真机全量冒烟（LINUX_TEST_PLAN）+ 基线 glibc 版本实测
-- [ ] 本分支评审后合入 main（首次 main push 将跑 4 个 Linux/mac/win job）
+- [x] x64 addon 容器编译并回传；供应物上传、校验；四平台 CI 构建与发布（见 8.4）。
+- [ ] 用**目标 x86_64 Linux 桌面系统**验证安装、启动、登录、入会、离会与音视频；记录 `uname -m`、`getconf GNU_LIBC_VERSION`、发行版与会话类型。
+- [ ] 真实 UVC 摄像头和麦克风采集、远端参会者观察；图形栈及 SDK .56 运行行为仍未验证。
+- [ ] 若目标系统 glibc < 2.31，先评估整个 DEB 的依赖和 SDK/Electron 要求，再选择降低构建基线；**仅重编 addon 不足以解决 DEB 的 `libc6 (>= 2.31)` 依赖**。
 
-- [ ] arm64 三端 CI 全绿（与改造前对照，零回归）
-- [ ] x64 job 全绿并稳定产出 `-x64.deb`
-- [ ] Release `latest` 四资产共存且互不误删（连续两次发布验证清理隔离）
-- [ ] x86 真机：安装/启动/登录/入会/预定冒烟通过（含图形三件套）
-- [ ] `update-linux-sdk.sh` 双架构升级演练各一次
-- [ ] 本文档补"实施结果"节
+## 九、x86 Linux 最后一轮测试方案（2026-11-02；待执行）
+
+### 9.1 测试场地与证据级别
+
+| 环境 | 能证明什么 | 不能证明什么 |
+|---|---|---|
+| 现有 CI 和静态包检查 | addon、SDK 库、Electron 的 ELF 架构以及包结构、契约与模拟参数 | 应用在 x86 桌面启动、SDK 调用真实设备、远端收到音视频 |
+| **Intel/AMD 主机上的 x86_64 VM + USB 摄像头/麦克风直通** | 目标发行版中安装、启动、实际 UVC/音频设备采集以及远端收流 | 某一台真实麒麟机的 GPU/厂商驱动兼容性；不同型号摄像头 |
+| x86_64 VM + `v4l2loopback` 虚拟摄像头/音频环回 | SDK 接收视频帧/音频与远端收流（须先确认 SDK 枚举并接受虚拟设备） | USB 摄像头的实际兼容性；SDK 不识别虚拟设备时也不能判定实体摄像头不支持 |
+| **目标 x86_64 物理机器 + UVC 摄像头/麦克风** | 完整目标系统、设备与图形栈验收 | — |
+
+**不推荐在本机 Apple Silicon/macOS 上用 QEMU 模拟 x86_64 来做最后的音视频验收**：这是软件模拟而非原生 x86 虚拟化，性能与 USB/GPU 结果不代表目标机器。无物理 x86 主机时可用云端 x86 桌面 VM 验证安装、启动；没有可直通的 UVC 设备，就不能宣称实体摄像头通过。
+
+### 9.2 推荐执行顺序（不需要额外 CI 构建）
+
+1. 使用 Release `latest` 的**准确 `-x64.deb` 文件**（不要用 `*.deb`，以免误装 arm64 包）；保存版本、文件名、SHA-256。准备一台 Intel/AMD 主机、目标 x86_64 Linux 桌面 VM；优先与最终交付系统相同的银河麒麟 V10 x86_64。设置 X11 会话（SDK 需要 X11；Wayland 须有 XWayland + 对应厂商补丁）。
+2. 在 VM 内运行 `uname -m`（须为 `x86_64`）、`getconf GNU_LIBC_VERSION`（目标须满足 DEB `libc6 (>= 2.31)`）、`echo "$XDG_SESSION_TYPE"`、`dpkg-deb -f ./<准确文件名>.deb Architecture Depends`；不满足就停止安装并记录阻断原因。
+3. VM 软件/硬件测试：将 UVC USB 摄像头和 USB 麦克风或组合摄像头**直通到客体**，不要仅使用宿主视频通话 App。VM 内检查 `/dev/video*`、`v4l2-ctl --list-devices`（如已安装 `v4l-utils`）、`arecord -l`；使用系统相机和录音工具先证明客体自身能采集。直通不可用时才尝试 `v4l2loopback`（测试图案）和音频环回，并明确标记为“虚拟设备测试”。
+4. `sudo dpkg -i ./<准确文件名>.deb`；依赖不足时 `sudo apt-get install -f`（离线系统预置所需包）；使用普通桌面用户执行 `tencent-meeting-sdk-linux-demo`。确认登录页/会议页可见、无 `GLIBC_* not found`、无 `ipc connect failed` 或图形进程崩溃；不以 `check --deb` 静态通过代替此步。
+5. 使用**测试账号**邀请另一台独立设备上的参会者：分别以摄像头关/开加入会议、切换麦克风开/关。由远端确认是否看到**正在移动**的画面、听到**实时**语音；观察 SDK 窗口是否预览/崩溃，离会、重入会重复一次。只看到设备列表或入会请求中的 `camera_on=true` 不算通过。避免将账号凭据、会议号或视频内容写入公开日志。
+6. 录制测试表：DEB SHA-256、主客体架构/OS/glibc、X11/Wayland、摄像头及麦克风型号、设备是直通还是真机、安装/启动结果、入会与远端收流结果、控制台错误与截图（打码）。异常先区分“客体无设备”“SDK 未枚举设备”“SDK 进程/图形崩溃”“远端无画面”再定位。
+
+### 9.3 放行标准和降级口径
+
+- **x86 安装与基础功能可用**：在目标版本桌面环境真实启动、登录、入会和离会，不能只凭 VM 的另一个发行版或 CI 四 job 全绿宣称麒麟 x86 适配完成。
+- **x86 音视频通过**：至少一次客体 UVC USB 直通或目标实体 x86 机器 + 实体摄像头/麦克风 + 远端确认动态画面/实时语音；只有环回设备通过，结论须标“虚拟设备音视频联调通过，实体摄像头待验”。
+- 如当前仅有 Apple Silicon Mac，建议借用一台 Intel/AMD 笔记本或申请可访问的 x86 物理测试机做最终设备验收；它**无需编译 addon**，只安装现有 DEB。若借不到设备，先做云端 x86 VM 基础测试，并如实保留音视频实体设备未验收的风险项。
+
+`docs/LINUX_TEST_PLAN.md` 原针对 ARM64；本次已将其中不存在的 `npm run doctor` 修正为 `bash scripts/check.sh`。其非 `--deb` 模式要求麒麟 V10 且 glibc 恰好 2.31，不可用来否定 glibc 更高系统的兼容性；x86 真机测试以本节为准。若需降基线，按 8.5 核对整个 DEB 与所有 ELF，不能仅重编 addon。

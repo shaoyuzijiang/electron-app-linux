@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const SIGN_IDENTITY = 'Apple Development: liuqi92@foxmail.com (5Y6WN3D7WG)';
+const SIGN_IDENTITY = process.env.CSC_NAME || process.env.MAC_SIGN_IDENTITY || '';
 
 /**
  * 探测目标架构
@@ -108,7 +108,11 @@ module.exports = async function afterPack(context) {
     return;
   }
 
-  console.log('[afterPack] 开始签名...');
+  if (!SIGN_IDENTITY) {
+    throw new Error('[afterPack] 未配置签名身份；请设置 CSC_NAME/MAC_SIGN_IDENTITY，或使用 SKIP_SIGN=1 进行本地 ad-hoc 签名');
+  }
+
+  console.log(`[afterPack] 开始签名（${SIGN_IDENTITY}）...`);
   const sign = spawnSync('codesign', [
     '--deep',
     '--force',

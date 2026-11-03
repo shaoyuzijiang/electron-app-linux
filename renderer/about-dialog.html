@@ -6,6 +6,11 @@
   logo 不能用 asar 内相对路径引用——electron-builder 会把被
   extraResources/icon 引用的源文件排除出 asar，因此由主进程注入
   真实文件的绝对路径。
+
+  更新面板（APP 更新入口）：
+  - 打开时自动检查更新（check-app-update，独立分发服务 dl.liuqi92.cn）
+  - 有更新：展示新版本号/大小/日期/更新说明，支持下载（进度条）并打开安装包
+  - 无更新：显示"已是最新版本"
 -->
 <html lang="zh-CN">
 <head>
@@ -35,26 +40,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 4px;
-    }
-    #logo {
-      width: 72px;
-      height: 72px;
-      border-radius: 16px;
-      margin-bottom: 12px;
-      -webkit-user-drag: none;
-    }
-    #app-name {
-      font-size: 16px;
-      font-weight: 600;
-      color: #1a1a1a;
-    }
-    .version-line {
-      font-size: 13px;
-      color: #666;
-      line-height: 1.8;
-      white-space: nowrap;
+      padding: 30px 24px 16px;
+      gap: 3px;
     }
     #close-btn {
       position: absolute;
@@ -70,10 +57,133 @@
       border-radius: 50%;
       background: transparent;
       cursor: pointer;
+      z-index: 2;
     }
     #close-btn:hover {
       background: #f0f0f0;
       color: #333;
+    }
+    #logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      margin-bottom: 8px;
+      -webkit-user-drag: none;
+    }
+    #app-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    .version-line {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.7;
+      white-space: nowrap;
+    }
+
+    /* ---------- 更新面板 ---------- */
+    #update-section {
+      width: 100%;
+      margin-top: 14px;
+      border-top: 1px solid #eee;
+      padding-top: 12px;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #update-status {
+      font-size: 12px;
+      color: #999;
+      line-height: 1.6;
+      text-align: center;
+    }
+    #update-status.error {
+      color: #d4380d;
+      white-space: pre-line;
+    }
+    #update-status.available {
+      color: #1a1a1a;
+    }
+    #update-detail {
+      /* 版本卡片：有更新时显示 */
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      margin-top: 6px;
+      padding: 8px 10px;
+      background: #f7f8fa;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #444;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    #update-detail::-webkit-scrollbar {
+      width: 6px;
+    }
+    #update-detail::-webkit-scrollbar-thumb {
+      background: #ddd;
+      border-radius: 3px;
+    }
+    #progress-wrap {
+      width: 100%;
+      margin-top: 10px;
+      display: none;
+    }
+    #progress-bar-bg {
+      width: 100%;
+      height: 6px;
+      background: #e8e8e8;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #1c6ec8;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    #progress-text {
+      margin-top: 5px;
+      font-size: 11px;
+      color: #999;
+      text-align: center;
+    }
+    .update-btn {
+      margin-top: 10px;
+      height: 28px;
+      padding: 0 18px;
+      font-size: 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #1c6ec8;
+      color: #fff;
+    }
+    .update-btn:hover {
+      background: #155da8;
+    }
+    .update-btn.plain {
+      background: transparent;
+      color: #1c6ec8;
+      padding: 0 8px;
+      height: 22px;
+      margin-top: 4px;
+    }
+    .update-btn.plain:hover {
+      text-decoration: underline;
+    }
+    .update-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   </style>
 </head>
@@ -84,16 +194,28 @@
     <div id="app-name"></div>
     <div class="version-line" id="app-version"></div>
     <div class="version-line" id="sdk-version"></div>
+
+    <div id="update-section">
+      <div id="update-status">正在检查更新...</div>
+      <div id="update-detail" style="display:none;"></div>
+      <div id="progress-wrap">
+        <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+        <div id="progress-text"></div>
+      </div>
+      <button class="update-btn" id="update-action-btn" style="display:none;">下载并安装</button>
+      <button class="update-btn plain" id="recheck-btn" style="display:none;">重新检查</button>
+    </div>
   </div>
 
   <script>
     (function () {
       var params = new URLSearchParams(location.search);
+      var isLinux = params.get('runtimePlatform') === 'linux';
       var logoUrl = params.get('logo');
       if (logoUrl) document.getElementById('logo').src = logoUrl;
+      var appVersion = params.get('appVersion') || '-';
       document.getElementById('app-name').textContent = params.get('appName') || '';
-      document.getElementById('app-version').textContent =
-        '应用版本: ' + (params.get('appVersion') || '-');
+      document.getElementById('app-version').textContent = '应用版本: ' + appVersion;
       document.getElementById('sdk-version').textContent =
         '腾讯会议 SDK 版本: ' + (params.get('sdkVersion') || '未加载');
 
@@ -104,6 +226,159 @@
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeDialog();
       });
+
+      // ---------- 更新面板 ----------
+      var statusEl = document.getElementById('update-status');
+      var detailEl = document.getElementById('update-detail');
+      var progressWrap = document.getElementById('progress-wrap');
+      var progressBar = document.getElementById('progress-bar');
+      var progressText = document.getElementById('progress-text');
+      var actionBtn = document.getElementById('update-action-btn');
+      var recheckBtn = document.getElementById('recheck-btn');
+
+      var latestInfo = null; // check-update 返回的版本对象
+      var downloadedFile = null; // 下载完成后的安装包路径
+      var busy = false;
+
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function formatSize(bytes) {
+        var n = Number(bytes) || 0;
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+        if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+        return n + ' B';
+      }
+
+      function resetUI() {
+        statusEl.className = '';
+        detailEl.style.display = 'none';
+        progressWrap.style.display = 'none';
+        actionBtn.style.display = 'none';
+        recheckBtn.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressText.textContent = '';
+        downloadedFile = null;
+      }
+
+      function checkForUpdate() {
+        if (busy) return;
+        busy = true;
+        resetUI();
+        statusEl.textContent = '正在检查更新...';
+
+        window.electronAPI
+          .checkAppUpdate()
+          .then(function (result) {
+            busy = false;
+            if (!result.success) {
+              statusEl.className = 'error';
+              statusEl.textContent = '检查更新失败: ' + (result.message || '未知错误');
+              recheckBtn.style.display = '';
+              return;
+            }
+            if (!result.updateAvailable || !result.latest) {
+              statusEl.textContent = '已是最新版本 (' + appVersion + ')';
+              recheckBtn.style.display = '';
+              return;
+            }
+            latestInfo = result.latest;
+            statusEl.className = 'available';
+            statusEl.textContent =
+              '发现新版本: ' + latestInfo.version +
+              ' (' + formatSize(latestInfo.size) +
+              (latestInfo.releaseDate ? '，' + latestInfo.releaseDate : '') + ')';
+            // 更新说明（Markdown 原文，按纯文本展示）
+            if (latestInfo.note) {
+              detailEl.style.display = '';
+              detailEl.textContent = latestInfo.note;
+            }
+            actionBtn.style.display = '';
+            actionBtn.textContent = isLinux ? '下载更新' : '下载并安装';
+          })
+          .catch(function (err) {
+            busy = false;
+            statusEl.className = 'error';
+            statusEl.textContent = '检查更新失败: ' + err.message;
+            recheckBtn.style.display = '';
+          });
+      }
+
+      function startDownload() {
+        if (busy || !latestInfo) return;
+        busy = true;
+        actionBtn.disabled = true;
+        actionBtn.textContent = '下载中...';
+        progressWrap.style.display = '';
+        statusEl.textContent = '正在下载 ' + latestInfo.version + ' ...';
+        statusEl.className = '';
+
+        var lastPercent = -1;
+        if (!startDownload._listenerRegistered) {
+          startDownload._listenerRegistered = true;
+          window.electronAPI.onUpdateProgress(function (p) {
+            if (p.percent !== lastPercent) {
+              lastPercent = p.percent;
+              progressBar.style.width = p.percent + '%';
+              progressText.textContent =
+                p.percent + '% (' + formatSize(p.received) + ' / ' + formatSize(p.total) + ')';
+            }
+          });
+        }
+
+        window.electronAPI
+          .downloadAppUpdate(latestInfo)
+          .then(function (result) {
+            busy = false;
+            actionBtn.disabled = false;
+            if (!result.success) {
+              statusEl.className = 'error';
+              statusEl.textContent = '下载失败: ' + (result.message || '未知错误');
+              actionBtn.textContent = '重试下载';
+              return;
+            }
+            downloadedFile = result.filePath;
+            statusEl.textContent = '下载完成，请核对来源与签名后手动安装';
+            actionBtn.textContent = '在文件夹中显示安装包';
+            progressText.textContent = '下载完成 (100%)';
+          })
+          .catch(function (err) {
+            busy = false;
+            actionBtn.disabled = false;
+            statusEl.className = 'error';
+            statusEl.textContent = '下载失败: ' + err.message;
+            actionBtn.textContent = '重试下载';
+          });
+      }
+
+      actionBtn.addEventListener('click', function () {
+        if (downloadedFile) {
+          window.electronAPI
+            .openUpdateInstaller(downloadedFile)
+            .then(function (result) {
+              if (!result.success) {
+                statusEl.className = 'error';
+                statusEl.textContent = '定位安装包失败: ' + (result.message || '');
+              } else {
+                statusEl.textContent = '已定位安装包，请核对来源与签名后手动安装';
+              }
+            })
+            .catch(function () {});
+        } else {
+          startDownload();
+        }
+      });
+
+      recheckBtn.addEventListener('click', function () {
+        latestInfo = null;
+        checkForUpdate();
+      });
+
+      // 打开弹窗即自动检查更新（文档建议低频调用，手动重开弹窗不算高频）
+      checkForUpdate();
     })();
   </script>
 </body>

@@ -7,11 +7,13 @@ const { getPlatformCapabilities } = require('../platform');
 const desktop = getPlatformCapabilities('darwin', 'arm64');
 const windows = getPlatformCapabilities('win32', 'x64');
 const linux = getPlatformCapabilities('linux', 'arm64');
+const linuxX64 = getPlatformCapabilities('linux', 'x64');
 
 for (const action of ACTIONS) {
   assert.strictEqual(typeof desktop[action], 'boolean', `桌面端缺少能力 ${action}`);
   assert.strictEqual(typeof windows[action], 'boolean', `Windows 缺少能力 ${action}`);
   assert.strictEqual(typeof linux[action], 'boolean', `Linux 缺少能力 ${action}`);
+  assert.strictEqual(linuxX64[action], linux[action], `Linux x64 能力与 arm64 不一致：${action}`);
 }
 
 for (const action of [
@@ -26,5 +28,7 @@ for (const action of [
   'feature.webView', 'feature.enterpriseSso',
 ]) assert.strictEqual(supports(linux, action), false, `Linux 3.26 不应暴露 ${action}`);
 
-assert.throws(() => getPlatformCapabilities('linux', 'x64'), /未支持的平台/);
+for (const unsupportedArch of ['ia32', 'riscv64', 's390x']) {
+  assert.throws(() => getPlatformCapabilities('linux', unsupportedArch), /未支持的平台/);
+}
 console.log(`平台能力契约校验通过：${ACTIONS.length} 项统一能力。`);

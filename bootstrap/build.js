@@ -32,10 +32,21 @@ if (process.platform === 'darwin') {
   process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
 }
 
-const child = spawn('electron-builder', args, {
+const builderCli = require.resolve('electron-builder/out/cli/cli.js');
+const child = spawn(process.execPath, [builderCli, ...args], {
   stdio: 'inherit',
   env: process.env,
-  shell: true,
+  shell: false,
 });
 
-child.on('close', (code) => process.exit(code || 0));
+child.on('error', (error) => {
+  console.error(`启动 electron-builder 失败：${error.message}`);
+  process.exit(1);
+});
+child.on('close', (code, signal) => {
+  if (signal) {
+    console.error(`electron-builder 被信号 ${signal} 终止`);
+    process.exit(1);
+  }
+  process.exit(code ?? 1);
+});

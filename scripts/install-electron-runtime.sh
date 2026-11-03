@@ -6,9 +6,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Electron 版本单一来源：package.json（升级 Electron 只改 package.json 一处）
 VERSION="$(node -p "require('$ROOT/package.json').devDependencies.electron")"
 echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "无法从 package.json 解析 Electron 版本" >&2; exit 1; }
-# 目标架构（arm64 | x64），默认 arm64
-EARCH="${TARGET_ARCH:-arm64}"
-case "$EARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) echo "TARGET_ARCH 仅支持 arm64|x64" >&2; exit 1 ;; esac
+# 目标架构（arm64 | x64），统一由 LINUX_ARCH 指定；TARGET_ARCH 仅作向后兼容。
+LINUX_ARCH="${LINUX_ARCH:-${TARGET_ARCH:-arm64}}"
+case "$LINUX_ARCH" in arm64) HOST_ARCH="aarch64"; ELF_ARCH="AArch64" ;; x64) HOST_ARCH="x86_64"; ELF_ARCH="x86-64" ;; *) echo "LINUX_ARCH 仅支持 arm64|x64" >&2; exit 1 ;; esac
+EARCH="$LINUX_ARCH"
 ARCHIVE="$ROOT/vendor/electron-v${VERSION}-linux-${EARCH}.zip"
 PACKAGE_DIR="$ROOT/node_modules/electron"
 DIST_DIR="$PACKAGE_DIR/dist"
@@ -56,4 +57,4 @@ mv -f "$PATH_FILE.tmp.$$" "$PATH_FILE"
 COMMITTED=1
 rm -rf "$BACKUP" "$PATH_BACKUP"
 trap - EXIT INT TERM
-echo "Electron $VERSION Linux ARM64 离线运行时安装完成"
+echo "Electron $VERSION Linux $LINUX_ARCH 离线运行时安装完成"

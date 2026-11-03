@@ -75,14 +75,14 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
     return callback.code === undefined || Number(callback.code) === 0;
   }
 
-  function settle(slot, pending, success, message) {
+  function settle(slot, pending, success, message, result = true) {
     if (!pending) return;
     clearTimeout(pending.timer);
     if (slot === 'initialize' && pendingInitialize === pending) pendingInitialize = null;
     if (slot === 'login' && pendingLogin === pending) pendingLogin = null;
     if (slot === 'shutdown' && pendingShutdown === pending) pendingShutdown = null;
     if (slot === 'meeting' && pendingMeeting === pending) pendingMeeting = null;
-    success ? pending.resolve(true) : pending.reject(new Error(message || 'SDK 操作失败'));
+    success ? pending.resolve(result) : pending.reject(new Error(message || 'SDK 操作失败'));
   }
 
   function cancelPending(message) {
@@ -142,7 +142,16 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
       if (success && sessionActive) inMeeting = callback.func === 'OnJoinMeeting';
       const pending = pendingMeeting;
       if (pending && pending.callbackName === callback.func && pending.generation === sessionGeneration && sessionActive) {
-        settle('meeting', pending, success, callback.msg || `${pending.label}失败`);
+        let result = true;
+        if (success && pending.includeMeetingCode && callback.func === 'OnJoinMeeting') {
+          let param = callback.param;
+          if (!param && typeof callback.msg === 'string' && callback.msg.trim().startsWith('{')) {
+            try { param = JSON.parse(callback.msg); } catch { param = null; }
+          }
+          const meetingCode = param && (param.meeting_code || param.meetingCode);
+          result = { meetingCode: meetingCode ? String(meetingCode) : '' };
+        }
+        settle('meeting', pending, success, callback.msg || `${pending.label}失败`, result);
       }
     } else if (callback.func === 'OnLogout') {
       if (sessionActive && !pendingLogin) loggedIn = false;
@@ -199,8 +208,8 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
       loadError = new Error('当前为 UI 开发模式，未加载 Linux SDK');
       return null;
     }
-    if (runtime.platform !== 'linux' || runtime.arch !== 'arm64') {
-      loadError = new Error(`仅支持 Linux ARM64，当前为 ${runtime.platform}/${runtime.arch}`);
+    if (runtime.platform !== 'linux' || !['arm64', 'x64'].includes(runtime.arch)) {
+      loadError = new Error(`仅支持 Linux arm64/x64，当前为 ${runtime.platform}/${runtime.arch}`);
       return null;
     }
     try {
@@ -364,10 +373,10 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
     return addon[name].bind(addon);
   }
 
-  async function invokeMeeting(method, args, callbackName, label) {
+  async function invokeMeeting(method, args, callbackName, label, metadata = {}) {
     if (!sessionActive || !loggedIn) throw new Error('会议服务尚未登录');
     if (pendingMeeting) throw new Error('已有会议操作正在进行，请稍候');
-    const waiter = createWaiter('meeting', label, sessionGeneration, CALLBACK_TIMEOUT_MS, { callbackName });
+    const waiter = createWaiter('meeting', label, sessionGeneration, CALLBACK_TIMEOUT_MS, { callbackName, ...metadata });
     try {
       const code = requireMethod(method)(...args);
       if (code !== undefined && Number(code) !== 0) settle('meeting', pendingMeeting, false, `${label}调用失败：${code}`);
@@ -410,7 +419,7 @@ function createLinuxSdkAdapter({ app, api, projectRoot, getSdkRoot, getAppIconPa
         }
       });
     },
-    quickMeeting: () => invokeMeeting('QuickMeeting', [], 'OnJoinMeeting', '快速会议'),
+    quickMeeting: () => invokeMeeting('QuickMeeting', [], 'OnJoinMeeting', '快速会议', { includeMeetingCode: true }),
     leaveMeeting: () => invokeMeeting('LeaveMeeting', [false], 'OnLeaveMeeting', '离开会议'),
     openView: async (view, detail = {}) => {
       const methods = {

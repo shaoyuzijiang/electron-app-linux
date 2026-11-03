@@ -13,6 +13,17 @@
  */
 const { WebContentsView, shell } = require('electron');
 
+function safeDiagnosticUrl(value) {
+  try {
+    const url = new URL(value);
+    const reason = url.pathname === '/user-center/login' ? url.searchParams.get('reason') : null;
+    const safeReason = reason && /^[a-zA-Z0-9_-]{1,32}$/.test(reason) ? `?reason=${encodeURIComponent(reason)}` : '';
+    return `${url.origin}${url.pathname}${safeReason}`;
+  } catch {
+    return '<invalid-url>';
+  }
+}
+
 // URL 白名单 —— 仅允许加载这些域名（protocol//host）
 // 按需扩展；SSRF 防护：白名单机制天然阻止内网地址（9.*, 10.*, 11.* 等）
 const ALLOWED_ORIGINS = [
@@ -120,7 +131,7 @@ function _attachView(tabId, url, options) {
     const navCheck = validateUrl(navUrl);
     if (!navCheck.ok) {
       event.preventDefault();
-      console.warn('[Webview] 拦截了非白名单导航:', navUrl, '-', navCheck.message);
+      console.warn('[Webview] 拦截了非白名单导航:', safeDiagnosticUrl(navUrl), '-', navCheck.message);
     }
   });
 
@@ -130,7 +141,7 @@ function _attachView(tabId, url, options) {
     if (openCheck.ok) {
       shell.openExternal(openUrl);
     } else {
-      console.warn('[Webview] 拦截了非白名单新窗口:', openUrl);
+      console.warn('[Webview] 拦截了非白名单新窗口:', safeDiagnosticUrl(openUrl));
     }
     return { action: 'deny' };
   });
@@ -175,7 +186,7 @@ function _wireNavigationDiagnostics(wc, tabId) {
   // 仅保留最近 N 条，避免内存膨胀
   const chain = [];
   const pushChain = (entry) => {
-    chain.push(entry);
+    chain.push({ ...entry, from: entry.from ? safeDiagnosticUrl(entry.from) : null, to: safeDiagnosticUrl(entry.to) });
     if (chain.length > 20) chain.shift();
   };
 
@@ -186,7 +197,7 @@ function _wireNavigationDiagnostics(wc, tabId) {
     pushChain({ from: wc.getURL(), to: navUrl, phase: 'start' });
     _emitNavigation(tabId, {
       type: 'start',
-      url: navUrl,
+      url: safeDiagnosticUrl(navUrl),
       chain: chain.slice(),
     });
   });
@@ -194,10 +205,10 @@ function _wireNavigationDiagnostics(wc, tabId) {
   // 重定向通知：server 302 时触发，包含 statusCode（>=300 && <400）
   wc.on('did-redirect-navigation', (_event, navUrl, _httpResponseCode, _httpMethod, _referrer, _responseHeaders) => {
     pushChain({ from: wc.getURL(), to: navUrl, phase: 'redirect' });
-    console.log('[Webview][SSO]', tabId, '重定向 ->', navUrl);
+    console.log('[Webview][SSO]', tabId, '重定向 ->', safeDiagnosticUrl(navUrl));
     _emitNavigation(tabId, {
       type: 'redirect',
-      url: navUrl,
+      url: safeDiagnosticUrl(navUrl),
       chain: chain.slice(),
     });
   });
@@ -205,10 +216,10 @@ function _wireNavigationDiagnostics(wc, tabId) {
   // 真正完成一次主框架导航（含所有重定向）
   wc.on('did-navigate', (_event, navUrl) => {
     pushChain({ from: null, to: navUrl, phase: 'navigate' });
-    console.log('[Webview][SSO]', tabId, '落地 ->', navUrl);
+    console.log('[Webview][SSO]', tabId, '落地 ->', safeDiagnosticUrl(navUrl));
     _emitNavigation(tabId, {
       type: 'navigate',
-      url: navUrl,
+      url: safeDiagnosticUrl(navUrl),
       chain: chain.slice(),
     });
   });
@@ -218,7 +229,7 @@ function _wireNavigationDiagnostics(wc, tabId) {
     pushChain({ from: null, to: navUrl, phase: 'navigate-in-page' });
     _emitNavigation(tabId, {
       type: 'navigate-in-page',
-      url: navUrl,
+      url: safeDiagnosticUrl(navUrl),
       chain: chain.slice(),
     });
   });
@@ -227,10 +238,10 @@ function _wireNavigationDiagnostics(wc, tabId) {
   wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return; // 子资源失败不告警
     pushChain({ from: wc.getURL(), to: validatedURL, phase: 'fail', errorCode, errorDescription });
-    console.warn('[Webview][SSO]', tabId, '加载失败', errorCode, errorDescription, validatedURL);
+    console.warn('[Webview][SSO]', tabId, '加载失败', errorCode, errorDescription, safeDiagnosticUrl(validatedURL));
     _emitNavigation(tabId, {
       type: 'fail',
-      url: validatedURL,
+      url: safeDiagnosticUrl(validatedURL),
       errorCode,
       errorDescription,
       chain: chain.slice(),
@@ -448,7 +459,7 @@ function getWebviewInfo(tabId) {
     success: true,
     data: {
       tabId,
-      url: wc.getURL(),
+      url: safeDiagnosticUrl(wc.getURL()),
       title: wc.getTitle(),
       userAgent: wc.getUserAgent(),
     },
@@ -463,7 +474,7 @@ function listWebviews() {
       const wc = item.view.webContents;
       result.push({
         tabId,
-        url: wc.getURL(),
+        url: safeDiagnosticUrl(wc.getURL()),
         title: wc.getTitle(),
         active: tabId === activeTabId,
       });

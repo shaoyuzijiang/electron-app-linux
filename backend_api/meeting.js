@@ -4,7 +4,7 @@
  * - 查询用户会议列表
  */
 
-const { BASE_URL, request } = require('./httpClient');
+const { getBaseUrl, request } = require('./httpClient');
 
 /**
  * 创建会议
@@ -36,7 +36,7 @@ const { BASE_URL, request } = require('./httpClient');
  * @returns {{ meeting_info: object }}
  */
 async function createMeeting(accessToken, meetingData) {
-  return await request(`${BASE_URL}/api/wemeet/meetings`, {
+  return await request(`${getBaseUrl()}/api/wemeet/meetings`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -100,7 +100,7 @@ async function getMeetingList(accessToken, options = {}) {
   if (pos !== undefined) params.append('pos', pos);
   if (cursory !== undefined) params.append('cursory', cursory);
   if (is_show_all_sub_meetings !== undefined) params.append('is_show_all_sub_meetings', is_show_all_sub_meetings);
-  return await request(`${BASE_URL}/api/wemeet/meetings?${params}`, {
+  return await request(`${getBaseUrl()}/api/wemeet/meetings?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
@@ -122,7 +122,7 @@ async function getMeetingList(accessToken, options = {}) {
  * @returns {{ meeting_number: number, meeting_info_list: MeetingInfo[] }}
  */
 async function updateMeeting(accessToken, meetingId, updates) {
-  return await request(`${BASE_URL}/api/wemeet/meetings/${meetingId}`, {
+  return await request(`${getBaseUrl()}/api/wemeet/meetings/${meetingId}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -144,7 +144,7 @@ async function updateMeeting(accessToken, meetingId, updates) {
  */
 async function cancelMeeting(accessToken, meetingId, options = {}) {
   const body = { ...options };
-  return await request(`${BASE_URL}/api/wemeet/meetings/${meetingId}/cancel`, {
+  return await request(`${getBaseUrl()}/api/wemeet/meetings/${meetingId}/cancel`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,

@@ -1,7 +1,7 @@
 'use strict';
 
 function getPlatformCapabilities(platform = process.platform, arch = process.arch) {
-  if (platform === 'linux' && arch === 'arm64') {
+  if (platform === 'linux' && (arch === 'arm64' || arch === 'x64')) {
     return require('./linux-arm64/capabilities');
   }
   if (platform === 'darwin' || platform === 'win32') {

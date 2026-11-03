@@ -50,7 +50,7 @@
 
 ```bash
 npm run verify        # S1 + S2 + S3 + S4 全量（打包前必须全绿）
-npm run doctor        # 真机环境/图形预检
+bash scripts/check.sh # 真机环境/图形预检（要求麒麟 V10、glibc 恰好 2.31；更高版本需分别核实，不可据此断言不兼容）
 npm run demo:deb      # M1 自动链路
 ```
 

@@ -15,12 +15,16 @@
  * 交互：
  *   - 模态子窗口（parent 为主窗口），点击 ✕ / Esc / 失焦自动关闭
  *   - 版本信息通过 URL query 传给页面，避免额外 IPC
+ *   - 更新检查/下载通过 preload 暴露的 IPC（utils/updater.js）；
+ *     下载进行中失焦不自动关闭（进度在窗口内展示，切走再回来仍可见）
  */
 const { BrowserWindow, app } = require('electron');
 const path = require('path');
 const url = require('url');
 
 let aboutWindow = null;
+// 下载进行中标记（由 ipc-handlers 通过 setDownloading 更新）
+let downloading = false;
 
 // 图标真实文件路径（与 sdk_mgmt/wemeet-sdk.js 的 appIconPath 同源）
 function getLogoFileUrl() {
@@ -44,8 +48,8 @@ function showAboutDialog(mainWindow, info) {
   const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
 
   aboutWindow = new BrowserWindow({
-    width: 340,
-    height: 280,
+    width: 360,
+    height: 460,
     frame: false,
     transparent: true,
     resizable: false,
@@ -57,15 +61,26 @@ function showAboutDialog(mainWindow, info) {
     parent,
     modal: !!parent, // macOS 模态：主窗口不可交互，直到关闭
     webPreferences: {
+      preload: path.join(__dirname, '..', 'bootstrap', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  aboutWindow.once('ready-to-show', () => aboutWindow.show());
+  aboutWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  aboutWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    let targetPath = '';
+    try { targetPath = new URL(targetUrl).pathname; } catch {}
+    if (targetPath !== new URL(url.pathToFileURL(path.join(__dirname, '..', 'renderer', 'about-dialog.html')).href).pathname) event.preventDefault();
+  });
+  aboutWindow.webContents.on('will-redirect', (event) => event.preventDefault());
+  aboutWindow.once('ready-to-show', () => {
+    if (aboutWindow && !aboutWindow.isDestroyed()) aboutWindow.show();
+  });
 
-  // 失焦自动关闭（点击主窗口外部区域时收起）
+  // 失焦自动关闭（下载进行中不关闭，避免丢失下载进度显示）
   aboutWindow.on('blur', () => {
+    if (downloading) return;
     if (aboutWindow && !aboutWindow.isDestroyed()) aboutWindow.close();
   });
 
@@ -78,6 +93,7 @@ function showAboutDialog(mainWindow, info) {
       appName: info.appName || '',
       appVersion: info.appVersion || '',
       sdkVersion: info.sdkVersion || '',
+      runtimePlatform: process.platform,
       logo: getLogoFileUrl(),
     },
   });
@@ -89,7 +105,17 @@ function closeAboutDialog() {
   }
 }
 
+function getAboutWindow() {
+  return aboutWindow && !aboutWindow.isDestroyed() ? aboutWindow : null;
+}
+
+function setAboutDownloading(isDownloading) {
+  downloading = !!isDownloading;
+}
+
 module.exports = {
   showAboutDialog,
   closeAboutDialog,
+  getAboutWindow,
+  setAboutDownloading,
 };
